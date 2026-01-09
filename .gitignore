@@ -14,6 +14,7 @@
 .env
 .env.backup
 .env.production
+.env.*.backup
 .phpactor.json
 .phpunit.result.cache
 Homestead.json
@@ -26,6 +27,65 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+/.cursor
+/.agent
 
 # YoYo AI version control directory
 .yoyo/
+
+# Test files
+/tests/
+phpunit.xml
+.phpunit.result.cache
+
+# Debug and temporary files
+*.log
+*.cache
+*.tmp
+/storage/logs/*
+!/storage/logs/.gitkeep
+
+# Editor and IDE files
+.editorconfig
+*.swp
+*.swo
+
+# Build artifacts
+/public/build/
+/public/mix-manifest.json
+
+# Misc
+*.zip
+*.tar.gz
+*.sql
+tambah_transaksi*.php
+
+# Python virtual environments
+venv/
+**/venv/
+__pycache__/
+*.pyc
+.Python
+
+# Services (microservices with their own repos)
+/services/
+
+# WhatsApp cache
+.wwebjs_cache/
+.wwebjs_auth/
+
+# Debug and patch files
+DEBUG_*.php
+*_PATCH.php
+DEPLOY_*.sh
+DEPLOY_*.md
+*_FIX_*.sh
+*_FIX_*.md
+*_CHECKLIST.sh
+verify_*.php
+fix_*.php
+
+# Analysis and documentation (not needed in repo)
+ANALISIS_*.md
+ATURAN_*.md
+BUG_FIX_*.md

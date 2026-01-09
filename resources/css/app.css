@@ -1,0 +1,494 @@
+@import 'tailwindcss';
+
+@import 'tw-animate-css';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-sans:
+        Instrument Sans, ui-sans-serif, system-ui, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+
+    --color-chart-income: var(--chart-income);
+    --color-chart-expense: var(--chart-expense);
+    --color-chart-space: var(--chart-space);
+
+    --color-sidebar: var(--sidebar-background);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-gray-200, currentColor);
+    }
+}
+
+@layer utilities {
+
+    body,
+    html {
+        --font-sans:
+            'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
+            'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+            'Noto Color Emoji';
+    }
+}
+
+:root {
+    /* Background & Foreground */
+    --background: hsl(210 20% 98%);
+    /* Abu-abu sangat terang #f5f7fa */
+    --foreground: hsl(220 20% 10%);
+    /* Abu-abu gelap hampir hitam #151a1f */
+
+    /* Card (Glassmorphism) */
+    --card: hsl(0 0% 100% / 0.6);
+    /* Putih transparan 60% */
+    --card-foreground: hsl(220 20% 10%);
+    /* Teks gelap */
+    --card-blur: 24px;
+    /* Blur backdrop */
+    --glass: hsl(0 0% 100% / 0.4);
+    /* Glass transparan 40% */
+    --glass-border: hsl(0 0% 100% / 0.3);
+    /* Border glass 30% */
+
+    /* Popover */
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(220 20% 10%);
+
+    /* Primary - Hijau Utama */
+    --primary: hsl(142 71% 45%);
+    --primary-foreground: hsl(0 0% 100%);
+    /* Putih */
+
+    /* Secondary */
+    --secondary: hsl(210 20% 96%);
+    /* Abu sangat terang #f2f4f6 */
+    --secondary-foreground: hsl(220 20% 10%);
+    /* Teks gelap */
+
+    /* Muted - Teks & Elemen Sekunder */
+    --muted: hsl(210 15% 95%);
+    /* Abu terang #eff1f3 */
+    --muted-foreground: hsl(215 15% 55%);
+    /* Abu medium #7d8694 */
+
+    /* Accent - Highlight Hijau Terang */
+    --accent: hsl(145 63% 95%);
+    /* Hijau sangat terang #e8f8ef */
+    --accent-foreground: hsl(145 63% 32%);
+    /* Hijau gelap #1e8449 */
+
+    /* Destructive - Merah Error */
+    --destructive: hsl(0 72% 51%);
+    /* Merah #e74c3c */
+    --destructive-foreground: hsl(0 0% 100%);
+    /* Putih */
+
+    /* Warning - Kuning/Orange */
+    --warning: hsl(38 92% 50%);
+    /* Orange #f39c12 */
+    --warning-foreground: hsl(38 92% 20%);
+    /* Orange gelap */
+
+    /* Border & Input */
+    --border: hsl(214 20% 92%);
+    /* Abu terang #e5e8ec */
+    --input: hsl(214 20% 92%);
+    --ring: hsl(145 63% 42%);
+    /* Sama dengan primary */
+
+    /* Chart Colors */
+    --chart-income: hsl(142 71% 45%);
+    --chart-income-light: hsl(142 60% 55%);
+    --chart-expense: hsl(142 60% 55%);
+    --chart-space: hsl(142 50% 75%);
+
+    /* Legacy chart variables for compatibility */
+    --chart-1: hsl(142 76% 36%);
+    --chart-2: hsl(84 81% 56%);
+    --chart-3: hsl(83 78% 80%);
+    --chart-4: hsl(43 74% 66%);
+    --chart-5: hsl(27 87% 67%);
+
+    /* Success */
+    --success: hsl(145 63% 42%);
+    /* Sama dengan primary */
+    --success-light: hsl(145 63% 95%);
+    /* Sama dengan accent */
+
+    /* Radius */
+    --radius: 0.5rem;
+
+    /* Sidebar */
+    --sidebar-background: hsl(210 20% 98%);
+    --sidebar-foreground: hsl(220 20% 10%);
+    --sidebar-primary: hsl(145 63% 42%);
+    --sidebar-primary-foreground: hsl(0 0% 100%);
+    --sidebar-accent: hsl(210 20% 96%);
+    --sidebar-accent-foreground: hsl(220 20% 10%);
+    --sidebar-border: hsl(214 20% 92%);
+    --sidebar-ring: hsl(145 63% 42%);
+    --sidebar: hsl(210 20% 98%);
+}
+
+.dark {
+    /* Background & Foreground */
+    --background: hsl(220 20% 10%);
+    /* Gelap kebiruan #151a1f */
+    --foreground: hsl(210 20% 98%);
+    /* Hampir putih #f5f7fa */
+
+    /* Card (Glassmorphism Dark) */
+    --card: hsl(220 20% 14% / 0.6);
+    /* Gelap transparan 60% */
+    --card-foreground: hsl(210 20% 98%);
+    --glass: hsl(220 20% 20% / 0.5);
+    --glass-border: hsl(220 20% 40% / 0.2);
+
+    /* Popover */
+    --popover: hsl(220 20% 14%);
+    --popover-foreground: hsl(210 20% 98%);
+
+    /* Primary - Hijau (Updated) */
+    --primary: hsl(142 70% 50%);
+    --primary-foreground: hsl(0 0% 100%);
+
+    /* Secondary */
+    --secondary: hsl(217 20% 20%);
+    /* Abu gelap */
+    --secondary-foreground: hsl(210 20% 98%);
+
+    /* Muted */
+    --muted: hsl(217 20% 20%);
+    --muted-foreground: hsl(215 15% 65%);
+    /* Abu lebih terang */
+
+    /* Accent */
+    --accent: hsl(145 40% 20%);
+    /* Hijau gelap */
+    --accent-foreground: hsl(145 63% 70%);
+    /* Hijau terang */
+
+    /* Destructive */
+    --destructive: hsl(0 62% 40%);
+    /* Merah lebih gelap */
+    --destructive-foreground: hsl(210 20% 98%);
+
+    /* Warning */
+    --warning: hsl(38 92% 50%);
+    --warning-foreground: hsl(38 92% 90%);
+
+    /* Border & Input */
+    --border: hsl(217 20% 20%);
+    --input: hsl(217 20% 20%);
+    --ring: hsl(145 63% 45%);
+
+    /* Chart Colors (Updated) */
+    --chart-income: hsl(142 70% 50%);
+    --chart-income-light: hsl(142 60% 60%);
+    --chart-expense: hsl(142 55% 50%);
+    --chart-space: hsl(142 45% 35%);
+
+    /* Legacy chart variables for compatibility */
+    --chart-1: hsl(142 76% 36%);
+    --chart-2: hsl(84 81% 56%);
+    --chart-3: hsl(83 78% 80%);
+    --chart-4: hsl(43 74% 66%);
+    --chart-5: hsl(27 87% 67%);
+
+    /* Success */
+    --success: hsl(145 63% 45%);
+    --success-light: hsl(145 40% 20%);
+
+    /* Sidebar */
+    --sidebar-background: hsl(220 20% 10%);
+    --sidebar-foreground: hsl(210 20% 98%);
+    --sidebar-primary: hsl(145 63% 45%);
+    --sidebar-primary-foreground: hsl(0 0% 100%);
+    --sidebar-accent: hsl(217 20% 20%);
+    --sidebar-accent-foreground: hsl(210 20% 98%);
+    --sidebar-border: hsl(217 20% 20%);
+    --sidebar-ring: hsl(145 63% 45%);
+    --sidebar: hsl(220 20% 10%);
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+    }
+
+    /* Active sidebar menu item dengan warna hijau transparan */
+    [data-sidebar="menu-button"][data-active="true"] {
+        background-color: oklch(0.65 0.19 137.46 / 0.2) !important;
+        color: oklch(0.65 0.19 137.46) !important;
+    }
+
+    [data-sidebar="menu-button"][data-active="true"] svg {
+        color: oklch(0.65 0.19 137.46) !important;
+    }
+
+    .dark [data-sidebar="menu-button"][data-active="true"] {
+        background-color: oklch(0.65 0.19 137.46 / 0.25) !important;
+        color: oklch(0.7 0.19 137.46) !important;
+    }
+
+    .dark [data-sidebar="menu-button"][data-active="true"] svg {
+        color: oklch(0.7 0.19 137.46) !important;
+    }
+
+    /* Active mobile footer menu item dengan warna hijau seperti sidebar */
+    .mobile-footer-item.mobile-footer-active {
+        color: oklch(0.65 0.19 137.46) !important;
+    }
+
+    .mobile-footer-item.mobile-footer-active svg {
+        color: oklch(0.65 0.19 137.46) !important;
+    }
+
+    /* Background hijau untuk active menu - lebih transparan */
+    .mobile-footer-bg {
+        background-color: oklch(0.65 0.19 137.46 / 0.15) !important;
+        box-shadow: 0 1px 4px oklch(0.65 0.19 137.46 / 0.06);
+    }
+
+    .dark .mobile-footer-bg {
+        background-color: oklch(0.65 0.19 137.46 / 0.18) !important;
+        box-shadow: 0 1px 4px oklch(0.65 0.19 137.46 / 0.1);
+    }
+
+    /* Glow effect hijau untuk icon aktif - lebih subtle */
+    .mobile-footer-glow {
+        background-color: oklch(0.65 0.19 137.46 / 0.1);
+    }
+
+    .dark .mobile-footer-glow {
+        background-color: oklch(0.65 0.19 137.46 / 0.15);
+    }
+
+    /* Active indicator bar hijau dengan gradient */
+    .mobile-footer-indicator {
+        background: linear-gradient(to right,
+                transparent,
+                oklch(0.65 0.19 137.46),
+                transparent);
+        box-shadow: 0 0 8px oklch(0.65 0.19 137.46 / 0.5);
+    }
+
+    .dark .mobile-footer-item.mobile-footer-active {
+        color: oklch(0.7 0.19 137.46) !important;
+    }
+
+    .dark .mobile-footer-item.mobile-footer-active svg {
+        color: oklch(0.7 0.19 137.46) !important;
+    }
+
+    /* Ripple effect hijau untuk active menu */
+    .mobile-footer-ripple {
+        background-color: oklch(0.65 0.19 137.46 / 0.3);
+    }
+
+    .dark .mobile-footer-ripple {
+        background-color: oklch(0.65 0.19 137.46 / 0.4);
+    }
+}
+
+/* SweetAlert2 Custom Styles */
+.swal2-popup {
+    border-radius: 1.5rem !important;
+    /* rounded-3xl = 1.5rem */
+}
+
+.swal2-popup .swal2-confirm,
+.swal2-popup .swal2-cancel,
+.swal2-popup .swal2-deny {
+    border-radius: 1rem !important;
+    /* rounded-2xl = 1rem */
+}
+
+/* Performance Optimizations for Landing Page */
+/* Optimize rendering for below-the-fold content */
+[data-lazy-section] {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 500px;
+}
+
+/* Reduce paint complexity for animated elements */
+.animate-bounce,
+.transition-all,
+.transition-transform {
+    will-change: transform;
+}
+
+/* Optimize backdrop blur for better performance */
+.backdrop-blur-xl,
+.backdrop-blur-sm {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+/* Smooth font rendering */
+html {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ========================================
+   MOBILE PERFORMANCE OPTIMIZATIONS
+   ======================================== */
+
+/* Reduce backdrop-blur on mobile devices for better scroll performance */
+@media (max-width: 768px) {
+
+    /* Reduce blur intensity on mobile */
+    .backdrop-blur-xl,
+    .backdrop-blur-2xl {
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+    }
+
+    .backdrop-blur-sm,
+    .backdrop-blur-md {
+        backdrop-filter: blur(4px) !important;
+        -webkit-backdrop-filter: blur(4px) !important;
+    }
+
+    /* Disable complex animations on mobile for smoother scrolling */
+    .animate-ping {
+        animation: none !important;
+    }
+
+    /* Simplify transitions on mobile */
+    .transition-all {
+        transition-property: opacity, transform !important;
+        transition-duration: 150ms !important;
+    }
+
+    /* Disable hover effects that cause repaints */
+    .hover\:scale-110:hover,
+    .hover\:scale-125:hover,
+    .hover\:scale-150:hover {
+        transform: none !important;
+    }
+
+    /* Reduce shadow complexity on mobile */
+    .shadow-xl,
+    .shadow-2xl {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    }
+
+    /* GPU acceleration for scrollable containers */
+    .overflow-y-auto,
+    .overflow-x-auto,
+    .overflow-auto {
+        -webkit-overflow-scrolling: touch;
+        transform: translateZ(0);
+    }
+}
+
+/* Enable hardware acceleration for animated elements */
+.animate-fade-in,
+.animate-fade-in-up,
+.animate-draw-line,
+.animate-pop-in {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* Optimize chart SVG rendering */
+svg {
+    shape-rendering: optimizeSpeed;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .animate-ping,
+    .animate-bounce,
+    .animate-pulse {
+        animation: none !important;
+    }
+}
+
+/* Improve touch scrolling */
+@layer base {
+    body {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
+    }
+}

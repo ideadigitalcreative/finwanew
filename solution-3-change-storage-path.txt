@@ -1,0 +1,47 @@
+===========================================
+SOLUSI 3: UBAH STORAGE PATH KE PUBLIC/UPLOADS
+===========================================
+
+Ini adalah solusi PERMANENT yang tidak memerlukan symbolic link.
+File akan disimpan langsung di public/uploads yang bisa diakses langsung.
+
+LANGKAH-LANGKAH:
+
+1. Buat folder di hosting:
+   /var/www/finwa_web_id_usr/data/www/finwa.web.id/public/uploads/avatars
+
+2. Ubah file: config/filesystems.php
+   Cari bagian 'public' disk dan ubah menjadi:
+
+   'public' => [
+       'driver' => 'local',
+       'root' => public_path('uploads'),
+       'url' => env('APP_URL').'/uploads',
+       'visibility' => 'public',
+       'throw' => false,
+   ],
+
+3. Ubah file: app/Http/Controllers/Settings/ProfileController.php
+   Cari baris:
+       $validated['avatar'] = '/storage/' . $path;
+   
+   Ubah menjadi:
+       $validated['avatar'] = '/uploads/' . $path;
+
+4. Ubah file: app/Http/Controllers/Settings/ProfileController.php
+   Cari baris:
+       $oldPath = str_replace('/storage/', '', $user->avatar);
+   
+   Ubah menjadi:
+       $oldPath = str_replace('/uploads/', '', $user->avatar);
+
+5. Update avatar yang sudah ada di database:
+   UPDATE users SET avatar = REPLACE(avatar, '/storage/', '/uploads/') WHERE avatar IS NOT NULL;
+
+6. Pindahkan file avatar yang sudah ada:
+   Di hosting via SSH:
+   cd /var/www/finwa_web_id_usr/data/www/finwa.web.id
+   mkdir -p public/uploads
+   cp -r storage/app/public/avatars public/uploads/
+
+SELESAI! Avatar akan tersimpan di public/uploads/avatars dan bisa diakses langsung.

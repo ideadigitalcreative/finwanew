@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEO Meta Tags Checker - FinWa</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #059669;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        h2 {
+            color: #1f2937;
+            font-size: 20px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .tag-item {
+            background: #f9fafb;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 3px solid #10b981;
+        }
+
+        .tag-name {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .tag-value {
+            color: #6b7280;
+            font-size: 13px;
+            word-break: break-all;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #d1fae5;
+            color: #059669;
+        }
+
+        .status-warning {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .preview {
+            background: #f3f4f6;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .preview-title {
+            font-size: 18px;
+            color: #1a0dab;
+            margin-bottom: 5px;
+            text-decoration: none;
+        }
+
+        .preview-url {
+            font-size: 14px;
+            color: #006621;
+            margin-bottom: 8px;
+        }
+
+        .preview-desc {
+            font-size: 13px;
+            color: #545454;
+            line-height: 1.5;
+        }
+
+        .social-preview {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            overflow: hidden;
+            max-width: 500px;
+        }
+
+        .social-image {
+            width: 100%;
+            height: 260px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .social-content {
+            padding: 15px;
+            background: white;
+        }
+
+        .social-title {
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 5px;
+        }
+
+        .social-desc {
+            font-size: 13px;
+            color: #6b7280;
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+
+        .social-url {
+            font-size: 12px;
+            color: #9ca3af;
+            text-transform: uppercase;
+        }
+
+        .checklist {
+            list-style: none;
+        }
+
+        .checklist li {
+            padding: 10px 0;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checklist li:last-child {
+            border-bottom: none;
+        }
+
+        .check-icon {
+            color: #10b981;
+            font-weight: bold;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✅ SEO Meta Tags Checker</h1>
+            <p class="subtitle">FinWa.web.id - SEO Implementation Status</p>
+        </div>
+
+        <div class="card">
+            <h2>📊 SEO Checklist <span class="status status-success">COMPLETED</span></h2>
+            <ul class="checklist">
+                <li><span class="check-icon">✓</span> Title Tag</li>
+                <li><span class="check-icon">✓</span> Meta Description</li>
+                <li><span class="check-icon">✓</span> Meta Keywords</li>
+                <li><span class="check-icon">✓</span> Canonical URL</li>
+                <li><span class="check-icon">✓</span> Open Graph Tags (Facebook)</li>
+                <li><span class="check-icon">✓</span> Twitter Card Tags</li>
+                <li><span class="check-icon">✓</span> Structured Data (Schema.org)</li>
+                <li><span class="check-icon">✓</span> Robots.txt</li>
+                <li><span class="check-icon">✓</span> XML Sitemap</li>
+                <li><span class="check-icon">✓</span> Language Meta Tag</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>🔍 Google Search Preview</h2>
+            <div class="preview">
+                <div class="preview-title">FinWa — Atur Keuangan via WhatsApp</div>
+                <div class="preview-url">https://finwa.web.id</div>
+                <div class="preview-desc">Atur keuangan tanpa ribet lewat WhatsApp. Kirim pesan pemasukan/pengeluaran,
+                    FinWa otomatis catat keuanganmu ke dashboard pintar.</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>📱 Facebook Preview</h2>
+                <div class="social-preview">
+                    <div class="social-image">FinWa Logo</div>
+                    <div class="social-content">
+                        <div class="social-title">FinWa — Atur Keuangan via WhatsApp</div>
+                        <div class="social-desc">Atur keuangan tanpa ribet lewat WhatsApp. Kirim pesan
+                            pemasukan/pengeluaran, FinWa otomatis catat keuanganmu ke dashboard pintar.</div>
+                        <div class="social-url">finwa.web.id</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>🐦 Twitter Preview</h2>
+                <div class="social-preview">
+                    <div class="social-image">FinWa Logo</div>
+                    <div class="social-content">
+                        <div class="social-title">FinWa — Atur Keuangan via WhatsApp</div>
+                        <div class="social-desc">Atur keuangan tanpa ribet lewat WhatsApp. Kirim pesan
+                            pemasukan/pengeluaran, FinWa otomatis catat keuanganmu ke dashboard pintar.</div>
+                        <div class="social-url">finwa.web.id</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🏷️ Basic Meta Tags</h2>
+            <div class="tag-item">
+                <div class="tag-name">Title</div>
+                <div class="tag-value">FinWa — Atur Keuangan via WhatsApp</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">Description</div>
+                <div class="tag-value">Atur keuangan tanpa ribet lewat WhatsApp. Kirim pesan pemasukan/pengeluaran,
+                    FinWa otomatis catat keuanganmu ke dashboard pintar.</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">Keywords</div>
+                <div class="tag-value">finwa, keuangan, pencatatan keuangan, whatsapp bot, manajemen keuangan, aplikasi
+                    keuangan, catatan pengeluaran, budget tracker</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">Language</div>
+                <div class="tag-value">Indonesian (id_ID)</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">Canonical URL</div>
+                <div class="tag-value">https://finwa.web.id</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🌐 Open Graph Meta Tags</h2>
+            <div class="tag-item">
+                <div class="tag-name">og:type</div>
+                <div class="tag-value">website</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">og:url</div>
+                <div class="tag-value">https://finwa.web.id/</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">og:title</div>
+                <div class="tag-value">FinWa — Atur Keuangan via WhatsApp</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">og:description</div>
+                <div class="tag-value">Atur keuangan tanpa ribet lewat WhatsApp. Kirim pesan pemasukan/pengeluaran,
+                    FinWa otomatis catat keuanganmu ke dashboard pintar.</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">og:image</div>
+                <div class="tag-value">https://finwa.web.id/finwalogo.png</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">og:locale</div>
+                <div class="tag-value">id_ID</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🐦 Twitter Card Meta Tags</h2>
+            <div class="tag-item">
+                <div class="tag-name">twitter:card</div>
+                <div class="tag-value">summary_large_image</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">twitter:url</div>
+                <div class="tag-value">https://finwa.web.id/</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">twitter:title</div>
+                <div class="tag-value">FinWa — Atur Keuangan via WhatsApp</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">twitter:description</div>
+                <div class="tag-value">Atur keuangan tanpa ribet lewat WhatsApp. Kirim pesan pemasukan/pengeluaran,
+                    FinWa otomatis catat keuanganmu ke dashboard pintar.</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">twitter:image</div>
+                <div class="tag-value">https://finwa.web.id/finwalogo.png</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📋 Next Steps & Recommendations</h2>
+            <div class="tag-item">
+                <div class="tag-name">1. Submit to Google Search Console</div>
+                <div class="tag-value">Submit sitemap: https://finwa.web.id/sitemap.xml di Google Search Console
+                </div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">2. Test Meta Tags</div>
+                <div class="tag-value">
+                    • Facebook: https://developers.facebook.com/tools/debug/<br>
+                    • Twitter: https://cards-dev.twitter.com/validator<br>
+                    • Google Rich Results: https://search.google.com/test/rich-results
+                </div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">3. Optimize Image</div>
+                <div class="tag-value">Pastikan finwalogo.png berukuran optimal 1200x630px untuk social sharing</div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">4. Create Google Business Profile</div>
+                <div class="tag-value">Daftarkan bisnis FinWa di Google Business untuk meningkatkan visibilitas lokal
+                </div>
+            </div>
+            <div class="tag-item">
+                <div class="tag-name">5. Monitor Performance</div>
+                <div class="tag-value">Setup Google Analytics untuk tracking visitor dan behavior</div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

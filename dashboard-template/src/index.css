@@ -1,0 +1,269 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hide scrollbar for swipeable cards */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 220 20% 10%;
+
+    --card: 0 0% 100% / 0.6;
+    --card-foreground: 220 20% 10%;
+    --card-blur: 24px;
+    
+    --glass: 0 0% 100% / 0.4;
+    --glass-border: 0 0% 100% / 0.3;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
+    --popover-foreground: 220 20% 10%;
+
+    --primary: 145 63% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 220 20% 10%;
+
+    --muted: 210 15% 95%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 145 63% 95%;
+    --accent-foreground: 145 63% 32%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 20%;
+
+    --border: 214 20% 92%;
+    --input: 214 20% 92%;
+    --ring: 145 63% 42%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 15% 40%;
+    --sidebar-primary: 145 63% 42%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 145 63% 95%;
+    --sidebar-accent-foreground: 145 63% 32%;
+    --sidebar-border: 214 20% 94%;
+    --sidebar-ring: 145 63% 42%;
+
+    /* Chart colors */
+    --chart-income: 145 63% 42%;
+    --chart-income-light: 145 50% 65%;
+    --chart-expense: 85 45% 55%;
+    --chart-space: 145 20% 85%;
+    
+    /* Additional semantic colors */
+    --success: 145 63% 42%;
+    --success-light: 145 63% 95%;
+  }
+
+  .dark {
+    --background: 220 20% 10%;
+    --foreground: 210 20% 98%;
+
+    --card: 220 20% 14% / 0.6;
+    --card-foreground: 210 20% 98%;
+    --card-blur: 24px;
+    
+    --glass: 220 20% 20% / 0.5;
+    --glass-border: 220 20% 40% / 0.2;
+
+    --popover: 220 20% 14%;
+
+    --popover: 220 20% 14%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 145 63% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 20% 20%;
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 217 20% 20%;
+    --muted-foreground: 215 15% 65%;
+
+    --accent: 145 40% 20%;
+    --accent-foreground: 145 63% 70%;
+
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 210 20% 98%;
+
+    --border: 217 20% 20%;
+    --input: 217 20% 20%;
+    --ring: 145 63% 45%;
+
+    --sidebar-background: 220 20% 12%;
+    --sidebar-foreground: 210 15% 70%;
+    --sidebar-primary: 145 63% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 145 30% 18%;
+    --sidebar-accent-foreground: 145 63% 70%;
+    --sidebar-border: 217 20% 18%;
+    --sidebar-ring: 145 63% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* Number formatting for better readability */
+  .amount-primary {
+    @apply text-foreground font-semibold tracking-tight;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .amount-secondary {
+    @apply text-muted-foreground font-medium;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .amount-cents {
+    @apply text-muted-foreground font-normal text-[0.6em];
+  }
+}
+
+@layer utilities {
+  .animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out forwards;
+    opacity: 0;
+  }
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Animated gradient background */
+  .gradient-bg {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .gradient-bg::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: 
+      radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, hsl(var(--chart-expense) / 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 40% 60%, hsl(var(--accent) / 0.1) 0%, transparent 40%);
+    animation: gradient-shift 20s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .gradient-bg > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  @keyframes gradient-shift {
+    0%, 100% {
+      transform: translate(0%, 0%) rotate(0deg);
+    }
+    25% {
+      transform: translate(5%, 5%) rotate(2deg);
+    }
+    50% {
+      transform: translate(0%, 10%) rotate(0deg);
+    }
+    75% {
+      transform: translate(-5%, 5%) rotate(-2deg);
+    }
+  }
+
+  /* Dark mode gradient */
+  .dark .gradient-bg::before {
+    background: 
+      radial-gradient(circle at 20% 20%, hsl(var(--primary) / 0.12) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, hsl(var(--chart-expense) / 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 40% 60%, hsl(var(--accent) / 0.15) 0%, transparent 40%);
+  }
+
+  /* Floating orbs animation */
+  .floating-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.4;
+    animation: float 15s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  .floating-orb-1 {
+    width: 300px;
+    height: 300px;
+    background: hsl(var(--primary) / 0.15);
+    top: 10%;
+    right: 10%;
+    animation-delay: 0s;
+  }
+
+  .floating-orb-2 {
+    width: 250px;
+    height: 250px;
+    background: hsl(var(--chart-expense) / 0.12);
+    bottom: 20%;
+    left: 5%;
+    animation-delay: -5s;
+  }
+
+  .floating-orb-3 {
+    width: 200px;
+    height: 200px;
+    background: hsl(var(--accent) / 0.2);
+    top: 50%;
+    left: 40%;
+    animation-delay: -10s;
+  }
+
+  @keyframes float {
+    0%, 100% {
+      transform: translate(0, 0) scale(1);
+    }
+    25% {
+      transform: translate(20px, -30px) scale(1.05);
+    }
+    50% {
+      transform: translate(-10px, 20px) scale(0.95);
+    }
+    75% {
+      transform: translate(-30px, -10px) scale(1.02);
+    }
+  }
+
+  .dark .floating-orb {
+    opacity: 0.3;
+  }
+}
