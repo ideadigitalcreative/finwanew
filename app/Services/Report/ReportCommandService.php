@@ -4,9 +4,10 @@ namespace App\Services\Report;
 
 use App\Models\Channel;
 use App\Models\Message;
-use App\Services\PdfReportService;
+use App\Jobs\GenerateMonthlyPdfReport;
 use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * ReportCommandService - Handles Report generation and export commands
@@ -34,6 +35,11 @@ class ReportCommandService
     public function handleExportPdf(string $messageText): void
     {
         try {
+            $dispatchKey = "report_pdf_dispatched:{$this->message->id}";
+            if (! Cache::add($dispatchKey, true, now()->addMinutes(15))) {
+                return;
+            }
+
             $this->sendReply("📊 Sedang membuat laporan PDF...\n\nMohon tunggu sebentar.");
 
             // Parse month/year from message if specified
@@ -72,28 +78,7 @@ class ReportCommandService
                 $year = now()->year;
             }
 
-            // Generate PDF
-            $pdfService = new PdfReportService($this->message->tenant_id);
-            $pdfPath = $pdfService->generateMonthlyReport($month, $year);
-
-            if (! $pdfPath || ! file_exists($pdfPath)) {
-                $this->sendReply(
-                    "⚠️ *Gagal membuat PDF*\n\n".
-                    'Tidak dapat membuat laporan. Pastikan ada transaksi di bulan tersebut.'
-                );
-
-                return;
-            }
-
-            // Send PDF via WhatsApp
-            $this->sendDocument($pdfPath, 'Laporan Keuangan - '.now()->translatedFormat('F Y'));
-
-            Log::info('PDF report sent', [
-                'message_id' => $this->message->id,
-                'tenant_id' => $this->message->tenant_id,
-                'month' => $month,
-                'year' => $year,
-            ]);
+            GenerateMonthlyPdfReport::dispatch($this->message->id, $month, $year);
 
         } catch (\Exception $e) {
             Log::error('Error exporting PDF', [
