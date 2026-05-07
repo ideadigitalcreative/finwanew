@@ -913,11 +913,18 @@ class ProcessIncomingMessage implements ShouldQueue
                 return;
             }
         }
+
+        // 1.6af1.5: Delete wallet command - must run BEFORE transaction delete-by-keyword
+        // e.g., "hapus dompet jago", "hapus dompet BCA Hadi"
+        if (preg_match('/^(hapus|delete)\s+(dompet|rekening|akun|wallet|bank)\b/i', $textLower)) {
+            $this->walletCommand->handleDeleteWallet($messageText);
+            return;
+        }
         
         // 1.6af2: Delete specific transaction by keyword - "hapus beli kue", "hapus makan siang"
         // Must have keyword after "hapus" but NOT "hapus transaksi terakhir" or "hapus semua"
         // EXCLUDE: "hapus target" and "hapus tabungan" - these are handled by delete savings target
-        if (preg_match('/^(hapus|delete|batal)\s+(?!transaksi\s*$)(?!semua)(?!terakhir)(?!target)(?!tabungan)(?!saving)/i', $textLower)) {
+        if (preg_match('/^(hapus|delete|batal)\s+(?!transaksi\s*$)(?!semua)(?!terakhir)(?!target)(?!tabungan)(?!saving)(?!dompet\b)(?!rekening\b)(?!akun\b)(?!wallet\b)(?!bank\b)/i', $textLower)) {
             // Check if it's "hapus transaksi [keyword]" or "hapus [keyword]"
             $isSpecificDelete = preg_match('/^(hapus|delete|batal)\s+(transaksi\s+)?[a-zA-Z]/i', $textLower);
             if ($isSpecificDelete && !str_contains($textLower, 'terakhir') && !str_contains($textLower, 'semua') 
