@@ -2,6 +2,7 @@
 
 namespace App\Services\OCR;
 
+use App\Jobs\ProcessOcrImage;
 use App\Models\Message;
 use App\Models\OcrJob;
 use App\Models\Transaction;
@@ -108,6 +109,28 @@ class OcrProcessorService
 
             return null;
         }
+    }
+
+    /**
+     * Dispatch OCR job to OCR worker dengan delay
+     *
+     * MOVED FROM: ProcessIncomingMessage::dispatchToOcrWorkerWithDelay()
+     * LINES: 4509-4541
+     */
+    public function dispatchToOcrWorkerWithDelay(OcrJob $ocrJob, int $delaySeconds = 3): void
+    {
+        Log::info('Dispatching OCR job with delay', [
+            'ocr_job_id' => $ocrJob->id,
+            'delay' => $delaySeconds,
+        ]);
+
+        // Dispatch job to queue
+        ProcessOcrImage::dispatch($ocrJob)
+            ->delay(now()->addSeconds($delaySeconds))
+            ->onQueue('ocr_queue');
+
+        // Notify user
+        ($this->sendReplyCallback)('⏳ Sedang memproses gambar... Mohon tunggu sebentar.');
     }
 
     /**
@@ -240,6 +263,20 @@ class OcrProcessorService
                 }
             }
 
+            // Build extracted text for message content
+            $extractedText = $merchant ?? 'Struk Belanja';
+            if (! empty($items)) {
+                $itemLines = [];
+                foreach ($items as $item) {
+                    $name = $item['name'] ?? 'Item';
+                    $price = isset($item['price']) ? ' Rp '.number_format((int) $item['price'], 0, ',', '.') : '';
+                    $itemLines[] = "- {$name}{$price}";
+                }
+                $extractedText .= "\n".implode("\n", $itemLines);
+            }
+            $extractedText .= "\nTotal: Rp ".number_format($total, 0, ',', '.');
+
+            // Map Gemini response ke structured_data yang diharapkan ProcessIncomingMessage
             $structuredData = [
                 'entities' => [
                     'merchant' => $merchant,
@@ -256,43 +293,9 @@ class OcrProcessorService
                 'items' => $items,
             ];
 
-            $transactionDate = $this->receiptParser->parseReceiptDate($dateRaw);
-            $txData = [
-                'type' => 'expense',
-                'amount' => $total,
-                'category_type' => 'pengeluaran_belanja',
-                'transaction_date' => $transactionDate,
-                'description' => $merchant ? "Belanja di {$merchant}" : 'Belanja dari struk',
-                'source' => 'gemini_vision',
-                'confidence_score' => 0.95,
-                'account_name' => null,
-            ];
-
-            $transaction = $this->transactionService->createTransaction($txData, false);
-
-            if (! $transaction) {
-                $ocrJob->update([
-                    'status' => 'failed',
-                    'completed_at' => now(),
-                    'error' => 'Failed to create transaction from receipt image',
-                    'metadata' => array_merge($ocrJob->metadata ?? [], [
-                        'ai_source' => 'gemini-vision',
-                        'confidence_score' => 0.95,
-                        'model' => config('services.gemini.model', 'gemini-2.5-flash'),
-                        'entities' => $structuredData['entities'],
-                        'structured_data' => $structuredData,
-                        'raw_response' => $parsed,
-                    ]),
-                ]);
-
-                ($this->sendReplyCallback)('⚠️ Gagal mencatat transaksi dari struk. Silakan coba lagi.');
-
-                return;
-            }
-
             $ocrJob->update([
                 'status' => 'completed',
-                'completed_at' => now(),
+                'extracted_text' => $extractedText,
                 'metadata' => array_merge($ocrJob->metadata ?? [], [
                     'ai_source' => 'gemini-vision',
                     'confidence_score' => 0.95,
@@ -300,23 +303,23 @@ class OcrProcessorService
                     'entities' => $structuredData['entities'],
                     'structured_data' => $structuredData,
                     'raw_response' => $parsed,
-                    'transaction_id' => $transaction->id,
                 ]),
+                'completed_at' => now(),
             ]);
 
-            if (! empty($items)) {
-                $this->confirmationService->sendReceiptConfirmation($transaction, $items, $merchant);
-            } else {
-                $reply = "✅ *Berhasil Dicatat*\n\n";
-                $reply .= '💸 *Pengeluaran*: Rp '.number_format($total, 0, ',', '.')."\n";
-                $reply .= "📁 Kategori: Belanja\n";
-                if ($merchant) {
-                    $reply .= "🏪 Toko: {$merchant}\n";
-                }
-                $reply .= "📅 Tanggal: {$transactionDate}\n";
-                $reply .= "\n*Struk berhasil dicatat sebagai 1 transaksi pengeluaran.*";
-                ($this->sendReplyCallback)($reply);
-            }
+            // Update message type ke text agar second-pass bisa membaca structured_data
+            $message = $ocrJob->message;
+            $message->update([
+                'type' => 'text',
+                'content' => $extractedText,
+            ]);
+
+            Log::info('Gemini Vision done — dispatching second pass', [
+                'message_id' => $message->id,
+                'total' => $total,
+            ]);
+
+            \App\Jobs\ProcessIncomingMessage::dispatch($message->fresh());
 
         } catch (\Throwable $e) {
             Log::error('Gemini Vision process failed', [

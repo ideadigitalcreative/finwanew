@@ -1175,9 +1175,6 @@ class WalletCommandService
             // Determine account type
             $accountType = $this->determineAccountType($walletName);
 
-            $balanceService = app(BalanceService::class);
-            $walletName = $balanceService->canonicalizeAccountName($walletName, $accountType);
-
             // Extract optional initial balance
             $initialBalance = $this->extractAmountFromText($textLower) ?? 0;
 

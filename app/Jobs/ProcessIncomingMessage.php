@@ -672,20 +672,6 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
         
-        // FAST PATH 1.92: Transfer between wallets (internal transfer)
-        // e.g., "transfer saldo Jago Hadi ke BRI 300rb", "transfer 100rb dari BCA ke Mandiri"
-        $transferBetweenWalletPatterns = [
-            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?\s+(?:dari\s+)?[a-zA-Z0-9\s]+?\s+ke\s+[a-zA-Z0-9\s]+/i',
-            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?(?:dari\s+)?[a-zA-Z0-9\s]+?\s+ke\s+[a-zA-Z0-9\s]+?\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?/i',
-        ];
-
-        foreach ($transferBetweenWalletPatterns as $pattern) {
-            if (preg_match($pattern, $messageText)) {
-                $this->walletCommand->handleTransferBetweenWallets();
-                return;
-            }
-        }
-
         // FAST PATH 1.9b: Catch INCOMPLETE "tambah saldo" commands (missing amount)
         // e.g., "tambah saldo BCA" without nominal - give helpful error message
         if (preg_match('/^(?:isi|tambah|top\s*up)\s+saldo\s+([a-zA-Z0-9\s]+)$/i', trim($messageText), $incompleteMatch)) {
@@ -911,7 +897,7 @@ class ProcessIncomingMessage implements ShouldQueue
         // 1.6af2: Delete specific transaction by keyword - "hapus beli kue", "hapus makan siang"
         // Must have keyword after "hapus" but NOT "hapus transaksi terakhir" or "hapus semua"
         // EXCLUDE: "hapus target" and "hapus tabungan" - these are handled by delete savings target
-        if (preg_match('/^(hapus|delete|batal)\s+(?!transaksi\s*$)(?!semua)(?!terakhir)(?!target)(?!tabungan)(?!saving)(?!dompet\b)(?!rekening\b)(?!wallet\b)(?!akun\b)(?!bank\b)/i', $textLower)) {
+        if (preg_match('/^(hapus|delete|batal)\s+(?!transaksi\s*$)(?!semua)(?!terakhir)(?!target)(?!tabungan)(?!saving)/i', $textLower)) {
             // Check if it's "hapus transaksi [keyword]" or "hapus [keyword]"
             $isSpecificDelete = preg_match('/^(hapus|delete|batal)\s+(transaksi\s+)?[a-zA-Z]/i', $textLower);
             if ($isSpecificDelete && !str_contains($textLower, 'terakhir') && !str_contains($textLower, 'semua') 

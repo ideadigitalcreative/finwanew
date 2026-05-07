@@ -9,11 +9,6 @@ use Illuminate\Support\Facades\Log;
 
 class BalanceService
 {
-    public function canonicalizeAccountName(string $accountName, ?string $accountType = null): string
-    {
-        return $this->normalizeAccountName($accountName, $accountType);
-    }
-
     /**
      * Find or create balance account by name
      */
@@ -23,8 +18,8 @@ class BalanceService
             return null;
         }
 
-        $normalizedName = $this->normalizeAccountName($accountName, $accountType);
-        $canonicalName = $this->extractCanonicalAccountName($normalizedName);
+        // Normalize account name (remove "saldo" prefix if present, normalize bank names)
+        $normalizedName = $this->normalizeAccountName($accountName);
 
         // Try to find existing balance (exact match)
         $balance = Balance::where('tenant_id', $tenantId)
@@ -34,17 +29,6 @@ class BalanceService
 
         if ($balance) {
             return $balance;
-        }
-
-        if ($canonicalName && $canonicalName !== $normalizedName) {
-            $balance = Balance::where('tenant_id', $tenantId)
-                ->where('account_name', $canonicalName)
-                ->where('is_active', true)
-                ->first();
-
-            if ($balance) {
-                return $balance;
-            }
         }
 
         // If not found, try to find similar account name (case insensitive)
@@ -57,46 +41,21 @@ class BalanceService
             return $balance;
         }
 
-        if ($canonicalName && $canonicalName !== $normalizedName) {
-            $balance = Balance::where('tenant_id', $tenantId)
-                ->whereRaw('LOWER(account_name) = ?', [strtolower($canonicalName)])
-                ->where('is_active', true)
-                ->first();
-
-            if ($balance) {
-                return $balance;
-            }
-        }
-
         // Try fuzzy match for bank names (e.g., "BCA" should match "Bank BCA")
         $accountNameLower = strtolower($normalizedName);
         $fuzzyMatches = [
-            'bca' => ['BCA', 'Bank BCA', 'Bank Central Asia'],
-            'mandiri' => ['Mandiri', 'Bank Mandiri'],
-            'bni' => ['BNI', 'Bank BNI'],
-            'bri' => ['BRI', 'Bank BRI'],
-            'jago' => ['Jago', 'Bank Jago'],
+            'bca' => 'Bank BCA',
+            'mandiri' => 'Bank Mandiri',
+            'bni' => 'Bank BNI',
+            'bri' => 'Bank BRI',
         ];
 
         foreach ($fuzzyMatches as $key => $bankName) {
-            $candidates = is_array($bankName) ? $bankName : [$bankName];
-            $hit = str_contains($accountNameLower, $key);
-            if (! $hit) {
-                foreach ($candidates as $candidate) {
-                    if (str_contains($accountNameLower, strtolower($candidate))) {
-                        $hit = true;
-                        break;
-                    }
-                }
-            }
-
-            if ($hit) {
+            if (str_contains($accountNameLower, $key) || str_contains($accountNameLower, strtolower($bankName))) {
                 $balance = Balance::where('tenant_id', $tenantId)
-                    ->where(function ($query) use ($candidates, $key) {
-                        foreach ($candidates as $candidate) {
-                            $query->orWhere('account_name', $candidate);
-                        }
-                        $query->orWhereRaw('LOWER(account_name) LIKE ?', ['%'.$key.'%']);
+                    ->where(function ($query) use ($bankName, $key) {
+                        $query->where('account_name', $bankName)
+                            ->orWhereRaw('LOWER(account_name) LIKE ?', ['%'.$key.'%']);
                     })
                     ->where('is_active', true)
                     ->first();
@@ -104,13 +63,8 @@ class BalanceService
                 if ($balance) {
                     return $balance;
                 }
-
-                if ($canonicalName) {
-                    $normalizedName = $canonicalName;
-                } else {
-                    $normalizedName = $candidates[0] ?? $normalizedName;
-                }
-
+                // Use normalized bank name for creation
+                $normalizedName = $bankName;
                 break;
             }
         }
@@ -118,10 +72,6 @@ class BalanceService
         // If still not found and accountType provided, create new balance with 0 balance
         if ($accountType) {
             try {
-                if ($canonicalName) {
-                    $normalizedName = $canonicalName;
-                }
-
                 $balance = Balance::create([
                     'tenant_id' => $tenantId,
                     'account_name' => $normalizedName, // Use normalized name
@@ -157,92 +107,38 @@ class BalanceService
     /**
      * Normalize account name (remove prefixes, normalize bank names)
      */
-    protected function normalizeAccountName(string $accountName, ?string $accountType = null): string
+    protected function normalizeAccountName(string $accountName): string
     {
         $name = trim($accountName);
-        $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
-
         $nameLower = strtolower($name);
-        $nameLower = preg_replace('/^(saldo|rekening|akun)\s+/iu', '', $nameLower) ?? $nameLower;
+
+        // Remove common prefixes
+        $nameLower = str_replace(['saldo', 'bank'], '', $nameLower);
         $nameLower = trim($nameLower);
 
-        $nameLower = preg_replace('/\s+rp\.?\s*/iu', ' ', $nameLower) ?? $nameLower;
-        $nameLower = preg_replace('/\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta|m|million)?\s*$/iu', '', $nameLower) ?? $nameLower;
-        $nameLower = trim(preg_replace('/\s+/u', ' ', $nameLower) ?? $nameLower);
-
-        if (in_array($nameLower, ['cash', 'tunai'], true)) {
+        // Normalize bank names
+        if ($nameLower === 'bca' || str_starts_with($nameLower, 'bca')) {
+            return 'Bank BCA';
+        }
+        if ($nameLower === 'mandiri' || str_starts_with($nameLower, 'mandiri')) {
+            return 'Bank Mandiri';
+        }
+        if ($nameLower === 'bni' || str_starts_with($nameLower, 'bni')) {
+            return 'Bank BNI';
+        }
+        if ($nameLower === 'bri' || str_starts_with($nameLower, 'bri')) {
+            return 'Bank BRI';
+        }
+        if (in_array($nameLower, ['cash', 'tunai'])) {
             return 'Cash';
         }
 
-        $canonical = $this->extractCanonicalAccountName($nameLower);
-        if ($canonical) {
-            if ($accountType === 'bank') {
-                return $canonical;
-            }
-
-            if ($accountType === 'wallet') {
-                return $canonical;
-            }
-        }
-
-        if (in_array($nameLower, ['gopay', 'go pay', 'ovo', 'dana', 'shopeepay', 'shopee pay', 'linkaja', 'link aja'], true)) {
-            return $this->extractCanonicalAccountName($nameLower) ?? ucwords($nameLower);
+        // If it already contains "Bank" or matches known format
+        if (in_array($nameLower, ['cash', 'tunai', 'gopay', 'ovo', 'dana'])) {
+            return ucwords($nameLower);
         }
 
         return ucwords($nameLower);
-    }
-
-    protected function extractCanonicalAccountName(string $accountName): ?string
-    {
-        $nameLower = strtolower(trim($accountName));
-        $nameLower = preg_replace('/\s+/u', ' ', $nameLower) ?? $nameLower;
-
-        $eWalletMap = [
-            '/\bgopay\b|\bgo\s*pay\b/i' => 'GoPay',
-            '/\bovo\b/i' => 'OVO',
-            '/\bdana\b/i' => 'Dana',
-            '/\bshopee\s*pay\b|\bshopeepay\b/i' => 'ShopeePay',
-            '/\blink\s*aja\b|\blinkaja\b/i' => 'LinkAja',
-            '/\bsakuku\b/i' => 'Sakuku',
-            '/\bisaku\b/i' => 'iSaku',
-        ];
-
-        foreach ($eWalletMap as $pattern => $canonical) {
-            if (preg_match($pattern, $nameLower)) {
-                return $canonical;
-            }
-        }
-
-        $bankMap = [
-            '/\b(bank\s+)?bca\b|\bbank\s+central\s+asia\b/i' => 'BCA',
-            '/\b(bank\s+)?bri\b|\bbank\s+rakyat\s+indonesia\b/i' => 'BRI',
-            '/\b(bank\s+)?bni\b|\bbank\s+negara\s+indonesia\b/i' => 'BNI',
-            '/\b(bank\s+)?mandiri\b/i' => 'Mandiri',
-            '/\b(bank\s+)?cimb\b|\bcimb\s+niaga\b/i' => 'CIMB',
-            '/\b(bank\s+)?permata\b/i' => 'Permata',
-            '/\b(bank\s+)?danamon\b/i' => 'Danamon',
-            '/\b(bank\s+)?btn\b/i' => 'BTN',
-            '/\b(bank\s+)?bsi\b|\bbank\s+syariah\s+indonesia\b/i' => 'BSI',
-            '/\b(bank\s+)?ocbc\b/i' => 'OCBC',
-            '/\b(bank\s+)?hsbc\b/i' => 'HSBC',
-            '/\b(bank\s+)?maybank\b/i' => 'Maybank',
-            '/\b(bank\s+)?uob\b/i' => 'UOB',
-            '/\b(bank\s+)?jago\b/i' => 'Jago',
-            '/\b(bank\s+)?jenius\b/i' => 'Jenius',
-            '/\b(bank\s+)?blu\b/i' => 'Blu',
-            '/\bsea\s*bank\b|\bseabank\b/i' => 'SeaBank',
-            '/\bline\s*bank\b/i' => 'Line Bank',
-            '/\btmrw\b/i' => 'TMRW',
-            '/\bneo\b/i' => 'Neo',
-        ];
-
-        foreach ($bankMap as $pattern => $canonical) {
-            if (preg_match($pattern, $nameLower)) {
-                return $canonical;
-            }
-        }
-
-        return null;
     }
 
     /**
