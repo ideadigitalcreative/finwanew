@@ -196,10 +196,15 @@ Aturan Ekstraksi:
 1. "merchant_name": Nama toko atau tempat transaksi.
 2. "date": Tanggal transaksi dalam format "YYYY-MM-DD". PERHATIAN: Format tanggal di struk Indonesia adalah DD-MM-YYYY. Jadi "01-05-2026" harus dikonversi menjadi "2026-05-01". Jika tidak ada tanggal, isi null.
 3. "time": Waktu transaksi dalam format "HH:MM". Jika tidak ada, isi null.
-4. "items": Array of object berisi daftar barang yang dibeli. Terdiri dari "name" (nama barang), "qty" (jumlah barang, harus berupa angka), dan "price" (harga total per baris barang tersebut, harus berupa angka).
+4. "items": Array of object berisi daftar barang yang DIBELI SAJA (line items). Terdiri dari:
+   - "name": nama barang (tanpa kode baris seperti "A", "B", "C" di depannya jika itu hanya penanda kategori)
+   - "qty": jumlah barang (angka; jika tidak ada, isi 1)
+   - "price": harga TOTAL per baris barang tersebut (angka murni). Jika struk menulis "2x 4.000" maka qty=2 dan price=8000.
+   Jangan masukkan baris non-item sebagai items, termasuk: TOTAL, SUBTOTAL, GRAND TOTAL, PAJAK/TAX, DISKON, BAYAR, TUNAI/CASH, KEMBALI/CHANGE, NOMOR/NO/REF, PASSWORD, WIFI, TERIMA KASIH, alamat, nomor telepon.
 5. "tax": Jumlah pajak (jika tertera). Jika tidak ada, isi 0.
 6. "total_amount": Total akhir yang harus dibayar. Harus berupa angka murni (misal: 150000). Jangan sertakan simbol mata uang ("Rp") atau titik/koma pemisah ribuan.
-7. Jika ada informasi yang sama sekali tidak terbaca atau tidak ada di struk, berikan nilai null.
+7. Pastikan items TIDAK mengandung baris "Total" apa pun. Total hanya ada di field total_amount.
+8. Jika ada informasi yang sama sekali tidak terbaca atau tidak ada di struk, berikan nilai null.
 
 Gunakan struktur JSON berikut:
 {

@@ -238,6 +238,34 @@ class OcrProcessorService
             $dateRaw = $parsed['date'] ?? null;
             $items = $parsed['items'] ?? [];
             $tax = (int) ($parsed['tax'] ?? 0);
+            $items = array_values(array_filter(array_map(function ($item) {
+                if (! is_array($item)) {
+                    return null;
+                }
+                $name = trim((string) ($item['name'] ?? ''));
+                $name = preg_replace('/^[A-Z]\s+(?=\p{L})/u', '', $name);
+                $name = trim($name);
+                if ($name === '') {
+                    return null;
+                }
+                if (preg_match('/^(total|subtotal|grand\s*total|tax|pajak|ppn|service|diskon|discount|bayar|tunai|cash|kembali|change|nomer|nomor|no\\b|ref\\b|password|wifi|terima\\s+kasih)/i', $name)) {
+                    return null;
+                }
+                $qty = (int) ($item['qty'] ?? 1);
+                if ($qty <= 0) {
+                    $qty = 1;
+                }
+                $price = (int) ($item['price'] ?? 0);
+                if ($price <= 0) {
+                    return null;
+                }
+
+                return [
+                    'name' => $name,
+                    'qty' => $qty,
+                    'price' => $price,
+                ];
+            }, $items), fn ($v) => $v !== null));
 
             // ── DATE VALIDATION ──────────────────────────────────────────────
             // Gemini kadang salah parse format DD-MM-YYYY jadi tahun yang aneh
@@ -269,17 +297,19 @@ class OcrProcessorService
             }
 
             // Build extracted text for message content
-            $extractedText = $merchant ?? 'Struk Belanja';
+            $extractedText = $merchant ? "Struk: {$merchant}" : 'Struk Belanja';
+            if ($dateRaw) {
+                $extractedText .= "\nTanggal: {$dateRaw}";
+            }
             if (! empty($items)) {
                 $itemLines = [];
                 foreach ($items as $item) {
                     $name = $item['name'] ?? 'Item';
-                    $price = isset($item['price']) ? ' Rp '.number_format((int) $item['price'], 0, ',', '.') : '';
-                    $itemLines[] = "- {$name}{$price}";
+                    $amountFormatted = number_format((int) ($item['price'] ?? 0), 0, ',', '.');
+                    $itemLines[] = "{$name} {$amountFormatted}";
                 }
                 $extractedText .= "\n".implode("\n", $itemLines);
             }
-            $extractedText .= "\nTotal: Rp ".number_format($total, 0, ',', '.');
 
             // Map Gemini response ke structured_data yang diharapkan ProcessIncomingMessage
             $structuredData = [
