@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Service untuk handle incoming messages dari wa-blast engine
@@ -814,7 +815,10 @@ class WhatsAppWebhookService
             // Determine message type and content
             // Map WhatsApp-web.js types to database types
             $waType = $waMessageData['type'] ?? 'chat';
-            $content = $waMessageData['body'] ?? '';
+            $content = is_string($waMessageData['body'] ?? null) ? (string) $waMessageData['body'] : '';
+            $mediaUrl = null;
+            $mediaPath = null;
+            $mediaFilename = null;
 
             // Determine initial type based on waType
             $typeMap = [
@@ -873,38 +877,86 @@ class WhatsAppWebhookService
                     if (str_starts_with($waMessageData['mimetype'], 'image/')) {
                         $type = 'image';
                         // If body contains URL (from media upload), use it
-                        if (! empty($waMessageData['body']) && (str_starts_with($waMessageData['body'], 'http://') || str_starts_with($waMessageData['body'], 'https://'))) {
-                            $content = $waMessageData['body'];
+                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                            $content = $this->normalizeIncomingMediaReference($content);
+                            $mediaUrl = $content;
                         } else {
+                            $fallback = $this->extractIncomingMediaReference($waMessageData, $tenantId, $messageId);
+                            if (! empty($fallback['content'])) {
+                                $content = $fallback['content'];
+                                $mediaUrl = $fallback['media_url'] ?? $content;
+                                $mediaPath = $fallback['media_path'] ?? null;
+                                $mediaFilename = $fallback['filename'] ?? null;
+                            }
                             // Log warning if media URL is missing
-                            Log::warning('Image message received but media URL is missing', [
+                            if (empty($mediaUrl) && empty($content)) {
+                                Log::warning('Image message received but media reference is missing', [
                                 'message_id' => $messageId,
                                 'hasMedia' => true,
                                 'mimetype' => $waMessageData['mimetype'],
-                                'body' => substr($waMessageData['body'] ?? '', 0, 100),
+                                'body_preview' => substr((string) ($waMessageData['body'] ?? ''), 0, 100),
+                                'keys' => array_keys($waMessageData),
+                                'raw_keys' => isset($waMessageData['raw_data']) && is_array($waMessageData['raw_data']) ? array_keys($waMessageData['raw_data']) : null,
                             ]);
+                            }
                         }
                     } elseif (str_starts_with($waMessageData['mimetype'], 'audio/')) {
                         $type = 'audio';
-                        if (! empty($waMessageData['body']) && (str_starts_with($waMessageData['body'], 'http://') || str_starts_with($waMessageData['body'], 'https://'))) {
-                            $content = $waMessageData['body'];
+                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                            $content = $this->normalizeIncomingMediaReference($content);
+                            $mediaUrl = $content;
+                        } else {
+                            $fallback = $this->extractIncomingMediaReference($waMessageData, $tenantId, $messageId);
+                            if (! empty($fallback['content'])) {
+                                $content = $fallback['content'];
+                                $mediaUrl = $fallback['media_url'] ?? $content;
+                                $mediaPath = $fallback['media_path'] ?? null;
+                                $mediaFilename = $fallback['filename'] ?? null;
+                            }
                         }
                     } elseif (str_contains($waMessageData['mimetype'], 'pdf')) {
                         $type = 'doc';
-                        if (! empty($waMessageData['body']) && (str_starts_with($waMessageData['body'], 'http://') || str_starts_with($waMessageData['body'], 'https://'))) {
-                            $content = $waMessageData['body'];
+                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                            $content = $this->normalizeIncomingMediaReference($content);
+                            $mediaUrl = $content;
+                        } else {
+                            $fallback = $this->extractIncomingMediaReference($waMessageData, $tenantId, $messageId);
+                            if (! empty($fallback['content'])) {
+                                $content = $fallback['content'];
+                                $mediaUrl = $fallback['media_url'] ?? $content;
+                                $mediaPath = $fallback['media_path'] ?? null;
+                                $mediaFilename = $fallback['filename'] ?? null;
+                            }
                         }
                     } elseif (str_contains($waMessageData['mimetype'], 'csv') ||
                               str_contains($waMessageData['mimetype'], 'spreadsheet') ||
                               str_contains($waMessageData['mimetype'], 'excel')) {
                         $type = 'csv';
-                        if (! empty($waMessageData['body']) && (str_starts_with($waMessageData['body'], 'http://') || str_starts_with($waMessageData['body'], 'https://'))) {
-                            $content = $waMessageData['body'];
+                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                            $content = $this->normalizeIncomingMediaReference($content);
+                            $mediaUrl = $content;
+                        } else {
+                            $fallback = $this->extractIncomingMediaReference($waMessageData, $tenantId, $messageId);
+                            if (! empty($fallback['content'])) {
+                                $content = $fallback['content'];
+                                $mediaUrl = $fallback['media_url'] ?? $content;
+                                $mediaPath = $fallback['media_path'] ?? null;
+                                $mediaFilename = $fallback['filename'] ?? null;
+                            }
                         }
                     } else {
                         $type = 'doc';
-                        if (! empty($waMessageData['body']) && (str_starts_with($waMessageData['body'], 'http://') || str_starts_with($waMessageData['body'], 'https://'))) {
-                            $content = $waMessageData['body'];
+                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                            $content = $this->normalizeIncomingMediaReference($content);
+                            $mediaUrl = $content;
+                        } else {
+                            $fallback = $this->extractIncomingMediaReference($waMessageData, $tenantId, $messageId);
+                            if (! empty($fallback['content'])) {
+                                $content = $fallback['content'];
+                                $mediaUrl = $fallback['media_url'] ?? $content;
+                                $mediaPath = $fallback['media_path'] ?? null;
+                                $mediaFilename = $fallback['filename'] ?? null;
+                            }
                         }
                     }
                 } else {
@@ -918,6 +970,21 @@ class WhatsAppWebhookService
                         'sticker' => 'image',
                     ];
                     $type = $typeMap[$waType] ?? 'text';
+                }
+
+                if ($mediaUrl === null && in_array($type, ['image', 'audio', 'doc', 'csv'], true)) {
+                    if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                        $content = $this->normalizeIncomingMediaReference($content);
+                        $mediaUrl = $content;
+                    } else {
+                        $fallback = $this->extractIncomingMediaReference($waMessageData, $tenantId, $messageId);
+                        if (! empty($fallback['content'])) {
+                            $content = $fallback['content'];
+                            $mediaUrl = $fallback['media_url'] ?? $content;
+                            $mediaPath = $fallback['media_path'] ?? null;
+                            $mediaFilename = $fallback['filename'] ?? null;
+                        }
+                    }
                 }
             } else {
                 // No media, map WhatsApp types to database types
@@ -959,6 +1026,9 @@ class WhatsAppWebhookService
                     'isStarred' => $waMessageData['isStarred'] ?? false,
                     'hasMedia' => $waMessageData['hasMedia'] ?? false,
                     'mimetype' => $waMessageData['mimetype'] ?? null,
+                    'media_url' => $mediaUrl,
+                    'media_path' => $mediaPath,
+                    'filename' => $mediaFilename,
                     'location' => $waMessageData['location'] ?? null,
                     'contact' => $waMessageData['contact'] ?? null,
                     'mentions' => $waMessageData['mentionedIds'] ?? [],
@@ -1002,6 +1072,18 @@ class WhatsAppWebhookService
             }
             if (! empty($payload['raw_data']['isGroup'])) {
                 $metadata['is_group'] = $payload['raw_data']['isGroup'];
+            }
+            if (! empty($payload['raw_data']['mimetype'])) {
+                $metadata['mimetype'] = $payload['raw_data']['mimetype'];
+            }
+            if (! empty($payload['raw_data']['media_url'])) {
+                $metadata['media_url'] = $payload['raw_data']['media_url'];
+            }
+            if (! empty($payload['raw_data']['media_path'])) {
+                $metadata['media_path'] = $payload['raw_data']['media_path'];
+            }
+            if (! empty($payload['raw_data']['filename'])) {
+                $metadata['filename'] = $payload['raw_data']['filename'];
             }
 
             try {
@@ -1507,5 +1589,295 @@ class WhatsAppWebhookService
                 'message_body' => $msgBody,
             ]);
         }
+    }
+
+    protected function isLikelyMediaReference(string $value): bool
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return false;
+        }
+
+        if (preg_match('/^https?:\/\//i', $value)) {
+            return true;
+        }
+
+        if (str_starts_with($value, '/storage/') || str_starts_with($value, 'storage/')) {
+            return true;
+        }
+
+        if (str_starts_with($value, '/api/files') || str_starts_with($value, 'api/files')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function normalizeIncomingMediaReference(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return $value;
+        }
+
+        if (preg_match('/^https?:\/\//i', $value)) {
+            return $value;
+        }
+
+        $base = rtrim((string) config('app.url'), '/');
+        if ($base === '') {
+            return $value;
+        }
+
+        if (str_starts_with($value, 'storage/')) {
+            return $base.'/'.ltrim($value, '/');
+        }
+
+        if (str_starts_with($value, 'api/files')) {
+            return $base.'/'.ltrim($value, '/');
+        }
+
+        if (str_starts_with($value, '/storage/') || str_starts_with($value, '/api/files')) {
+            return $base.$value;
+        }
+
+        return $value;
+    }
+
+    protected function extractIncomingMediaReference(array $waMessageData, int $tenantId, ?string $messageId): array
+    {
+        $urlCandidates = [
+            $waMessageData['mediaUrl'] ?? null,
+            $waMessageData['media_url'] ?? null,
+            $waMessageData['url'] ?? null,
+            $waMessageData['fileUrl'] ?? null,
+            $waMessageData['raw_data']['mediaUrl'] ?? null,
+            $waMessageData['raw_data']['media_url'] ?? null,
+            $waMessageData['raw_data']['url'] ?? null,
+            $waMessageData['raw_data']['fileUrl'] ?? null,
+            $waMessageData['raw_data']['file_url'] ?? null,
+            $waMessageData['raw_data']['image']['url'] ?? null,
+            $waMessageData['raw_data']['document']['url'] ?? null,
+            $waMessageData['raw_data']['audio']['url'] ?? null,
+        ];
+
+        foreach ($urlCandidates as $candidate) {
+            if (! is_string($candidate)) {
+                continue;
+            }
+            $candidate = trim($candidate);
+            if ($candidate === '') {
+                continue;
+            }
+            if ($this->isLikelyMediaReference($candidate) || filter_var($candidate, FILTER_VALIDATE_URL)) {
+                $normalized = $this->normalizeIncomingMediaReference($candidate);
+
+                return [
+                    'content' => $normalized,
+                    'media_url' => $normalized,
+                    'media_path' => null,
+                    'filename' => $this->extractIncomingFilename($waMessageData),
+                ];
+            }
+        }
+
+        $base64 = $this->extractIncomingBase64($waMessageData);
+        if (! $base64) {
+            return [];
+        }
+
+        $mimeType = $this->extractIncomingMimeType($waMessageData) ?? 'application/octet-stream';
+        $decoded = $this->decodeBase64Payload($base64);
+        if ($decoded === null) {
+            Log::warning('Media base64 present but failed to decode', [
+                'message_id' => $messageId,
+                'tenant_id' => $tenantId,
+                'mimetype' => $mimeType,
+                'base64_len' => strlen($base64),
+            ]);
+
+            return [];
+        }
+
+        $filename = $this->extractIncomingFilename($waMessageData) ?? ('media_'.($messageId ? preg_replace('/\W+/', '', (string) $messageId) : uniqid()));
+        $extension = $this->extensionFromMimeType($mimeType);
+        $safeFilename = $this->sanitizeFilename($filename);
+        if ($extension && ! str_ends_with(strtolower($safeFilename), '.'.strtolower($extension))) {
+            $safeFilename .= '.'.$extension;
+        }
+
+        $path = "whatsapp/{$tenantId}/".date('Y/m/d').'/'.uniqid().'_'.$safeFilename;
+        Storage::disk('public')->put($path, $decoded);
+
+        return [
+            'content' => $path,
+            'media_url' => $path,
+            'media_path' => $path,
+            'filename' => $safeFilename,
+        ];
+    }
+
+    protected function extractIncomingBase64(array $waMessageData): ?string
+    {
+        $candidates = [
+            $waMessageData['file_data'] ?? null,
+            $waMessageData['fileData'] ?? null,
+            $waMessageData['base64'] ?? null,
+            $waMessageData['data'] ?? null,
+            $waMessageData['mediaBase64'] ?? null,
+            $waMessageData['media_data'] ?? null,
+            $waMessageData['raw_data']['file_data'] ?? null,
+            $waMessageData['raw_data']['fileData'] ?? null,
+            $waMessageData['raw_data']['base64'] ?? null,
+            $waMessageData['raw_data']['data'] ?? null,
+            $waMessageData['raw_data']['mediaBase64'] ?? null,
+            $waMessageData['raw_data']['media_data'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                return trim($candidate);
+            }
+            if (is_array($candidate)) {
+                foreach (['file_data', 'fileData', 'base64', 'data'] as $key) {
+                    if (isset($candidate[$key]) && is_string($candidate[$key]) && trim($candidate[$key]) !== '') {
+                        return trim($candidate[$key]);
+                    }
+                }
+            }
+        }
+
+        foreach (['media', 'image', 'document', 'audio'] as $top) {
+            if (! isset($waMessageData[$top])) {
+                continue;
+            }
+            $obj = $waMessageData[$top];
+            if (is_array($obj)) {
+                foreach (['file_data', 'fileData', 'base64', 'data'] as $key) {
+                    if (isset($obj[$key]) && is_string($obj[$key]) && trim($obj[$key]) !== '') {
+                        return trim($obj[$key]);
+                    }
+                }
+            }
+        }
+
+        if (isset($waMessageData['raw_data']) && is_array($waMessageData['raw_data'])) {
+            foreach (['media', 'image', 'document', 'audio'] as $top) {
+                if (! isset($waMessageData['raw_data'][$top])) {
+                    continue;
+                }
+                $obj = $waMessageData['raw_data'][$top];
+                if (is_array($obj)) {
+                    foreach (['file_data', 'fileData', 'base64', 'data'] as $key) {
+                        if (isset($obj[$key]) && is_string($obj[$key]) && trim($obj[$key]) !== '') {
+                            return trim($obj[$key]);
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    protected function decodeBase64Payload(string $value): ?string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return null;
+        }
+
+        if (str_starts_with($value, 'data:') && str_contains($value, 'base64,')) {
+            $parts = explode('base64,', $value, 2);
+            $value = $parts[1] ?? '';
+        }
+
+        $value = preg_replace('/\s+/', '', $value) ?? $value;
+        if ($value === '') {
+            return null;
+        }
+
+        $decoded = base64_decode($value, true);
+        if ($decoded === false) {
+            return null;
+        }
+
+        return $decoded;
+    }
+
+    protected function extractIncomingFilename(array $waMessageData): ?string
+    {
+        $candidates = [
+            $waMessageData['filename'] ?? null,
+            $waMessageData['fileName'] ?? null,
+            $waMessageData['raw_data']['filename'] ?? null,
+            $waMessageData['raw_data']['fileName'] ?? null,
+            $waMessageData['raw_data']['file_name'] ?? null,
+            $waMessageData['raw_data']['document']['filename'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                return trim($candidate);
+            }
+        }
+
+        return null;
+    }
+
+    protected function extractIncomingMimeType(array $waMessageData): ?string
+    {
+        $candidates = [
+            $waMessageData['mimetype'] ?? null,
+            $waMessageData['mime_type'] ?? null,
+            $waMessageData['raw_data']['mimetype'] ?? null,
+            $waMessageData['raw_data']['mime_type'] ?? null,
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                return trim($candidate);
+            }
+        }
+
+        return null;
+    }
+
+    protected function extensionFromMimeType(string $mimeType): ?string
+    {
+        $mimeType = strtolower(trim($mimeType));
+        $map = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+            'image/heic' => 'heic',
+            'image/heif' => 'heif',
+            'application/pdf' => 'pdf',
+            'audio/ogg' => 'ogg',
+            'audio/mpeg' => 'mp3',
+            'audio/mp3' => 'mp3',
+            'audio/wav' => 'wav',
+            'audio/x-wav' => 'wav',
+            'audio/mp4' => 'm4a',
+            'audio/aac' => 'aac',
+        ];
+
+        return $map[$mimeType] ?? null;
+    }
+
+    protected function sanitizeFilename(string $filename): string
+    {
+        $filename = trim($filename);
+        if ($filename === '') {
+            return 'media';
+        }
+
+        $filename = preg_replace('/[^\w.\-]+/u', '_', $filename) ?? $filename;
+        $filename = ltrim($filename, '._-');
+        $filename = $filename === '' ? 'media' : $filename;
+
+        return $filename;
     }
 }
