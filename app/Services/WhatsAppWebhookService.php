@@ -819,6 +819,7 @@ class WhatsAppWebhookService
             $mediaUrl = null;
             $mediaPath = null;
             $mediaFilename = null;
+            $content = $this->sanitizeIncomingTextValue($content);
 
             // Determine initial type based on waType
             $typeMap = [
@@ -877,7 +878,7 @@ class WhatsAppWebhookService
                     if (str_starts_with($waMessageData['mimetype'], 'image/')) {
                         $type = 'image';
                         // If body contains URL (from media upload), use it
-                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                        if (! empty($content) && $this->isUsableMediaReference($content)) {
                             $content = $this->normalizeIncomingMediaReference($content);
                             $mediaUrl = $content;
                         } else {
@@ -902,7 +903,7 @@ class WhatsAppWebhookService
                         }
                     } elseif (str_starts_with($waMessageData['mimetype'], 'audio/')) {
                         $type = 'audio';
-                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                        if (! empty($content) && $this->isUsableMediaReference($content)) {
                             $content = $this->normalizeIncomingMediaReference($content);
                             $mediaUrl = $content;
                         } else {
@@ -916,7 +917,7 @@ class WhatsAppWebhookService
                         }
                     } elseif (str_contains($waMessageData['mimetype'], 'pdf')) {
                         $type = 'doc';
-                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                        if (! empty($content) && $this->isUsableMediaReference($content)) {
                             $content = $this->normalizeIncomingMediaReference($content);
                             $mediaUrl = $content;
                         } else {
@@ -932,7 +933,7 @@ class WhatsAppWebhookService
                               str_contains($waMessageData['mimetype'], 'spreadsheet') ||
                               str_contains($waMessageData['mimetype'], 'excel')) {
                         $type = 'csv';
-                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                        if (! empty($content) && $this->isUsableMediaReference($content)) {
                             $content = $this->normalizeIncomingMediaReference($content);
                             $mediaUrl = $content;
                         } else {
@@ -946,7 +947,7 @@ class WhatsAppWebhookService
                         }
                     } else {
                         $type = 'doc';
-                        if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                        if (! empty($content) && $this->isUsableMediaReference($content)) {
                             $content = $this->normalizeIncomingMediaReference($content);
                             $mediaUrl = $content;
                         } else {
@@ -973,7 +974,7 @@ class WhatsAppWebhookService
                 }
 
                 if ($mediaUrl === null && in_array($type, ['image', 'audio', 'doc', 'csv'], true)) {
-                    if (! empty($content) && $this->isLikelyMediaReference($content)) {
+                    if (! empty($content) && $this->isUsableMediaReference($content)) {
                         $content = $this->normalizeIncomingMediaReference($content);
                         $mediaUrl = $content;
                     } else {
@@ -1613,9 +1614,38 @@ class WhatsAppWebhookService
         return false;
     }
 
+    protected function isUsableMediaReference(string $value): bool
+    {
+        $value = $this->sanitizeIncomingTextValue($value);
+        if ($value === '') {
+            return false;
+        }
+
+        if (str_starts_with($value, '/storage/') || str_starts_with($value, 'storage/')) {
+            return true;
+        }
+
+        if (str_starts_with($value, '/api/files') || str_starts_with($value, 'api/files')) {
+            return str_contains($value, 'path=');
+        }
+
+        if (preg_match('/^https?:\/\//i', $value)) {
+            if (! filter_var($value, FILTER_VALIDATE_URL)) {
+                return false;
+            }
+            if (str_contains($value, '/api/files') && ! str_contains($value, 'path=')) {
+                return false;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
     protected function normalizeIncomingMediaReference(string $value): string
     {
-        $value = trim($value);
+        $value = $this->sanitizeIncomingTextValue($value);
         if ($value === '') {
             return $value;
         }
@@ -1665,11 +1695,14 @@ class WhatsAppWebhookService
             if (! is_string($candidate)) {
                 continue;
             }
-            $candidate = trim($candidate);
+            $candidate = $this->sanitizeIncomingTextValue($candidate);
             if ($candidate === '') {
                 continue;
             }
-            if ($this->isLikelyMediaReference($candidate) || filter_var($candidate, FILTER_VALIDATE_URL)) {
+            if ($this->isUsableMediaReference($candidate) || filter_var($candidate, FILTER_VALIDATE_URL)) {
+                if (str_contains($candidate, '/api/files') && ! str_contains($candidate, 'path=')) {
+                    continue;
+                }
                 $normalized = $this->normalizeIncomingMediaReference($candidate);
 
                 return [
@@ -1683,6 +1716,16 @@ class WhatsAppWebhookService
 
         $base64 = $this->extractIncomingBase64($waMessageData);
         if (! $base64) {
+            $recent = $this->findRecentPublicWhatsappUploadPath($tenantId, $this->extractIncomingMimeType($waMessageData));
+            if ($recent) {
+                return [
+                    'content' => $recent,
+                    'media_url' => $recent,
+                    'media_path' => $recent,
+                    'filename' => basename($recent),
+                ];
+            }
+
             return [];
         }
 
@@ -1715,6 +1758,74 @@ class WhatsAppWebhookService
             'media_path' => $path,
             'filename' => $safeFilename,
         ];
+    }
+
+    protected function sanitizeIncomingTextValue(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return $value;
+        }
+
+        $value = preg_replace('/^`+|`+$/', '', $value) ?? $value;
+        $value = trim($value, " \t\n\r\0\x0B\"'<>");
+
+        return $value;
+    }
+
+    protected function findRecentPublicWhatsappUploadPath(int $tenantId, ?string $mimeType = null): ?string
+    {
+        $date = now();
+        $dirs = [
+            "whatsapp/{$tenantId}/".$date->format('Y/m/d'),
+            "whatsapp/{$tenantId}/".$date->subDay()->format('Y/m/d'),
+        ];
+
+        $ext = null;
+        if ($mimeType) {
+            $ext = $this->extensionFromMimeType($mimeType);
+        }
+
+        $disk = Storage::disk('public');
+        $bestPath = null;
+        $bestTs = null;
+
+        foreach ($dirs as $dir) {
+            if (! $disk->exists($dir)) {
+                continue;
+            }
+
+            $files = $disk->files($dir);
+            foreach ($files as $file) {
+                if (! is_string($file) || $file === '') {
+                    continue;
+                }
+                if ($ext && ! str_ends_with(strtolower($file), '.'.strtolower($ext))) {
+                    continue;
+                }
+
+                try {
+                    $ts = $disk->lastModified($file);
+                } catch (\Throwable $e) {
+                    continue;
+                }
+
+                if ($bestTs === null || $ts > $bestTs) {
+                    $bestTs = $ts;
+                    $bestPath = $file;
+                }
+            }
+        }
+
+        if (! $bestPath || $bestTs === null) {
+            return null;
+        }
+
+        if ($bestTs < now()->subMinutes(5)->timestamp) {
+            return null;
+        }
+
+        return $bestPath;
     }
 
     protected function extractIncomingBase64(array $waMessageData): ?string
