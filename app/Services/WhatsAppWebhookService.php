@@ -1002,6 +1002,21 @@ class WhatsAppWebhookService
                 $type = $typeMap[$waType] ?? 'text';
             }
 
+            if ($mediaUrl === null && in_array($type, ['image', 'audio', 'doc', 'csv'], true)) {
+                if (! empty($content) && $this->isUsableMediaReference($content)) {
+                    $content = $this->normalizeIncomingMediaReference($content);
+                    $mediaUrl = $content;
+                } else {
+                    $fallback = $this->extractIncomingMediaReference($waMessageData, $tenantId, $messageId);
+                    if (! empty($fallback['content'])) {
+                        $content = $fallback['content'];
+                        $mediaUrl = $fallback['media_url'] ?? $content;
+                        $mediaPath = $fallback['media_path'] ?? null;
+                        $mediaFilename = $fallback['filename'] ?? null;
+                    }
+                }
+            }
+
             // Check if we have original LID (for reply fallback)
             $originalFrom = $waMessageData['originalFrom'] ?? null;
 
