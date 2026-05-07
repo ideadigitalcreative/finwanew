@@ -57,20 +57,33 @@ class OcrProcessorService
                 $fileId = $this->message->media_id ?? null; // Usually file_id or url
 
                 // 1. If content is a URL
-                if (! empty($this->message->content) && (filter_var($this->message->content, FILTER_VALIDATE_URL) || str_contains($this->message->content, 'http') || str_contains($this->message->content, '/storage/'))) {
-                    $imageUrl = $this->sanitizeMediaReference($this->message->content);
+                if (! empty($this->message->content) && $this->isValidMediaReference((string) $this->message->content)) {
+                    $imageUrl = $this->sanitizeMediaReference((string) $this->message->content);
                 }
                 // 2. Check metadata (common storage)
-                elseif (isset($this->message->metadata['media_url'])) {
-                    $imageUrl = $this->sanitizeMediaReference($this->message->metadata['media_url']);
+                elseif (isset($this->message->metadata['media_url']) && $this->isValidMediaReference((string) $this->message->metadata['media_url'])) {
+                    $imageUrl = $this->sanitizeMediaReference((string) $this->message->metadata['media_url']);
                 }
                 // 3. Check raw_data (WhatsApp standard)
-                elseif (isset($this->message->raw_data['image']['url'])) {
-                    $imageUrl = $this->sanitizeMediaReference($this->message->raw_data['image']['url']);
+                elseif (isset($this->message->raw_data['image']['url']) && $this->isValidMediaReference((string) $this->message->raw_data['image']['url'])) {
+                    $imageUrl = $this->sanitizeMediaReference((string) $this->message->raw_data['image']['url']);
                 }
                 // 4. Fallback: treat content as path even if check failed
                 else {
-                    $imageUrl = $this->sanitizeMediaReference($this->message->content);
+                    $candidate = $this->sanitizeMediaReference((string) $this->message->content);
+                    if ($candidate !== '' && $this->isValidMediaReference($candidate)) {
+                        $imageUrl = $candidate;
+                    }
+                }
+
+                if (! $imageUrl) {
+                    $recent = $this->findRecentPublicWhatsappUploadPath(
+                        (int) $this->message->tenant_id,
+                        (string) ($this->message->metadata['mimetype'] ?? '')
+                    );
+                    if ($recent) {
+                        $imageUrl = $recent;
+                    }
                 }
             } else {
                 // Check for image inside text (URL)
@@ -697,6 +710,100 @@ class OcrProcessorService
         }
 
         return null;
+    }
+
+    protected function isValidMediaReference(string $value): bool
+    {
+        $value = $this->sanitizeMediaReference($value);
+        if ($value === '') {
+            return false;
+        }
+
+        if (str_starts_with($value, '/storage/') || str_starts_with($value, 'storage/')) {
+            return true;
+        }
+
+        if (str_starts_with($value, '/api/files') || str_starts_with($value, 'api/files')) {
+            return str_contains($value, 'path=');
+        }
+
+        if (! filter_var($value, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        if (str_contains($value, '/api/files') && ! str_contains($value, 'path=')) {
+            return false;
+        }
+
+        return true;
+    }
+
+    protected function findRecentPublicWhatsappUploadPath(int $tenantId, string $mimeType = ''): ?string
+    {
+        $date = now();
+        $dirs = [
+            "whatsapp/{$tenantId}/".$date->format('Y/m/d'),
+            "whatsapp/{$tenantId}/".$date->subDay()->format('Y/m/d'),
+        ];
+
+        $ext = $mimeType !== '' ? $this->extensionFromMimeType($mimeType) : null;
+
+        $disk = Storage::disk('public');
+        $bestPath = null;
+        $bestTs = null;
+
+        foreach ($dirs as $dir) {
+            if (! $disk->exists($dir)) {
+                continue;
+            }
+
+            $files = $disk->files($dir);
+            foreach ($files as $file) {
+                if (! is_string($file) || $file === '') {
+                    continue;
+                }
+                if ($ext && ! str_ends_with(strtolower($file), '.'.strtolower($ext))) {
+                    continue;
+                }
+
+                try {
+                    $ts = $disk->lastModified($file);
+                } catch (\Throwable $e) {
+                    continue;
+                }
+
+                if ($bestTs === null || $ts > $bestTs) {
+                    $bestTs = $ts;
+                    $bestPath = $file;
+                }
+            }
+        }
+
+        if (! $bestPath || $bestTs === null) {
+            return null;
+        }
+
+        if ($bestTs < now()->subMinutes(5)->timestamp) {
+            return null;
+        }
+
+        return $bestPath;
+    }
+
+    protected function extensionFromMimeType(string $mimeType): ?string
+    {
+        $mimeType = strtolower(trim($mimeType));
+        $map = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            'image/gif' => 'gif',
+            'image/heic' => 'heic',
+            'image/heif' => 'heif',
+        ];
+
+        return $map[$mimeType] ?? null;
     }
 
     /**
