@@ -55,6 +55,14 @@ class OcrProcessorService
 
             if ($this->message->type === 'image') {
                 $fileId = $this->message->media_id ?? null; // Usually file_id or url
+                Log::debug('Gemini Vision: createOcrJob image message received', [
+                    'message_id' => $this->message->id,
+                    'tenant_id' => $this->message->tenant_id,
+                    'content_preview' => mb_substr((string) $this->message->content, 0, 160),
+                    'metadata_mimetype' => $this->message->metadata['mimetype'] ?? null,
+                    'metadata_media_url_preview' => isset($this->message->metadata['media_url']) ? mb_substr((string) $this->message->metadata['media_url'], 0, 160) : null,
+                    'raw_image_url_preview' => isset($this->message->raw_data['image']['url']) ? mb_substr((string) $this->message->raw_data['image']['url'], 0, 160) : null,
+                ]);
 
                 // 1. If content is a URL
                 if (! empty($this->message->content) && $this->isValidMediaReference((string) $this->message->content)) {
@@ -97,6 +105,13 @@ class OcrProcessorService
             }
 
             $normalizedPath = $this->normalizeToStorageRelativePath($imageUrl);
+            Log::info('Gemini Vision: image reference resolved', [
+                'message_id' => $this->message->id,
+                'tenant_id' => $this->message->tenant_id,
+                'image_url_preview' => mb_substr((string) $imageUrl, 0, 200),
+                'normalized_path' => $normalizedPath,
+                'final_file_path' => $normalizedPath ?? $imageUrl,
+            ]);
 
             // Create OCR Job
             $ocrJob = OcrJob::create([
@@ -350,14 +365,24 @@ class OcrProcessorService
         }
 
         if ($downloadUrl) {
-            Log::info('Downloading image from URL for Gemini', ['url' => $downloadUrl]);
-            $http = Http::timeout(30);
             $expectedKey = config('services.ocr_worker.api_key');
+            $addsApiKey = ! empty($expectedKey) && str_contains($downloadUrl, '/api/files');
+            Log::info('Downloading image from URL for Gemini', [
+                'url' => $downloadUrl,
+                'adds_api_key' => $addsApiKey,
+                'url_has_path_param' => str_contains($downloadUrl, 'path='),
+            ]);
+            $http = Http::timeout(30);
             if (! empty($expectedKey) && str_contains($downloadUrl, '/api/files')) {
                 $http = $http->withHeaders(['X-API-Key' => $expectedKey]);
             }
             $response = $http->get($downloadUrl);
             if (! $response->successful()) {
+                Log::warning('Failed to fetch image for Gemini', [
+                    'status' => $response->status(),
+                    'content_type' => $response->header('Content-Type'),
+                    'body_preview' => mb_substr((string) $response->body(), 0, 200),
+                ]);
                 throw new \Exception("Failed to fetch image (HTTP {$response->status()})");
             }
 
@@ -369,6 +394,10 @@ class OcrProcessorService
             throw new \Exception('File struk tidak ditemukan di server: '.basename($absolutePath));
         }
 
+        Log::debug('Loading image from local filesystem for Gemini', [
+            'absolute_path' => $absolutePath,
+            'size_bytes' => @filesize($absolutePath) ?: null,
+        ]);
         return file_get_contents($absolutePath);
     }
 

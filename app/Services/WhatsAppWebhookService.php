@@ -820,6 +820,20 @@ class WhatsAppWebhookService
             $mediaPath = null;
             $mediaFilename = null;
             $content = $this->sanitizeIncomingTextValue($content);
+            Log::debug('WhatsApp webhook: incoming payload summary', [
+                'session_id' => $sessionId,
+                'tenant_id' => $tenantId,
+                'channel_account' => $channelAccount,
+                'message_id' => $messageId,
+                'from' => $senderId,
+                'originalFrom' => $waMessageData['originalFrom'] ?? null,
+                'wa_type' => $waType,
+                'hasMedia_present' => array_key_exists('hasMedia', $waMessageData),
+                'hasMedia' => $waMessageData['hasMedia'] ?? null,
+                'mimetype' => $waMessageData['mimetype'] ?? null,
+                'body_len' => strlen($content),
+                'body_preview' => mb_substr($content, 0, 160),
+            ]);
 
             // Determine initial type based on waType
             $typeMap = [
@@ -1015,6 +1029,18 @@ class WhatsAppWebhookService
                         $mediaFilename = $fallback['filename'] ?? null;
                     }
                 }
+            }
+            if (in_array($type, ['image', 'audio', 'doc', 'csv'], true)) {
+                Log::info('WhatsApp webhook: media resolved', [
+                    'session_id' => $sessionId,
+                    'tenant_id' => $tenantId,
+                    'message_id' => $messageId,
+                    'type' => $type,
+                    'content_preview' => mb_substr((string) $content, 0, 200),
+                    'media_url_preview' => $mediaUrl ? mb_substr((string) $mediaUrl, 0, 200) : null,
+                    'media_path' => $mediaPath,
+                    'filename' => $mediaFilename,
+                ]);
             }
 
             // Check if we have original LID (for reply fallback)
@@ -1706,6 +1732,16 @@ class WhatsAppWebhookService
             $waMessageData['raw_data']['audio']['url'] ?? null,
         ];
 
+        Log::debug('WhatsApp webhook: media candidates scan', [
+            'tenant_id' => $tenantId,
+            'message_id' => $messageId,
+            'hasMedia_present' => array_key_exists('hasMedia', $waMessageData),
+            'hasMedia' => $waMessageData['hasMedia'] ?? null,
+            'mimetype' => $this->extractIncomingMimeType($waMessageData),
+            'body_preview' => mb_substr($this->sanitizeIncomingTextValue((string) ($waMessageData['body'] ?? '')), 0, 160),
+            'top_level_keys' => array_keys($waMessageData),
+        ]);
+
         foreach ($urlCandidates as $candidate) {
             if (! is_string($candidate)) {
                 continue;
@@ -1716,9 +1752,20 @@ class WhatsAppWebhookService
             }
             if ($this->isUsableMediaReference($candidate) || filter_var($candidate, FILTER_VALIDATE_URL)) {
                 if (str_contains($candidate, '/api/files') && ! str_contains($candidate, 'path=')) {
+                    Log::debug('WhatsApp webhook: skipping truncated /api/files url', [
+                        'tenant_id' => $tenantId,
+                        'message_id' => $messageId,
+                        'candidate_preview' => mb_substr($candidate, 0, 160),
+                    ]);
                     continue;
                 }
                 $normalized = $this->normalizeIncomingMediaReference($candidate);
+                Log::info('WhatsApp webhook: media url selected', [
+                    'tenant_id' => $tenantId,
+                    'message_id' => $messageId,
+                    'candidate_preview' => mb_substr($candidate, 0, 160),
+                    'normalized_preview' => mb_substr($normalized, 0, 200),
+                ]);
 
                 return [
                     'content' => $normalized,
@@ -1733,6 +1780,11 @@ class WhatsAppWebhookService
         if (! $base64) {
             $recent = $this->findRecentPublicWhatsappUploadPath($tenantId, $this->extractIncomingMimeType($waMessageData));
             if ($recent) {
+                Log::info('WhatsApp webhook: using recent uploaded file as fallback', [
+                    'tenant_id' => $tenantId,
+                    'message_id' => $messageId,
+                    'recent_path' => $recent,
+                ]);
                 return [
                     'content' => $recent,
                     'media_url' => $recent,
@@ -1766,6 +1818,13 @@ class WhatsAppWebhookService
 
         $path = "whatsapp/{$tenantId}/".date('Y/m/d').'/'.uniqid().'_'.$safeFilename;
         Storage::disk('public')->put($path, $decoded);
+        Log::info('WhatsApp webhook: media base64 stored', [
+            'tenant_id' => $tenantId,
+            'message_id' => $messageId,
+            'mime_type' => $mimeType,
+            'size_bytes' => strlen($decoded),
+            'path' => $path,
+        ]);
 
         return [
             'content' => $path,
@@ -1840,6 +1899,12 @@ class WhatsAppWebhookService
             return null;
         }
 
+        Log::debug('WhatsApp webhook: recent upload selected', [
+            'tenant_id' => $tenantId,
+            'mime_type' => $mimeType,
+            'selected_path' => $bestPath,
+            'last_modified' => $bestTs,
+        ]);
         return $bestPath;
     }
 
