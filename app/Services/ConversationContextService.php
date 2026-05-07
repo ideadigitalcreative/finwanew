@@ -128,7 +128,14 @@ class ConversationContextService
                     'context_message' => substr($lastContext->message, 0, 50),
                 ]);
             } else {
-                Log::warning('No context found to store transaction ID', [
+                $this->addContext(
+                    'transaction',
+                    'transaction',
+                    ['last_transaction_id' => $transactionId],
+                    'transaction'
+                );
+
+                Log::info('Created new context for last transaction ID', [
                     'tenant_id' => $this->tenantId,
                     'transaction_id' => $transactionId,
                 ]);
