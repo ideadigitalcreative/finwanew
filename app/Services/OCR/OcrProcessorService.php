@@ -2,7 +2,6 @@
 
 namespace App\Services\OCR;
 
-use App\Jobs\ProcessOcrImage;
 use App\Models\Message;
 use App\Models\OcrJob;
 use App\Models\Transaction;
@@ -109,28 +108,6 @@ class OcrProcessorService
 
             return null;
         }
-    }
-
-    /**
-     * Dispatch OCR job to OCR worker dengan delay
-     *
-     * MOVED FROM: ProcessIncomingMessage::dispatchToOcrWorkerWithDelay()
-     * LINES: 4509-4541
-     */
-    public function dispatchToOcrWorkerWithDelay(OcrJob $ocrJob, int $delaySeconds = 3): void
-    {
-        Log::info('Dispatching OCR job with delay', [
-            'ocr_job_id' => $ocrJob->id,
-            'delay' => $delaySeconds,
-        ]);
-
-        // Dispatch job to queue
-        ProcessOcrImage::dispatch($ocrJob)
-            ->delay(now()->addSeconds($delaySeconds))
-            ->onQueue('ocr_queue');
-
-        // Notify user
-        ($this->sendReplyCallback)('⏳ Sedang memproses gambar... Mohon tunggu sebentar.');
     }
 
     /**
@@ -1294,7 +1271,16 @@ class OcrProcessorService
         // User-friendly error message (hide technical details)
         $userMessage = "⚠️ Maaf, gambar tidak dapat diproses saat ini.\n\n";
 
-        if (str_contains($error, 'cURL error') || str_contains($error, 'Empty reply')) {
+        if (str_contains($error, 'Gemini API key belum dikonfigurasi')) {
+            $userMessage .= "AI (Gemini) belum aktif di server.\n\n".
+                'Admin: buka *Super Admin → Gemini Settings* lalu isi API key.';
+        } elseif (str_contains($error, 'Failed to fetch image (HTTP 401') || str_contains($error, 'Failed to fetch image (HTTP 403')) {
+            $userMessage .= "Server tidak punya akses untuk mengambil file gambar.\n\n".
+                'Silakan kirim ulang gambar, atau admin cek konfigurasi akses file (/api/files).';
+        } elseif (str_contains($error, 'File struk tidak ditemukan')) {
+            $userMessage .= "File gambar tidak ditemukan di server.\n\n".
+                'Silakan kirim ulang gambar.';
+        } elseif (str_contains($error, 'cURL error') || str_contains($error, 'Empty reply')) {
             $userMessage .= 'Layanan OCR sedang sibuk. Silakan coba kirim ulang gambar dalam beberapa detik.';
         } elseif (str_contains($error, 'Failed to fetch image')) {
             $userMessage .= 'Gambar tidak dapat diambil. Silakan kirim ulang foto yang lebih jelas.';
