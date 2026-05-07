@@ -54,6 +54,17 @@ class CategoryInferenceServiceTest extends TestCase
         $this->assertEquals('income', $result['type']);
     }
 
+    public function test_gaji_tanpa_kata_gajian_tetap_masuk_pendapatan_gaji(): void
+    {
+        $service = new CategoryInferenceService();
+        $result = $service->infer('gaji 800rb');
+
+        $this->assertEquals('pendapatan_gaji', $result['category_type']);
+        $this->assertEquals('Gaji', $result['category_name']);
+        $this->assertEquals('income', $result['type']);
+        $this->assertGreaterThanOrEqual(0.4, $result['confidence']);
+    }
+
     public function test_bonus_masuk_pendapatan_bonus(): void
     {
         $service = new CategoryInferenceService();

@@ -506,7 +506,7 @@ class CategoryInferenceService
         }
 
         // Detect income keywords
-        $incomeKeywords = ['gajian', 'terima', 'masuk', 'dapat', 'pemasukan', 'pendapatan', 'bonus', 'thr', 'insentif', 'komisi', 'cashback', 'refund', 'dividen', 'bunga', 'penjualan', 'jualan', 'omset', 'laku'];
+        $incomeKeywords = ['gajian', 'gaji', 'dikasih', 'terima', 'masuk', 'dapat', 'pemasukan', 'pendapatan', 'bonus', 'thr', 'insentif', 'komisi', 'cashback', 'refund', 'dividen', 'bunga', 'penjualan', 'jualan', 'omset', 'laku'];
         $isIncome = false;
         foreach ($incomeKeywords as $keyword) {
             if (str_contains($text, $keyword)) {
@@ -523,6 +523,22 @@ class CategoryInferenceService
                 $isExpense = true;
                 break;
             }
+        }
+
+        if (preg_match('/\b(bayar|kasih|beri|berikan)\b.*\b(gaji|upah|honor)\b/u', $text)) {
+            $isExpense = true;
+        }
+
+        if (preg_match('/\b(gaji|upah|honor)\b.*\b(karyawan|pegawai|tukang)\b/u', $text)) {
+            $isExpense = true;
+        }
+
+        if (preg_match('/\b(terima|dapat|masuk|gajian)\b.*\b(gaji|honor)\b/u', $text)) {
+            $isIncome = true;
+        }
+
+        if (preg_match('/^\s*gaji\b/u', $text)) {
+            $isIncome = true;
         }
 
         if (preg_match('/\b(transfer|tf|kirim)\b/u', $text)) {
