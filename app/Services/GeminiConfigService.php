@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\AppSetting;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Konfigurasi runtime Gemini: gabungan .env/config + override dari Super Admin (DB).
@@ -27,16 +29,35 @@ class GeminiConfigService
             'api_keys' => $this->apiKeysFromEnv(),
         ];
 
-        $row = AppSetting::query()->where('key', self::SETTING_KEY)->first();
-        if (! $row || ! is_array($row->value)) {
+        $rawValue = AppSetting::query()
+            ->where('key', self::SETTING_KEY)
+            ->value('value');
+        if (! is_string($rawValue) || trim($rawValue) === '') {
             return $defaults;
         }
 
-        $v = $row->value;
+        $v = null;
+        try {
+            $decrypted = Crypt::decryptString($rawValue);
+            $decoded = json_decode($decrypted, true);
+            if (is_array($decoded)) {
+                $v = $decoded;
+            }
+        } catch (\Throwable $e) {
+            Log::error('GeminiConfigService: failed to decrypt AppSetting value', [
+                'setting_key' => self::SETTING_KEY,
+                'error' => $e->getMessage(),
+            ]);
+            $v = null;
+        }
+        if (! is_array($v)) {
+            return $defaults;
+        }
         if (! empty($v['model']) && is_string($v['model'])) {
-            $defaults['model'] = trim($v['model']);
         }
         if (array_key_exists('base_url', $v) && is_string($v['base_url'])) {
+            $defaults['base_url'] = trim($v['base_url']);
+        }
             $defaults['base_url'] = trim($v['base_url']);
         }
 
