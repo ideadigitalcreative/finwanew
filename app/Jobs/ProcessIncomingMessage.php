@@ -88,8 +88,11 @@ class ProcessIncomingMessage implements ShouldQueue
         $sendConfirm = fn($txs, $rev) => $this->confirmationService->sendConfirmation($txs, $rev);
         $parseDate = fn($h) => $this->batchTransaction->parseDateFromHeader($h);
         
+        $categoryInference = new \App\Services\Transaction\CategoryInferenceService();
+        
         $this->transactionService = new TransactionService(
             $this->message,
+            $categoryInference,
             $sendReply,
             $extractLocal,
             $extractAcc,
@@ -254,12 +257,6 @@ class ProcessIncomingMessage implements ShouldQueue
 
             return;
         }
-        
-        // Check if this message came from OCR (has OCR job)
-        $ocrJob = OcrJob::where('message_id', $this->message->id)->first();
-        $isFromOcr = $ocrJob !== null;
-        
-
         
         // Normalize keywords (map variations to standard commands)
         $originalText = $messageText;
@@ -491,6 +488,17 @@ class ProcessIncomingMessage implements ShouldQueue
 
         
         $textLower = strtolower($messageText);
+
+        // FAST PATH 0: Help & Greeting (Priority 1)
+        if (trim($textLower) === 'help' || trim($textLower) === 'panduan' || trim($textLower) === 'menu') {
+            $this->greetingService->handleSpecialIntent('help');
+            return;
+        }
+        if (trim($textLower) === 'halo' || trim($textLower) === 'hai' || trim($textLower) === 'p') {
+            $this->greetingService->handleSpecialIntent('sapa');
+            return;
+        }
+
         $hasQueryKeyword = false;
         $hasPeriodKeyword = false;
         $hasTransactionKeyword = false;
@@ -650,7 +658,11 @@ class ProcessIncomingMessage implements ShouldQueue
             '/(?:tf|transfer)\s+masuk\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?\s+(?:ke|di)\s+(.+)/i',
             '/(?:terima|dapat)\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?\s+(?:ke|di)\s+(.+)/i',
             // Pattern: Tambah saldo dana 5jt (Top Up)
-            '/(?:isi|tambah|top\s*up)\s+saldo\s+(?:ke\s+|di\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i'
+            '/(?:isi|tambah|top\s*up)\s+saldo\s+(?:ke\s+|di\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+            // Pattern: Tambah uang ke Jago Hadi 600rb
+            '/(?:isi|tambah|top\s*up)\s+uang\s+(?:ke\s+|di\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+            // Pattern: Tambah uang 600rb ke Jago Hadi
+            '/(?:isi|tambah|top\s*up)\s+uang\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(?:ke|di)\s+(.+)/i'
         ];
         
         foreach ($transferToWalletPatterns as $pattern) {
@@ -660,6 +672,20 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
         
+        // FAST PATH 1.92: Transfer between wallets (internal transfer)
+        // e.g., "transfer saldo Jago Hadi ke BRI 300rb", "transfer 100rb dari BCA ke Mandiri"
+        $transferBetweenWalletPatterns = [
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?\s+(?:dari\s+)?[a-zA-Z0-9\s]+?\s+ke\s+[a-zA-Z0-9\s]+/i',
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?(?:dari\s+)?[a-zA-Z0-9\s]+?\s+ke\s+[a-zA-Z0-9\s]+?\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?/i',
+        ];
+
+        foreach ($transferBetweenWalletPatterns as $pattern) {
+            if (preg_match($pattern, $messageText)) {
+                $this->walletCommand->handleTransferBetweenWallets();
+                return;
+            }
+        }
+
         // FAST PATH 1.9b: Catch INCOMPLETE "tambah saldo" commands (missing amount)
         // e.g., "tambah saldo BCA" without nominal - give helpful error message
         if (preg_match('/^(?:isi|tambah|top\s*up)\s+saldo\s+([a-zA-Z0-9\s]+)$/i', trim($messageText), $incompleteMatch)) {
@@ -671,6 +697,19 @@ class ProcessIncomingMessage implements ShouldQueue
                 "• _tambah saldo {$walletName} 100rb_\n" .
                 "• _isi saldo {$walletName} 1jt_\n" .
                 "• _top up {$walletName} 500.000_"
+            );
+            return;
+        }
+
+        if (preg_match('/^(?:isi|tambah|top\s*up)\s+uang\s+(?:ke\s+|di\s+)?([a-zA-Z0-9\s]+)$/i', trim($messageText), $incompleteMatchUang)) {
+            $walletName = trim($incompleteMatchUang[1]);
+            $this->replyService->sendReply(
+                "⚠️ *Nominal tidak terdeteksi*\n\n" .
+                "Untuk menambah uang ke *{$walletName}*, sertakan nominal:\n\n" .
+                "Contoh:\n" .
+                "• _tambah uang ke {$walletName} 100rb_\n" .
+                "• _isi uang {$walletName} 1jt_\n" .
+                "• _top up uang {$walletName} 500.000_"
             );
             return;
         }
@@ -872,7 +911,7 @@ class ProcessIncomingMessage implements ShouldQueue
         // 1.6af2: Delete specific transaction by keyword - "hapus beli kue", "hapus makan siang"
         // Must have keyword after "hapus" but NOT "hapus transaksi terakhir" or "hapus semua"
         // EXCLUDE: "hapus target" and "hapus tabungan" - these are handled by delete savings target
-        if (preg_match('/^(hapus|delete|batal)\s+(?!transaksi\s*$)(?!semua)(?!terakhir)(?!target)(?!tabungan)(?!saving)/i', $textLower)) {
+        if (preg_match('/^(hapus|delete|batal)\s+(?!transaksi\s*$)(?!semua)(?!terakhir)(?!target)(?!tabungan)(?!saving)(?!dompet\b)(?!rekening\b)(?!wallet\b)(?!akun\b)(?!bank\b)/i', $textLower)) {
             // Check if it's "hapus transaksi [keyword]" or "hapus [keyword]"
             $isSpecificDelete = preg_match('/^(hapus|delete|batal)\s+(transaksi\s+)?[a-zA-Z]/i', $textLower);
             if ($isSpecificDelete && !str_contains($textLower, 'terakhir') && !str_contains($textLower, 'semua') 
@@ -900,7 +939,8 @@ class ProcessIncomingMessage implements ShouldQueue
             'bukan', 'yang bener', 'yang benar', 'ralat'
         ];
         foreach ($editContextKeywords as $keyword) {
-            if (str_contains($textLower, $keyword) && $hasAmount) {
+            // Use word boundary to avoid matching "peralatan" with "ralat"
+            if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $textLower) && $hasAmount) {
 
                 $this->transactionService->handleEditWithContext($messageText);
                 return;
@@ -916,7 +956,7 @@ class ProcessIncomingMessage implements ShouldQueue
             'hapus yang tadi', 'delete yang tadi', 'yang barusan salah'
         ];
         foreach ($undoKeywords as $keyword) {
-            if (str_contains($textLower, $keyword) || $textLower === 'batal' || $textLower === 'undo') {
+            if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $textLower) || $textLower === 'batal' || $textLower === 'undo') {
                 $this->transactionService->handleDeleteTransaction();
                 return;
             }
@@ -1235,131 +1275,6 @@ class ProcessIncomingMessage implements ShouldQueue
         // e.g., "bagaimana cara pakai?", "bisa untuk grup?", "apa itu finwa?"
         $faqResult = $this->faqService->checkAndHandleFAQ($messageText);
         if ($faqResult) {
-            return;
-        }
-        
-        // If message is from OCR, always treat as transaction
-        if ($isFromOcr) {
-
-            
-            // For receipts: use structured data from OcrJob (total, date) instead of sending to AI
-            // This prevents AI from creating multiple transactions for each line
-            // NOTE: structured_data can be in metadata OR in result (JSON encoded by FinWa-AI handler)
-            $metadata = $ocrJob->metadata ?? [];
-            $structuredData = $metadata['structured_data'] ?? [];
-            
-            // Also check result field (FinWa-AI handler saves structured_data there)
-            if (empty($structuredData) && !empty($ocrJob->result)) {
-                $resultData = is_string($ocrJob->result) ? json_decode($ocrJob->result, true) : $ocrJob->result;
-                if ($resultData && isset($resultData['structured_data'])) {
-                    $structuredData = $resultData['structured_data'];
-                }
-            }
-            
-            $fields = $structuredData['fields'] ?? [];
-            $entities = $structuredData['entities'] ?? [];
-            
-            // Debug logging
-
-
-            
-            // PRIORITY 1: Get total from structured data (most accurate - from LLM extraction)
-            $total = isset($fields['total']) && $fields['total'] > 0 ? (int)$fields['total'] : null;
-            $dateRaw = $fields['date_raw'] ?? null;
-            
-            // PRIORITY 2: If no total in structured data, try to extract from text using regex
-            if (!$total) {
-
-                $total = $this->receiptParser->extractTotalFromOcrText($messageText);
-            }
-            
-            // PRIORITY 3: If still no total, try FinWa-AI for OCR extraction
-            $storeName = null;
-            $dateRaw = $dateRaw ?? null;
-            
-            if (!$total) {
-                $finwaService = new FinWaAIService();
-                if ($finwaService->isEnabled()) {
-
-                    
-                    $finwaResult = $finwaService->processOCR($messageText);
-                    if ($finwaResult['success']) {
-                        $finwaEntities = $finwaResult['data']['entities'] ?? [];
-                        $total = $finwaEntities['nominal'] ?? null;
-                        $storeName = $finwaEntities['merchant'] ?? null;
-                        $dateRaw = $dateRaw ?? $finwaEntities['tanggal'] ?? null;
-                        
-
-                    }
-                }
-            }
-            
-            if ($total && $total > 0) {
-                // Create single expense transaction for the receipt total
-
-                
-                // Determine store name from OCR text if not from FinWa-AI
-                if (!$storeName) {
-                    // Try to get from entities first (FinWa-AI)
-                    $storeName = $entities['merchant'] ?? null;
-                    if (!$storeName) {
-                        $storeName = $this->receiptParser->extractStoreNameFromOcrText($messageText);
-                    }
-                }
-                
-                // Extract items from structured data if available
-                // Priority: entities['items'] (FinWa-AI) > structuredData['items'] > fields['items']
-                $items = $entities['items'] ?? $structuredData['items'] ?? $fields['items'] ?? [];
-                
-                // Create transaction data
-                $txData = [
-                    'type' => 'expense',
-                    'amount' => $total,
-                    'category_type' => 'pengeluaran_belanja',
-                    'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw),
-                    'description' => $storeName ? "Belanja di {$storeName}" : "Belanja dari struk",
-                    'source' => 'receipt_ocr',
-                    'confidence_score' => 0.95,
-                    'account_name' => null
-                ];
-                
-                // Create the transaction
-                $transaction = $this->transactionService->createTransaction($txData, false);
-                
-                if ($transaction) {
-                    // Log items extraction result
-
-                    
-                    // Use sendReceiptConfirmation for detailed product list (if items available)
-                    if (!empty($items)) {
-                        $this->confirmationService->sendReceiptConfirmation($transaction, $items, $storeName);
-                    } else {
-                        // Fallback to simple confirmation if no items
-                        $reply = "✅ *Berhasil Dicatat*\n\n";
-                        $reply .= "💸 *Pengeluaran*: Rp " . number_format($total, 0, ',', '.') . "\n";
-                        $reply .= "📁 Kategori: Belanja\n";
-                        if ($storeName) {
-                            $reply .= "🏪 Toko: {$storeName}\n";
-                        }
-                        if ($dateRaw) {
-                            $reply .= "📅 Tanggal: {$dateRaw}\n";
-                        }
-                        $reply .= "\n*Struk berhasil dicatat sebagai 1 transaksi pengeluaran.*";
-                        
-                        $this->replyService->sendReply($reply);
-                    }
-                } else {
-                    $this->replyService->sendReply("⚠️ Gagal mencatat transaksi dari struk. Silakan coba lagi.");
-                }
-                return;
-            }
-            
-            // PRIORITY 4 (Fallback): if no total found, use AIProcessor to extract
-            Log::warning('No total found in OCR data, falling back to AIProcessor extraction', [
-                'message_id' => $this->message->id
-            ]);
-            $optimizedText = $this->receiptParser->optimizeOcrTextForAI($messageText);
-            $this->transactionService->handleTransaction($optimizedText);
             return;
         }
         

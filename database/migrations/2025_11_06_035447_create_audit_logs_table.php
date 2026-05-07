@@ -24,7 +24,7 @@ return new class extends Migration
             $table->text('user_agent')->nullable();
             $table->text('description')->nullable();
             $table->timestamps();
-            
+
             $table->index(['tenant_id', 'created_at']);
             $table->index(['tenant_id', 'user_id']);
             $table->index(['model_type', 'model_id']);

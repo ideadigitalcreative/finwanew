@@ -6,10 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Cashflow;
 use App\Models\Tenant;
 use App\Models\Transaction;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
 
 class CashflowController extends Controller
 {
@@ -21,14 +20,14 @@ class CashflowController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'start' => 'required|date',
-            'end' => 'required|date|after_or_equal:start'
+            'end' => 'required|date|after_or_equal:start',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'error' => 'Invalid date parameters',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 400);
         }
 
@@ -44,7 +43,7 @@ class CashflowController extends Controller
                 ->where('period_end', $endDate->toDateString())
                 ->first();
 
-            if (!$cashflow) {
+            if (! $cashflow) {
                 // Calculate cashflow
                 $transactions = Transaction::where('tenant_id', $tenantModel->id)
                     ->where('status', 'confirmed')
@@ -58,13 +57,14 @@ class CashflowController extends Controller
                 // Breakdown by category
                 $breakdown = $transactions->groupBy('category_id')->map(function ($group) {
                     $category = $group->first()->category;
+
                     return [
                         'category_id' => $category->id,
                         'category_name' => $category->name,
                         'category_type' => $category->type,
                         'income' => $group->where('type', 'income')->sum('amount'),
                         'expense' => $group->where('type', 'expense')->sum('amount'),
-                        'count' => $group->count()
+                        'count' => $group->count(),
                     ];
                 })->values();
 
@@ -77,19 +77,19 @@ class CashflowController extends Controller
                     'total_expense' => $totalExpense,
                     'net_cashflow' => $netCashflow,
                     'breakdown' => $breakdown,
-                    'summary' => $this->generateSummary($totalIncome, $totalExpense, $netCashflow, $breakdown)
+                    'summary' => $this->generateSummary($totalIncome, $totalExpense, $netCashflow, $breakdown),
                 ]);
             }
 
             return response()->json([
                 'success' => true,
-                'data' => $cashflow
+                'data' => $cashflow,
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -101,9 +101,9 @@ class CashflowController extends Controller
     {
         $markdown = "# Ringkasan Cashflow\n\n";
         $markdown .= "## Total\n\n";
-        $markdown .= "- **Pendapatan**: Rp " . number_format($income, 0, ',', '.') . "\n";
-        $markdown .= "- **Pengeluaran**: Rp " . number_format($expense, 0, ',', '.') . "\n";
-        $markdown .= "- **Net Cashflow**: Rp " . number_format($net, 0, ',', '.') . "\n\n";
+        $markdown .= '- **Pendapatan**: Rp '.number_format($income, 0, ',', '.')."\n";
+        $markdown .= '- **Pengeluaran**: Rp '.number_format($expense, 0, ',', '.')."\n";
+        $markdown .= '- **Net Cashflow**: Rp '.number_format($net, 0, ',', '.')."\n\n";
 
         if ($net > 0) {
             $markdown .= "✅ **Surplus**: Cashflow positif, kondisi keuangan sehat.\n\n";
@@ -115,10 +115,10 @@ class CashflowController extends Controller
         foreach ($breakdown as $item) {
             $markdown .= "### {$item['category_name']}\n";
             if ($item['income'] > 0) {
-                $markdown .= "- Pendapatan: Rp " . number_format($item['income'], 0, ',', '.') . "\n";
+                $markdown .= '- Pendapatan: Rp '.number_format($item['income'], 0, ',', '.')."\n";
             }
             if ($item['expense'] > 0) {
-                $markdown .= "- Pengeluaran: Rp " . number_format($item['expense'], 0, ',', '.') . "\n";
+                $markdown .= '- Pengeluaran: Rp '.number_format($item['expense'], 0, ',', '.')."\n";
             }
             $markdown .= "- Jumlah transaksi: {$item['count']}\n\n";
         }
@@ -129,8 +129,8 @@ class CashflowController extends Controller
                 'total_income' => $income,
                 'total_expense' => $expense,
                 'net_cashflow' => $net,
-                'breakdown' => $breakdown
-            ]
+                'breakdown' => $breakdown,
+            ],
         ];
     }
 }

@@ -26,7 +26,7 @@ return new class extends Migration
             $table->timestamp('last_sent_at')->nullable();
             $table->timestamp('next_send_at')->nullable();
             $table->timestamps();
-            
+
             $table->index(['tenant_id', 'is_active']);
             $table->index('next_send_at');
         });

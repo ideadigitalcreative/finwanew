@@ -1,7 +1,7 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Webhook\WhatsAppWebhookController;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -14,6 +14,36 @@ use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 |
 */
 
+// Auth Routes with enhanced rate limiting
+Route::prefix('auth')->middleware('throttle:api-auth')->group(function () {
+    Route::post('/register', [\App\Http\Controllers\Api\AuthController::class, 'register']);
+    Route::post('/login', [\App\Http\Controllers\Api\AuthController::class, 'login']);
+    Route::post('/google', [\App\Http\Controllers\Api\AuthController::class, 'googleLogin']);
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/logout', [\App\Http\Controllers\Api\AuthController::class, 'logout']);
+        Route::get('/user', [\App\Http\Controllers\Api\AuthController::class, 'user']);
+
+        // Protected by Subscription Check
+        Route::middleware('subscription')->group(function () {
+            // Dashboard
+            Route::get('/dashboard/summary', [\App\Http\Controllers\Api\DashboardController::class, 'summary']);
+
+            // Transactions
+            Route::get('/transactions', [\App\Http\Controllers\Api\TransactionController::class, 'index']);
+            Route::post('/transactions', [\App\Http\Controllers\Api\TransactionController::class, 'store']);
+            Route::post('/transactions/parse', [\App\Http\Controllers\Api\TransactionController::class, 'parse']);
+
+            // Balances (Reuse BalanceController with tenant fallback)
+            Route::get('/balances', [\App\Http\Controllers\Api\BalanceController::class, 'index']);
+            Route::post('/balances', [\App\Http\Controllers\Api\BalanceController::class, 'store']);
+
+            // WhatsApp Link (Token-based)
+            Route::post('/whatsapp-link/token', [\App\Http\Controllers\Api\WhatsAppLinkController::class, 'generateToken']);
+        });
+    });
+});
+
 // WhatsApp Webhook Routes (protected with API key)
 Route::prefix('webhooks/whatsapp')
     ->middleware('api.key:webhook')
@@ -22,10 +52,10 @@ Route::prefix('webhooks/whatsapp')
         Route::post('/message', [WhatsAppWebhookController::class, 'handleMessage']);
         Route::post('/attachment', [WhatsAppWebhookController::class, 'handleAttachment']);
         Route::post('/status', [WhatsAppWebhookController::class, 'handleStatus']);
-        
+
         // Route untuk menerima dari wa-blast engine
         Route::post('/from-engine', [\App\Http\Controllers\Webhook\WhatsAppEngineWebhookController::class, 'handleMessage']);
-        
+
         // Route untuk menerima LID mapping dari gateway (auto-discovery)
         Route::post('/lid-mapping', [\App\Http\Controllers\Webhook\WhatsAppEngineWebhookController::class, 'handleLidMapping']);
     });
@@ -80,70 +110,69 @@ Route::prefix('channels')->group(function () {
 // WhatsApp Number Validation (public with rate limiting - 5 requests per minute)
 Route::post('/validate-whatsapp', function (\Illuminate\Http\Request $request) {
     $phoneNumber = $request->input('phone_number');
-    
+
     if (empty($phoneNumber)) {
         return response()->json([
             'success' => false,
-            'error' => 'Phone number is required'
+            'error' => 'Phone number is required',
         ], 400);
     }
-    
+
     // Clean phone number for database check
     $cleanNumber = preg_replace('/[^0-9]/', '', $phoneNumber);
     if (substr($cleanNumber, 0, 1) === '0') {
-        $cleanNumber = '62' . substr($cleanNumber, 1);
+        $cleanNumber = '62'.substr($cleanNumber, 1);
     }
     if (substr($cleanNumber, 0, 2) !== '62') {
-        $cleanNumber = '62' . $cleanNumber;
+        $cleanNumber = '62'.$cleanNumber;
     }
-    
+
     // Check if number is already registered in database
     $existingUser = \App\Models\User::where('whatsapp_number', $cleanNumber)
-        ->orWhere('whatsapp_number', '0' . substr($cleanNumber, 2))
-        ->orWhere('whatsapp_number', '+' . $cleanNumber)
+        ->orWhere('whatsapp_number', '0'.substr($cleanNumber, 2))
+        ->orWhere('whatsapp_number', '+'.$cleanNumber)
         ->first();
-    
+
     if ($existingUser) {
         return response()->json([
             'success' => true,
             'exists' => true,
             'already_registered' => true,
-            'message' => 'Nomor WhatsApp ini sudah terdaftar. Silakan login.'
+            'message' => 'Nomor WhatsApp ini sudah terdaftar. Silakan login.',
         ]);
     }
-    
+
     // Get active WhatsApp session
     $channel = \App\Models\Channel::where('type', 'whatsapp')
         ->where('is_active', true)
         ->first();
-    
-    if (!$channel) {
+
+    if (! $channel) {
         // If no active session, assume valid (fallback)
         return response()->json([
             'success' => true,
             'exists' => true,
             'already_registered' => false,
-            'message' => 'Validation skipped - no active session'
+            'message' => 'Validation skipped - no active session',
         ]);
     }
-    
+
     $sessionId = $channel->config['session_id'] ?? null;
-    
-    if (!$sessionId) {
+
+    if (! $sessionId) {
         return response()->json([
             'success' => true,
             'exists' => true,
             'already_registered' => false,
-            'message' => 'Validation skipped - no session ID'
+            'message' => 'Validation skipped - no session ID',
         ]);
     }
-    
-    $whatsAppService = new \App\Services\WhatsAppService();
+
+    $whatsAppService = new \App\Services\WhatsAppService;
     $result = $whatsAppService->checkNumber($sessionId, $phoneNumber);
-    
+
     // Add already_registered flag
     $result['already_registered'] = false;
-    
+
     return response()->json($result);
 })->middleware('throttle:5,1'); // 5 requests per minute per IP
-

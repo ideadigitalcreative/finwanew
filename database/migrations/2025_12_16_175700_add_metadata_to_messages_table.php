@@ -12,10 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('messages', function (Blueprint $table) {
-            if (!Schema::hasColumn('messages', 'metadata')) {
+            if (! Schema::hasColumn('messages', 'metadata')) {
                 $table->json('metadata')->nullable()->after('raw_data');
             }
-            if (!Schema::hasColumn('messages', 'status')) {
+            if (! Schema::hasColumn('messages', 'status')) {
                 $table->string('status')->default('received')->after('metadata');
             }
         });

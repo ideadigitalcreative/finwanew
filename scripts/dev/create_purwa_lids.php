@@ -10,16 +10,16 @@ $lids = ['122213311238273', '171652679762073'];
 
 foreach ($lids as $lid) {
     $existing = \App\Models\UserWhatsAppNumber::where('whatsapp_number', $lid)->first();
-    
-    if (!$existing) {
+
+    if (! $existing) {
         \App\Models\UserWhatsAppNumber::create([
             'user_id' => 106,
             'tenant_id' => 10012,
             'whatsapp_number' => $lid,
-            'name' => 'LID - ' . substr($lid, 0, 8),
+            'name' => 'LID - '.substr($lid, 0, 8),
             'is_primary' => false,
             'is_active' => true,
-            'is_lid' => true
+            'is_lid' => true,
         ]);
         echo "✅ Created LID: $lid\n";
     } else {

@@ -2,23 +2,36 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}"  @class(['dark' => ($appearance ?? 'system') == 'dark'])>
     <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+
+        {{-- PWA --}}
+        <meta name="theme-color" content="#0d9488" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#0f766e" media="(prefers-color-scheme: dark)">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="FinWa">
+        <link rel="manifest" href="{{ url('/manifest.webmanifest') }}">
         <meta name="google-site-verification" content="HW2rQyxeNMjG46R-Z_4X8wsJe-uQZNIJ9am2DxFVjHs" />
         
-        {{-- Critical: Preload font untuk mengurangi FCP --}}
-        <link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
-        <link rel="dns-prefetch" href="https://fonts.bunny.net">
-        <link rel="preload" href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
-        <noscript><link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600&display=swap" rel="stylesheet"></noscript>
+        {{-- Critical: Preload Manrope font non-blocking untuk mengurangi FCP --}}
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="preload" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+        <noscript><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
         
         {{-- Preload critical images --}}
         <link rel="preload" href="/logo.png" as="image" fetchpriority="high">
         
         {{-- SEO Meta Tags - Optimized for "catat keuangan via whatsapp" --}}
-        <meta name="description" content="Catat keuangan via WhatsApp dengan mudah! FinWa adalah aplikasi pencatatan keuangan otomatis dari WA. Cukup chat pengeluaran & pemasukan, langsung tercatat. Coba Gratis!">
-        <meta name="keywords" content="catat keuangan via whatsapp, catat keuangan dari wa, aplikasi catat keuangan whatsapp, pencatatan keuangan lewat wa, bot keuangan whatsapp, catat pengeluaran via wa, aplikasi keuangan di whatsapp, finwa, catatan keuangan otomatis whatsapp, buku kas whatsapp">
-        <meta name="author" content="FinWa - Catat Keuangan via WhatsApp">
+        @if(isset($seo_page))
+            <meta name="description" content="{{ $seo_page->meta_description }}">
+        @else
+            <meta name="description" content="Catat keuangan via WhatsApp dengan mudah. FinWa adalah aplikasi keuangan WhatsApp Indonesia. Cukup chat pengeluaran, otomatis tercatat. Coba Gratis!">
+        @endif
+        <meta name="keywords" content="aplikasi keuangan whatsapp indonesia, catat keuangan via whatsapp, aplikasi catat keuangan umkm, finwa, bot keuangan whatsapp, pencatatan otomatis dari wa">
+        <meta name="author" content="FinWa - Aplikasi Keuangan WhatsApp Indonesia">
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
         <meta name="language" content="Indonesian">
         @php
@@ -34,24 +47,24 @@
         <link rel="canonical" href="{{ $canonicalUrl }}">
         
         {{-- Open Graph / Facebook --}}
-        <meta property="og:type" content="website">
+        <meta property="og:type" content="{{ isset($seo_page) ? 'article' : 'website' }}">
         <meta property="og:url" content="{{ $canonicalUrl }}">
-        <meta property="og:title" content="Catat Keuangan via WhatsApp - FinWa | Pencatatan Otomatis dari WA">
-        <meta property="og:description" content="Catat keuangan via WhatsApp dengan mudah! Cukup chat pengeluaran & pemasukan di WA, FinWa otomatis mencatat. Aplikasi pencatatan keuangan terbaik dari WhatsApp.">
-        <meta property="og:image" content="{{ asset('finwalogo.png') }}">
+        <meta property="og:title" content="{{ $seo_page->title ?? 'FinWa: Aplikasi Keuangan WhatsApp Indonesia' }}">
+        <meta property="og:description" content="{{ $seo_page->meta_description ?? 'Catat keuangan via WhatsApp dengan mudah. FinWa adalah aplikasi keuangan WhatsApp Indonesia. Cukup chat pengeluaran, otomatis tercatat. Coba Gratis!' }}">
+        <meta property="og:image" content="{{ isset($seo_page) && $seo_page->thumbnail ? asset('storage/' . $seo_page->thumbnail) : asset('finwalogo.png') }}">
         <meta property="og:image:width" content="1200">
         <meta property="og:image:height" content="630">
-        <meta property="og:image:alt" content="FinWa - Aplikasi Catat Keuangan via WhatsApp">
-        <meta property="og:site_name" content="FinWa - Catat Keuangan via WhatsApp">
+        <meta property="og:image:alt" content="{{ $seo_page->title ?? 'FinWa - Aplikasi Keuangan WhatsApp Indonesia' }}">
+        <meta property="og:site_name" content="FinWa - Aplikasi Keuangan WhatsApp Indonesia">
         <meta property="og:locale" content="id_ID">
         
         {{-- Twitter Card --}}
         <meta name="twitter:card" content="summary_large_image">
         <meta name="twitter:url" content="{{ $canonicalUrl }}">
-        <meta name="twitter:title" content="Catat Keuangan via WhatsApp - FinWa | Pencatatan Otomatis dari WA">
-        <meta name="twitter:description" content="Catat keuangan via WhatsApp dengan mudah! Cukup chat pengeluaran & pemasukan di WA, FinWa otomatis mencatat. Aplikasi pencatatan keuangan terbaik dari WhatsApp.">
-        <meta name="twitter:image" content="{{ asset('finwalogo.png') }}">
-        <meta name="twitter:image:alt" content="FinWa - Aplikasi Catat Keuangan via WhatsApp">
+        <meta name="twitter:title" content="{{ $seo_page->title ?? 'FinWa: Aplikasi Keuangan WhatsApp Indonesia' }}">
+        <meta property="twitter:description" content="{{ $seo_page->meta_description ?? 'Catat keuangan via WhatsApp dengan mudah. FinWa adalah aplikasi keuangan WhatsApp Indonesia. Cukup chat pengeluaran, otomatis tercatat. Coba Gratis!' }}">
+        <meta name="twitter:image" content="{{ isset($seo_page) && $seo_page->thumbnail ? asset('storage/' . $seo_page->thumbnail) : asset('finwalogo.png') }}">
+        <meta name="twitter:image:alt" content="{{ $seo_page->title ?? 'FinWa - Aplikasi Keuangan WhatsApp Indonesia' }}">
 
         {{-- Inline script to detect system dark mode preference and apply it immediately --}}
         <script>
@@ -78,7 +91,7 @@
             }
             /* Critical font fallback to prevent layout shift */
             body {
-                font-family: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             }
         </style>
 
@@ -139,5 +152,35 @@
         {{-- Google Tag Manager (noscript) --}}
         <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PKWTCMFK"
         height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+        
+        {{-- SEO Fallback Content for Crawlers without JS --}}
+        <noscript>
+            <div style="padding: 20px; text-align: center;">
+                <h1>FinWa: Aplikasi Keuangan WhatsApp Indonesia</h1>
+                <h2>Catat Keuangan via WhatsApp dengan Mudah & Otomatis</h2>
+                <p>FinWa adalah aplikasi keuangan WhatsApp Indonesia untuk UMKM dan freelancer. Cukup chat pengeluaran dan pemasukan di WA, langsung otomatis tercatat ke dashboard Anda.</p>
+                
+                <h3>Fitur Utama FinWa</h3>
+                <ul>
+                    <li>Pencatatan Otomatis dari WhatsApp</li>
+                    <li>Laporan Keuangan Real-time</li>
+                    <li>Manajemen Hutang Piutang</li>
+                </ul>
+
+                <h4>Mulai Sekarang</h4>
+                <a href="/finwa/launch" style="display: inline-block; padding: 10px 20px; background: #0f766e; color: white; text-decoration: none; border-radius: 5px;">Coba Gratis</a>
+                
+                <nav style="margin-top: 30px;">
+                    <h3>Tautan Navigasi Internal</h3>
+                    <ul style="list-style: none; padding: 0;">
+                        <li><a href="/">Beranda</a></li>
+                        <li><a href="/panduan-umkm">Panduan UMKM</a></li>
+                        <li><a href="/bantuan">Pusat Bantuan</a></li>
+                        <li><a href="/privasi">Kebijakan Privasi</a></li>
+                        <li><a href="/syarat-ketentuan">Syarat & Ketentuan</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </noscript>
     </body>
 </html>

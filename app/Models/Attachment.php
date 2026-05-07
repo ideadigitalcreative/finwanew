@@ -18,12 +18,12 @@ class Attachment extends Model
         'type',
         'signed_url',
         'signed_url_expires_at',
-        'is_encrypted'
+        'is_encrypted',
     ];
 
     protected $casts = [
         'is_encrypted' => 'boolean',
-        'signed_url_expires_at' => 'datetime'
+        'signed_url_expires_at' => 'datetime',
     ];
 
     public function tenant(): BelongsTo

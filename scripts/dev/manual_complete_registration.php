@@ -10,13 +10,13 @@ $app = require_once __DIR__.'/bootstrap/app.php';
 $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 
 use App\Helpers\WhatsAppRegistrationHelper as RegHelper;
-use App\Models\User;
-use App\Models\Tenant;
-use App\Models\UserWhatsAppNumber;
 use App\Models\Subscription;
+use App\Models\Tenant;
+use App\Models\User;
+use App\Models\UserWhatsAppNumber;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Carbon\Carbon;
 
 echo "=== MANUAL COMPLETE REGISTRATION ===\n\n";
 
@@ -41,22 +41,22 @@ echo "  LID: {$lid}\n\n";
 
 try {
     // Generate password
-    $password = strtoupper(Str::random(3)) . rand(100, 999);
+    $password = strtoupper(Str::random(3)).rand(100, 999);
     echo "Generated Password: {$password}\n\n";
-    
+
     // Generate slug
-    $slug = Str::slug($name) . '-' . Str::random(6);
+    $slug = Str::slug($name).'-'.Str::random(6);
     echo "Generated Slug: {$slug}\n\n";
-    
+
     // Create tenant
     $tenant = Tenant::create([
-        'name' => $name . "'s Business",
+        'name' => $name."'s Business",
         'slug' => $slug,
         'is_active' => true,
         'trial_ends_at' => Carbon::now()->addDays(30),
     ]);
     echo "✅ Tenant created (ID: {$tenant->id})\n";
-    
+
     // Create user
     $user = User::create([
         'name' => $name,
@@ -68,7 +68,7 @@ try {
         'email_verified_at' => now(),
     ]);
     echo "✅ User created (ID: {$user->id})\n";
-    
+
     // Create WhatsApp number mapping for LID
     UserWhatsAppNumber::create([
         'user_id' => $user->id,
@@ -80,7 +80,7 @@ try {
         'is_lid' => true,
     ]);
     echo "✅ WhatsApp LID mapping created\n";
-    
+
     // Create trial subscription
     Subscription::create([
         'tenant_id' => $tenant->id,
@@ -97,18 +97,18 @@ try {
         ],
     ]);
     echo "✅ Trial subscription created\n\n";
-    
+
     // Clear registration flow
     RegHelper::clearFlow($lid);
     echo "✅ Registration flow cleared\n\n";
-    
+
     echo "=== SUCCESS! ===\n\n";
     echo "Account Details:\n";
     echo "  📧 Email: {$email}\n";
     echo "  🔑 Password: {$password}\n";
     echo "  🌐 Login: https://finwa.web.id\n";
     echo "  ✨ Trial: 30 days\n\n";
-    
+
     echo "Send this message to user via WhatsApp:\n";
     echo "---\n";
     echo "🎉 *Akun Berhasil Dibuat!*\n\n";
@@ -121,9 +121,9 @@ try {
     echo "• _terima gaji 5jt_\n\n";
     echo "Selamat mencoba! 🚀\n";
     echo "---\n";
-    
+
 } catch (\Exception $e) {
-    echo "❌ ERROR: " . $e->getMessage() . "\n";
+    echo '❌ ERROR: '.$e->getMessage()."\n";
     echo "\nStack trace:\n";
-    echo $e->getTraceAsString() . "\n";
+    echo $e->getTraceAsString()."\n";
 }

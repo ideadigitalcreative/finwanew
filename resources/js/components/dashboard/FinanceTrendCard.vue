@@ -134,7 +134,7 @@ const handlePointLeave = () => {
 </script>
 
 <template>
-    <div class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl h-full rounded-[13px] flex flex-col shadow-lg shadow-gray-200/50 dark:shadow-gray-900/30 border border-gray-100 dark:border-gray-700/30">
+    <div class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl h-full rounded-[13px] flex flex-col border border-gray-100 dark:border-gray-700/30">
         <!-- Header -->
         <div class="p-4 md:p-5 border-b border-gray-100 dark:border-gray-700/50">
             <div class="flex items-center justify-between">
@@ -176,21 +176,6 @@ const handlePointLeave = () => {
                             <stop offset="50%" stop-color="#f97316" />
                             <stop offset="100%" stop-color="#ea580c" />
                         </linearGradient>
-                        <!-- Glow filters -->
-                        <filter id="incomeGlow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                            <feMerge>
-                                <feMergeNode in="coloredBlur"/>
-                                <feMergeNode in="SourceGraphic"/>
-                            </feMerge>
-                        </filter>
-                        <filter id="expenseGlow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-                            <feMerge>
-                                <feMergeNode in="coloredBlur"/>
-                                <feMergeNode in="SourceGraphic"/>
-                            </feMerge>
-                        </filter>
                     </defs>
 
                     <!-- Grid lines -->
@@ -259,7 +244,6 @@ const handlePointLeave = () => {
                         stroke-width="2"
                         stroke-linecap="round"
                         stroke-linejoin="round"
-                        filter="url(#incomeGlow)"
                         class="animate-draw-line"
                         style="--line-length: 1000"
                     />
@@ -272,7 +256,6 @@ const handlePointLeave = () => {
                         stroke-width="2"
                         stroke-linecap="round"
                         stroke-linejoin="round"
-                        filter="url(#expenseGlow)"
                         class="animate-draw-line"
                         style="--line-length: 1000; animation-delay: 0.3s"
                     />
@@ -288,7 +271,7 @@ const handlePointLeave = () => {
                             fill="white"
                             stroke="#22c55e"
                             stroke-width="2"
-                            class="cursor-pointer transition-all duration-200 hover:scale-150 animate-pop-in drop-shadow-sm"
+                            class="cursor-pointer transition-all duration-200 hover:scale-150 animate-pop-in"
                             :style="`animation-delay: ${0.8 + i * 0.1}s`"
                             @mouseenter="handlePointHover(i)"
                             @mouseleave="handlePointLeave"
@@ -306,7 +289,7 @@ const handlePointLeave = () => {
                             fill="white"
                             stroke="#f97316"
                             stroke-width="2"
-                            class="cursor-pointer transition-all duration-200 hover:scale-150 animate-pop-in drop-shadow-sm"
+                            class="cursor-pointer transition-all duration-200 hover:scale-150 animate-pop-in"
                             :style="`animation-delay: ${1.1 + i * 0.1}s`"
                             @mouseenter="handlePointHover(i)"
                             @mouseleave="handlePointLeave"
@@ -421,10 +404,8 @@ const handlePointLeave = () => {
 /* Data point hover effect */
 .data-points circle {
     transform-origin: center;
-    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
 }
 
 .data-points circle:hover {
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 </style>

@@ -18,7 +18,7 @@ echo "=== CHECKING TENANT {$tenantId} ===\n\n";
 // Check tenant
 $tenant = DB::table('tenants')->where('id', $tenantId)->first();
 
-if (!$tenant) {
+if (! $tenant) {
     echo "❌ Tenant not found\n";
     exit;
 }
@@ -27,7 +27,7 @@ echo "Tenant Details:\n";
 echo "  ID: {$tenant->id}\n";
 echo "  Name: {$tenant->name}\n";
 echo "  Slug: {$tenant->slug}\n";
-echo "  Active: " . ($tenant->is_active ? 'Yes' : 'No') . "\n";
+echo '  Active: '.($tenant->is_active ? 'Yes' : 'No')."\n";
 echo "  Created: {$tenant->created_at}\n\n";
 
 // Check users in this tenant
@@ -61,11 +61,11 @@ if ($mappings->count() === 0) {
         echo "  - Mapping ID: {$mapping->id}\n";
         echo "    User ID: {$mapping->user_id}\n";
         echo "    WhatsApp: {$mapping->whatsapp_number}\n";
-        echo "    Is LID: " . ($mapping->is_lid ? 'Yes' : 'No') . "\n";
-        
+        echo '    Is LID: '.($mapping->is_lid ? 'Yes' : 'No')."\n";
+
         // Check if user exists
         $user = DB::table('users')->where('id', $mapping->user_id)->first();
-        if (!$user) {
+        if (! $user) {
             echo "    ⚠️  USER DELETED (orphaned mapping)\n";
         }
         echo "\n";
@@ -81,7 +81,7 @@ $messages = DB::table('messages')
     ->get(['id', 'sender_id', 'content', 'created_at']);
 
 foreach ($messages as $msg) {
-    echo "  - [{$msg->created_at}] {$msg->sender_id}: " . substr($msg->content, 0, 30) . "\n";
+    echo "  - [{$msg->created_at}] {$msg->sender_id}: ".substr($msg->content, 0, 30)."\n";
 }
 
 echo "\n=== DONE ===\n";

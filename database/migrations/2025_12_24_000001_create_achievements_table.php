@@ -21,7 +21,7 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
-        
+
         // User achievements - Pivot table
         Schema::create('user_achievements', function (Blueprint $table) {
             $table->id();
@@ -30,10 +30,10 @@ return new class extends Migration
             $table->timestamp('earned_at');
             $table->json('metadata')->nullable(); // Extra info about how it was earned
             $table->timestamps();
-            
+
             $table->unique(['tenant_id', 'achievement_id']);
         });
-        
+
         // User streaks - Track consecutive days
         Schema::create('user_streaks', function (Blueprint $table) {
             $table->id();
@@ -43,14 +43,14 @@ return new class extends Migration
             $table->integer('longest_streak')->default(0);
             $table->date('last_activity_date')->nullable();
             $table->timestamps();
-            
+
             $table->unique(['tenant_id', 'streak_type']);
         });
-        
+
         // Seed default achievements
         $this->seedDefaultAchievements();
     }
-    
+
     protected function seedDefaultAchievements(): void
     {
         $achievements = [
@@ -127,7 +127,7 @@ return new class extends Migration
                 'points' => 25,
             ],
         ];
-        
+
         foreach ($achievements as $achievement) {
             \DB::table('achievements')->insert(array_merge($achievement, [
                 'created_at' => now(),

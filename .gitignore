@@ -34,6 +34,12 @@ yarn-error.log
 # YoYo AI version control directory
 .yoyo/
 
+# Trae / AI / scratch
+/.ai/
+/scratch/
+/*.code-workspace
+/Animated Navbar/
+
 # Test cache
 phpunit.xml.bak
 .phpunit.result.cache
@@ -163,6 +169,12 @@ __pycache__/
 /*_FIX_*.sh
 /*_FIX_*.md
 /*_PATCH.php
+
+/CHANGELOG_*.md
+/CHANGES/
+/LAPORAN_*.md
+/RENCANA_*.md
+/REFACTORING_*.md
 
 # File kredensial / sensitif — WAJIB tidak pernah masuk repo
 /*credentials*

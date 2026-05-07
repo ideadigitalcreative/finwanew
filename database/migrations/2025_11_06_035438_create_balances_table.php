@@ -23,7 +23,7 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->json('metadata')->nullable();
             $table->timestamps();
-            
+
             $table->unique(['tenant_id', 'account_name', 'account_number']);
             $table->index(['tenant_id', 'account_type']);
         });

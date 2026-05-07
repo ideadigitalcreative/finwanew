@@ -17,14 +17,14 @@ class TenantController extends Controller
         $user = $request->user();
 
         // Verify user belongs to this tenant
-        if (!$user->belongsToTenant($tenant->id)) {
+        if (! $user->belongsToTenant($tenant->id)) {
             abort(403, 'You do not have access to this tenant');
         }
 
         // Set current tenant in session
         session(['current_tenant_id' => $tenant->id]);
 
-        return redirect('/dashboard')->with('success', 'Switched to ' . $tenant->name);
+        return redirect('/dashboard')->with('success', 'Switched to '.$tenant->name);
     }
 
     /**
@@ -39,6 +39,7 @@ class TenantController extends Controller
             ->get()
             ->map(function ($tenant) use ($user) {
                 $membership = $tenant->pivot;
+
                 return [
                     'id' => $tenant->id,
                     'name' => $tenant->name,

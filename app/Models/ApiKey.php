@@ -16,18 +16,18 @@ class ApiKey extends Model
         'permissions',
         'last_used_at',
         'expires_at',
-        'is_active'
+        'is_active',
     ];
 
     protected $casts = [
         'permissions' => 'array',
         'last_used_at' => 'datetime',
         'expires_at' => 'datetime',
-        'is_active' => 'boolean'
+        'is_active' => 'boolean',
     ];
 
     protected $hidden = [
-        'secret'
+        'secret',
     ];
 
     public function tenant(): BelongsTo
@@ -37,12 +37,12 @@ class ApiKey extends Model
 
     public static function generate(): string
     {
-        return 'keu_' . Str::random(40);
+        return 'keu_'.Str::random(40);
     }
 
     public function isValid(): bool
     {
-        if (!$this->is_active) {
+        if (! $this->is_active) {
             return false;
         }
 

@@ -5,9 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Balance;
 use App\Models\Tenant;
+use App\Services\TenantProvisioningService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class BalanceController extends Controller
 {
@@ -18,6 +19,11 @@ class BalanceController extends Controller
     {
         try {
             $tenantId = $tenant ?? $request->input('tenant_id') ?? $request->tenant_id;
+
+            if (! $tenantId && auth()->check()) {
+                $tenantId = auth()->user()->currentTenant()->id;
+            }
+
             $tenantModel = Tenant::findOrFail($tenantId);
 
             $balances = Balance::where('tenant_id', $tenantModel->id)
@@ -28,13 +34,13 @@ class BalanceController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $balances
+                'data' => $balances,
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -57,12 +63,17 @@ class BalanceController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         try {
             $tenantId = $tenant ?? $request->input('tenant_id') ?? $request->tenant_id;
+
+            if (! $tenantId && auth()->check()) {
+                $tenantId = auth()->user()->currentTenant()->id;
+            }
+
             $tenantModel = Tenant::findOrFail($tenantId);
 
             $balance = Balance::create([
@@ -79,18 +90,18 @@ class BalanceController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Balance created successfully',
-                'data' => $balance
+                'data' => $balance,
             ], 201);
 
         } catch (\Exception $e) {
             Log::error('Error creating balance', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -114,7 +125,7 @@ class BalanceController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Validation failed',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
@@ -133,24 +144,24 @@ class BalanceController extends Controller
                 'currency',
                 'balance',
                 'balance_date',
-                'is_active'
+                'is_active',
             ]));
 
             return response()->json([
                 'success' => true,
                 'message' => 'Balance updated successfully',
-                'data' => $balance
+                'data' => $balance,
             ]);
 
         } catch (\Exception $e) {
             Log::error('Error updating balance', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -168,25 +179,23 @@ class BalanceController extends Controller
                 ->where('id', $balanceId)
                 ->firstOrFail();
 
-            // Hard delete: permanently remove from database
-            $balance->delete();
+            app(TenantProvisioningService::class)->permanentlyDeleteBalance($balance);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Balance deleted successfully'
+                'message' => 'Balance deleted permanently',
             ]);
 
         } catch (\Exception $e) {
             Log::error('Error deleting balance', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
 }
-

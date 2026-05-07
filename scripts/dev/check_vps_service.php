@@ -1,8 +1,9 @@
 <?php
-$file = __DIR__ . '/app/Services/FinWaAIService.php';
 
-if (!file_exists($file)) {
-    die("❌ File not found: $file\n");
+$file = __DIR__.'/app/Services/FinWaAIService.php';
+
+if (! file_exists($file)) {
+    exit("❌ File not found: $file\n");
 }
 
 $content = file_get_contents($file);
@@ -14,7 +15,7 @@ echo "File: $file\n";
 $checks = [
     'Sentiment Key' => "'sentiment' => \$result['data']['sentiment'] ?? (\$result['sentiment'] ?? null),",
     'Suggestion Key' => "'suggestion' => \$result['data']['suggestion'] ?? (\$result['suggestion'] ?? null)",
-    'User ID Param' => 'public function processText(string $message, ?string $userId = null): array'
+    'User ID Param' => 'public function processText(string $message, ?string $userId = null): array',
 ];
 
 foreach ($checks as $name => $snippet) {

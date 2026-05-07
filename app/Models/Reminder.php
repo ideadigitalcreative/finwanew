@@ -14,6 +14,7 @@ class Reminder extends Model
         'type', // 'once', 'daily', 'weekly', 'monthly'
         'amount',
         'category_type',
+        'metadata',
         'reminder_date', // For once type
         'reminder_day', // For monthly (1-31) or weekly (0-6)
         'reminder_time', // HH:MM format
@@ -29,6 +30,7 @@ class Reminder extends Model
         'is_active' => 'boolean',
         'last_sent_at' => 'datetime',
         'next_send_at' => 'datetime',
+        'metadata' => 'array',
     ];
 
     public function tenant(): BelongsTo
@@ -42,12 +44,12 @@ class Reminder extends Model
     public function calculateNextSendAt(): void
     {
         $now = now();
-        
+
         switch ($this->type) {
             case 'once':
                 $this->next_send_at = $this->reminder_date->setTimeFromTimeString($this->reminder_time ?? '08:00');
                 break;
-                
+
             case 'daily':
                 $nextSend = $now->copy()->setTimeFromTimeString($this->reminder_time ?? '08:00');
                 if ($nextSend->lte($now)) {
@@ -55,7 +57,7 @@ class Reminder extends Model
                 }
                 $this->next_send_at = $nextSend;
                 break;
-                
+
             case 'weekly':
                 $nextSend = $now->copy()
                     ->next($this->reminder_day) // 0 = Sunday, 1 = Monday, etc.
@@ -65,7 +67,7 @@ class Reminder extends Model
                 }
                 $this->next_send_at = $nextSend;
                 break;
-                
+
             case 'monthly':
                 $day = min($this->reminder_day, $now->daysInMonth);
                 $nextSend = $now->copy()
@@ -79,7 +81,7 @@ class Reminder extends Model
                 $this->next_send_at = $nextSend;
                 break;
         }
-        
+
         $this->save();
     }
 }

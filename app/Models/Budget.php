@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Carbon\Carbon;
 
 class Budget extends Model
 {
@@ -18,7 +18,7 @@ class Budget extends Model
         'is_active',
         'alert_enabled',
         'alert_threshold',
-        'metadata'
+        'metadata',
     ];
 
     protected $casts = [
@@ -27,7 +27,7 @@ class Budget extends Model
         'end_date' => 'date',
         'is_active' => 'boolean',
         'alert_enabled' => 'boolean',
-        'metadata' => 'array'
+        'metadata' => 'array',
     ];
 
     /**
@@ -96,7 +96,7 @@ class Budget extends Model
      */
     public function shouldTriggerAlert(): bool
     {
-        if (!$this->alert_enabled) {
+        if (! $this->alert_enabled) {
             return false;
         }
 
@@ -110,7 +110,7 @@ class Budget extends Model
     {
         $start = Carbon::parse($this->start_date);
 
-        return match($this->period) {
+        return match ($this->period) {
             'daily' => $start->copy()->endOfDay(),
             'weekly' => $start->copy()->endOfWeek(),
             'monthly' => $start->copy()->endOfMonth(),

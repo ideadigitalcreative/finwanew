@@ -26,12 +26,12 @@ class ApiKeyAuth
         if (empty($expectedKey)) {
             return response()->json([
                 'success' => false,
-                'error' => 'API key not configured on server'
+                'error' => 'API key not configured on server',
             ], 500);
         }
 
         // Get API key from request (header or query param)
-        $providedKey = $request->header('X-Api-Key') 
+        $providedKey = $request->header('X-Api-Key')
             ?? $request->header('Authorization')
             ?? $request->query('api_key');
 
@@ -41,10 +41,10 @@ class ApiKeyAuth
         }
 
         // Validate API key
-        if (empty($providedKey) || !hash_equals($expectedKey, $providedKey)) {
+        if (empty($providedKey) || ! hash_equals($expectedKey, $providedKey)) {
             return response()->json([
                 'success' => false,
-                'error' => 'Invalid or missing API key'
+                'error' => 'Invalid or missing API key',
             ], 401);
         }
 

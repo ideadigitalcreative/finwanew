@@ -14,12 +14,12 @@ class Role extends Model
         'slug',
         'permissions',
         'description',
-        'is_system'
+        'is_system',
     ];
 
     protected $casts = [
         'permissions' => 'array',
-        'is_system' => 'boolean'
+        'is_system' => 'boolean',
     ];
 
     public function tenant(): BelongsTo

@@ -89,7 +89,7 @@ const hasData = computed(() => props.categories && props.categories.length > 0);
 </script>
 
 <template>
-    <div class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl h-full rounded-[13px] flex flex-col shadow-lg shadow-gray-200/50 dark:shadow-gray-900/30 border border-gray-100 dark:border-gray-700/30">
+    <div class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl h-full rounded-[13px] flex flex-col border border-gray-100 dark:border-gray-700/30">
         <!-- Header -->
         <div class="p-4 md:p-5 border-b border-gray-100 dark:border-gray-700/50">
             <div>
@@ -114,7 +114,6 @@ const hasData = computed(() => props.categories && props.categories.length > 0);
                             :d="getSegmentPath(segment.startPercent, segment.endPercent)"
                             :fill="segment.color"
                             class="transition-all duration-500 hover:opacity-80 cursor-pointer"
-                            :style="{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }"
                         />
                         
                         <!-- Center hole (donut style - thinner ring) -->

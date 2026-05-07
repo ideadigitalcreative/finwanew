@@ -1,11 +1,12 @@
 <?php
+
 $email = 'melisatulris22ki@gmail.com';
 $phone = '6285179849922';
 
 echo "\n--- HAPUS USER MELISA ---\n";
 
 $user = App\Models\User::where('email', $email)->first();
-if (!$user) {
+if (! $user) {
     echo "❌ User tidak ditemukan.\n";
     exit;
 }

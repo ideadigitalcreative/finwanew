@@ -24,7 +24,7 @@ return new class extends Migration
             $table->bigInteger('timestamp'); // Unix epoch timestamp
             $table->json('raw_data')->nullable(); // Original payload
             $table->timestamps();
-            
+
             $table->index(['tenant_id', 'channel_id', 'timestamp']);
             $table->index(['tenant_id', 'sender_id']);
         });

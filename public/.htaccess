@@ -1,3 +1,8 @@
+# PWA: Web App Manifest
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
@@ -45,15 +50,41 @@
 <IfModule mod_headers.c>
     # Prevent MIME type sniffing
     Header set X-Content-Type-Options "nosniff"
-    
+
     # Enable XSS filter
     Header set X-XSS-Protection "1; mode=block"
-    
+
     # Clickjacking protection
     Header set X-Frame-Options "SAMEORIGIN"
-    
+
     # Referrer Policy
     Header set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # DDoS Protection Headers
+    # Allow search engine indexing
+    # Header set X-Robots-Tag "noindex, nofollow, noarchive"
+    Header set X-Permitted-Cross-Domain-Policies "none"
+
+    # Rate limiting hint for reverse proxies/load balancers
+    Header set X-Rate-Limit "100 requests per minute"
+</IfModule>
+
+# =====================================================
+# DDoS Protection Rules
+# =====================================================
+<IfModule mod_rewrite.c>
+    # Block common attack patterns
+    RewriteCond %{QUERY_STRING} (\.\./|\.\.\\|%2e%2e%2f|%2e%2e%5c) [NC,OR]
+    RewriteCond %{QUERY_STRING} (javascript:|vbscript:|data:|mailto:) [NC,OR]
+    RewriteCond %{QUERY_STRING} (<|%3C)(script|iframe|object|embed) [NC,OR]
+    RewriteCond %{QUERY_STRING} (union.*select|cast.*chr|declare.*exec) [NC]
+    RewriteRule ^.*$ - [F,L]
+
+    # Block excessive requests from same IP (basic protection)
+    RewriteCond %{REQUEST_METHOD} ^(GET|POST|HEAD) [NC]
+    RewriteCond %{HTTP_USER_AGENT} ^$ [OR]
+    RewriteCond %{HTTP_USER_AGENT} (libwww-perl|BBBike|wget|winhttp|HTTrack|clshttp|archiver|loader|email|harvest|extract|grab|miner|python-requests|go-http-client) [NC]
+    RewriteRule ^.*$ - [F,L]
 </IfModule>
 
 # =====================================================

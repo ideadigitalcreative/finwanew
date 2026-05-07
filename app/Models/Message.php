@@ -20,13 +20,13 @@ class Message extends Model
         'timestamp',
         'raw_data',
         'metadata',
-        'status'
+        'status',
     ];
 
     protected $casts = [
         'raw_data' => 'array',
         'metadata' => 'array',
-        'timestamp' => 'integer'
+        'timestamp' => 'integer',
     ];
 
     public function tenant(): BelongsTo

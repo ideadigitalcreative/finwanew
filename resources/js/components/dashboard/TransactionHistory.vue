@@ -35,7 +35,19 @@ const formatCurrency = (amount: number) => {
 };
 
 const formatDate = (date: string) => {
+    if (!date) return '-';
+    // Using string parts instead of new Date().getDate() directly to avoid timezone shifts
+    // But since we want to show localized date, the simplest safe way is:
     const d = new Date(date);
+    if (isNaN(d.getTime())) return date;
+    
+    // Check if it's a simple YYYY-MM-DD string
+    if (date.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const [y, m, day] = date.split('-').map(Number);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        return `${day.toString().padStart(2, '0')} ${months[m - 1]} ${y}`;
+    }
+
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
     return `${d.getDate().toString().padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
 };
@@ -88,13 +100,28 @@ const deleteTransaction = async (id: number) => {
 };
 
 const editTransaction = async (transaction: Transaction) => {
+    const escapeHtml = (str: string) => {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    };
+
     const { value: formValues } = await Swal.fire({
         title: 'Edit Transaksi',
         html: `
             <div class="space-y-4 pt-4">
                 <div class="text-left px-4">
+                    <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Tipe</label>
+                    <select id="swal-input-type" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none bg-white">
+                        <option value="income" ${transaction.type === 'income' ? 'selected' : ''}>Pemasukan</option>
+                        <option value="expense" ${transaction.type === 'expense' ? 'selected' : ''}>Pengeluaran</option>
+                        <option value="debit_internal" ${transaction.type === 'debit_internal' ? 'selected' : ''}>Debit Antar Dompet</option>
+                        <option value="kredit_internal" ${transaction.type === 'kredit_internal' ? 'selected' : ''}>Kredit Antar Dompet</option>
+                    </select>
+                </div>
+                <div class="text-left px-4">
                     <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Keterangan</label>
-                    <input id="swal-input-desc" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none" value="${transaction.description}" placeholder="Keterangan transaksi">
+                    <input id="swal-input-desc" class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none" value="${escapeHtml(transaction.description)}" placeholder="Keterangan transaksi">
                 </div>
                 <div class="text-left px-4">
                     <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Jumlah (Rp)</label>
@@ -115,6 +142,7 @@ const editTransaction = async (transaction: Transaction) => {
         },
         focusConfirm: false,
         preConfirm: () => {
+            const type = (document.getElementById('swal-input-type') as HTMLSelectElement).value;
             const description = (document.getElementById('swal-input-desc') as HTMLInputElement).value;
             const amount = (document.getElementById('swal-input-amount') as HTMLInputElement).value;
             
@@ -123,17 +151,23 @@ const editTransaction = async (transaction: Transaction) => {
                 return false;
             }
             
-            return { description, amount };
+            return { type, description, amount };
         }
     });
 
     if (formValues) {
         showLoading('Menyimpan...');
+        const d = new Date(transaction.transaction_date);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const formattedDate = `${y}-${m}-${day}`;
+
         router.put(`/transactions/${transaction.id}`, {
             description: formValues.description,
             amount: parseFloat(formValues.amount),
-            type: transaction.type, // Maintain existing type
-            transaction_date: transaction.transaction_date // Maintain existing date
+            type: formValues.type, 
+            transaction_date: formattedDate // Consistent with list display
         }, {
             preserveScroll: true,
             onSuccess: () => {
@@ -150,7 +184,7 @@ const editTransaction = async (transaction: Transaction) => {
 </script>
 
 <template>
-    <div class="bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 shadow-xl shadow-primary/5 transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10 animate-fade-in-up" style="animation-delay: 0.5s">
+    <div class="bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 transition-all duration-500 animate-fade-in-up" style="animation-delay: 0.5s">
         <div class="flex items-center justify-between mb-4 md:mb-5">
             <h3 class="text-base md:text-lg font-semibold text-foreground">Riwayat Transaksi</h3>
             
@@ -234,14 +268,23 @@ const editTransaction = async (transaction: Transaction) => {
                             <div class="flex items-center gap-2">
                                 <div 
                                     class="w-8 h-8 rounded-xl backdrop-blur-sm flex items-center justify-center border"
-                                    :class="transaction.type === 'income' 
-                                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' 
-                                        : 'bg-rose-500/10 border-rose-500/20 text-rose-500'"
+                                    :class="{
+                                        'bg-emerald-500/10 border-emerald-500/20 text-emerald-500': transaction.type === 'income' || transaction.type === 'kredit_internal',
+                                        'bg-rose-500/10 border-rose-500/20 text-rose-500': transaction.type === 'expense' || transaction.type === 'debit_internal'
+                                    }"
                                 >
-                                    <component :is="transaction.type === 'income' ? TrendingUp : TrendingDown" class="w-4 h-4" />
+                                    <component 
+                                        :is="transaction.type === 'income' || transaction.type === 'kredit_internal' ? TrendingUp : (transaction.type === 'expense' || transaction.type === 'debit_internal' ? TrendingDown : ArrowLeftRight)" 
+                                        class="w-4 h-4" 
+                                    />
                                 </div>
                                 <span class="text-sm md:text-base text-foreground capitalize">
-                                    {{ transaction.type === 'income' ? 'Pemasukan' : (transaction.type === 'expense' ? 'Pengeluaran' : transaction.type) }}
+                                    {{ 
+                                        transaction.type === 'income' ? 'Pemasukan' : 
+                                        (transaction.type === 'expense' ? 'Pengeluaran' : 
+                                        (transaction.type === 'debit_internal' ? 'Debit Antar Dompet' : 
+                                        (transaction.type === 'kredit_internal' ? 'Kredit Antar Dompet' : transaction.type))) 
+                                    }}
                                 </span>
                             </div>
                         </td>

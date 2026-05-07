@@ -48,3 +48,5 @@ Setelah fitur dasar (pencatatan) berjalan, dapat ditambahkan fitur tracking:
 ---
 *Dibuat pada: 26 Maret 2026*
 *Status: Analisis Selesai (Siap Implementasi)*
+
+**Implementasi bertahap & ceklist:** [HUTANG_PIUTANG_IMPLEMENTATION_PLAN.md](./HUTANG_PIUTANG_IMPLEMENTATION_PLAN.md)

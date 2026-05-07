@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 
 $identifier = $argv[1] ?? null;
 
-if (!$identifier) {
+if (! $identifier) {
     echo "Usage: php delete_user.php <email_or_id>\n";
     echo "Example: php delete_user.php haerulhadi00@gmail.com\n";
     echo "Example: php delete_user.php 12\n";
@@ -30,7 +30,7 @@ if (is_numeric($identifier)) {
     $user = User::where('email', $identifier)->first();
 }
 
-if (!$user) {
+if (! $user) {
     echo "❌ User not found: {$identifier}\n";
     exit;
 }
@@ -61,9 +61,9 @@ echo "  Tenant memberships: {$pivotEntries}\n";
 echo "  Messages sent: {$messages}\n\n";
 
 echo "⚠️  WARNING: This will permanently delete the user and related data!\n";
-echo "Continue? (yes/no): ";
+echo 'Continue? (yes/no): ';
 
-$handle = fopen("php://stdin", "r");
+$handle = fopen('php://stdin', 'r');
 $line = trim(fgets($handle));
 fclose($handle);
 

@@ -27,7 +27,7 @@ $txs = \App\Models\Transaction::where('tenant_id', $tenantId)->get();
 if ($txs->isEmpty()) {
     echo "Tidak ada transaksi ditemukan.\n";
 } else {
-    foreach($txs as $t) {
-       echo "Tx ID: {$t->id} | Amount: " . number_format($t->amount) . " | Type: {$t->type} | Cat ID: " . ($t->category_id ?? 'NULL') . "\n";
+    foreach ($txs as $t) {
+        echo "Tx ID: {$t->id} | Amount: ".number_format($t->amount)." | Type: {$t->type} | Cat ID: ".($t->category_id ?? 'NULL')."\n";
     }
 }

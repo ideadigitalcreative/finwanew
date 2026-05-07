@@ -16,11 +16,11 @@ class Category extends Model
         'description',
         'icon',
         'color',
-        'is_system'
+        'is_system',
     ];
 
     protected $casts = [
-        'is_system' => 'boolean'
+        'is_system' => 'boolean',
     ];
 
     public function tenant(): BelongsTo

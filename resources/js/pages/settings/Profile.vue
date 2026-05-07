@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
+import PasswordController from '@/actions/App/Http/Controllers/Settings/PasswordController';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 import { Form, Head, Link, usePage } from '@inertiajs/vue3';
@@ -213,6 +214,93 @@ const handleFileChange = (event: Event) => {
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                                         Saved successfully.
+                                    </p>
+                                </Transition>
+                            </div>
+                        </Form>
+                    </div>
+
+                    <!-- Update Password Card -->
+                    <div class="relative overflow-hidden rounded-2xl bg-white p-6 shadow-[0_2px_10px_rgba(0,0,0,0.04)] transition-all hover:shadow-md dark:bg-gray-800">
+                        <div class="mb-6 border-b border-gray-100 dark:border-gray-700 pb-4 px-1">
+                             <h3 class="text-lg font-bold text-gray-900 dark:text-white">Update Password</h3>
+                             <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Ensure your account is using a long, random password to stay secure.</p>
+                        </div>
+
+                        <Form
+                            v-bind="PasswordController.update.form()"
+                            :options="{
+                                preserveScroll: true,
+                            }"
+                            reset-on-success
+                            :reset-on-error="[
+                                'password',
+                                'password_confirmation',
+                                'current_password',
+                            ]"
+                            class="space-y-6 px-1"
+                            v-slot="{ errors, processing, recentlySuccessful }"
+                        >
+                            <div class="grid gap-2">
+                                <Label for="current_password">Current Password</Label>
+                                <Input
+                                    id="current_password"
+                                    name="current_password"
+                                    type="password"
+                                    class="mt-1 block w-full"
+                                    autocomplete="current-password"
+                                    placeholder="Current password"
+                                />
+                                <InputError :message="errors.current_password" />
+                            </div>
+
+                            <div class="grid gap-2">
+                                <Label for="password">New Password</Label>
+                                <Input
+                                    id="password"
+                                    name="password"
+                                    type="password"
+                                    class="mt-1 block w-full"
+                                    autocomplete="new-password"
+                                    placeholder="New password"
+                                />
+                                <InputError :message="errors.password" />
+                            </div>
+
+                            <div class="grid gap-2">
+                                <Label for="password_confirmation">Confirm Password</Label>
+                                <Input
+                                    id="password_confirmation"
+                                    name="password_confirmation"
+                                    type="password"
+                                    class="mt-1 block w-full"
+                                    autocomplete="new-password"
+                                    placeholder="Confirm password"
+                                />
+                                <InputError :message="errors.password_confirmation" />
+                            </div>
+
+                            <div class="flex items-center gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                <Button
+                                    :disabled="processing"
+                                    data-test="update-password-button"
+                                    class="bg-gray-900 text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
+                                >
+                                    Update Password
+                                </Button>
+
+                                <Transition
+                                    enter-active-class="transition ease-in-out"
+                                    enter-from-class="opacity-0"
+                                    leave-active-class="transition ease-in-out"
+                                    leave-to-class="opacity-0"
+                                >
+                                    <p
+                                        v-show="recentlySuccessful"
+                                        class="text-sm text-green-600 font-medium flex items-center gap-1"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                        Password updated.
                                     </p>
                                 </Transition>
                             </div>

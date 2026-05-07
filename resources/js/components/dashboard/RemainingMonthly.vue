@@ -30,7 +30,7 @@ const formatCurrency = (amount: number) => {
 </script>
 
 <template>
-    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 shadow-xl shadow-primary/5 transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10 animate-fade-in-up" style="animation-delay: 0.4s">
+    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 transition-all duration-500 animate-fade-in-up" style="animation-delay: 0.4s">
         <div class="flex items-center justify-between mb-4 md:mb-5">
             <h3 class="text-base md:text-lg font-semibold text-foreground">Sisa Bulanan</h3>
             <button @click="router.visit('/budgets')" class="flex items-center gap-1 md:gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors bg-muted/30 backdrop-blur-sm px-3 py-1.5 rounded-full hover:bg-primary/10">
@@ -65,7 +65,7 @@ const formatCurrency = (amount: number) => {
                 
                 <!-- Progress bar -->
                 <div class="h-2.5 md:h-3.5 bg-muted/30 backdrop-blur-sm rounded-full overflow-hidden border border-border/20">
-                    <div class="h-full bg-gradient-to-r from-primary via-primary to-primary/60 rounded-full transition-all duration-500 shadow-lg shadow-primary/30" :style="{ width: percentage + '%' }" />
+                    <div class="h-full bg-gradient-to-r from-primary via-primary to-primary/60 rounded-full transition-all duration-500" :style="{ width: percentage + '%' }" />
                 </div>
             </div>
         </div>
@@ -76,11 +76,11 @@ const formatCurrency = (amount: number) => {
                 v-for="(category, index) in categories" 
                 :key="index"
                 :class="[
-                    index % 3 === 0 ? 'bg-muted/20 hover:bg-muted/40 border-border/20 hover:border-primary/20 hover:shadow-primary/5' : 
-                    index % 3 === 1 ? 'bg-chart-expense/10 hover:bg-chart-expense/20 border-chart-expense/20 hover:border-chart-expense/40 hover:shadow-chart-expense/10' :
-                    'bg-accent/30 hover:bg-accent/50 border-accent/30 hover:border-accent/50 hover:shadow-accent/10'
+                    index % 3 === 0 ? 'bg-muted/20 hover:bg-muted/40 border-border/20 hover:border-primary/20' : 
+                    index % 3 === 1 ? 'bg-chart-expense/10 hover:bg-chart-expense/20 border-chart-expense/20 hover:border-chart-expense/40' :
+                    'bg-accent/30 hover:bg-accent/50 border-accent/30 hover:border-accent/50'
                 ]"
-                class="backdrop-blur-md rounded-2xl p-3 md:p-4 transition-all duration-300 border hover:shadow-lg"
+                class="backdrop-blur-md rounded-2xl p-3 md:p-4 transition-all duration-300 border"
             >
                 <div class="flex items-baseline mb-0.5 md:mb-1">
                     <span class="text-xl md:text-3xl font-bold text-foreground">{{ category.percent }}</span>

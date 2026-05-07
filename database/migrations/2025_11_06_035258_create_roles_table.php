@@ -20,7 +20,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->boolean('is_system')->default(false); // System roles cannot be deleted
             $table->timestamps();
-            
+
             $table->unique(['tenant_id', 'slug']);
         });
     }

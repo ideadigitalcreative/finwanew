@@ -21,7 +21,7 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->timestamp('last_activity_at')->nullable();
             $table->timestamps();
-            
+
             $table->unique(['tenant_id', 'type', 'channel_account']);
         });
     }

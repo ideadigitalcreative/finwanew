@@ -12,13 +12,13 @@ $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 use Illuminate\Support\Facades\DB;
 
 $userId = 12;
-$backupFile = "backup_user_id_{$userId}_" . date('Y-m-d_His') . ".json";
+$backupFile = "backup_user_id_{$userId}_".date('Y-m-d_His').'.json';
 
 echo "=== BACKUP USER ID: {$userId} ===\n\n";
 
 $user = \App\Models\User::find($userId);
 
-if (!$user) {
+if (! $user) {
     echo "❌ User not found\n";
     exit;
 }
@@ -111,17 +111,17 @@ echo "✅ Balances: {$balances->count()}\n";
 file_put_contents($backupFile, json_encode($backup, JSON_PRETTY_PRINT));
 
 echo "\n✅ Backup saved to: {$backupFile}\n";
-echo "File size: " . number_format(filesize($backupFile)) . " bytes\n";
+echo 'File size: '.number_format(filesize($backupFile))." bytes\n";
 
 // Summary
 echo "\n=== BACKUP SUMMARY ===\n";
 echo "User: {$user->email}\n";
-echo "Tenant: " . ($backup['tenant']['name'] ?? 'N/A') . "\n";
-echo "WhatsApp Numbers: " . count($backup['whatsapp_mappings']) . "\n";
-echo "Transactions: " . count($backup['transactions']) . "\n";
-echo "Subscriptions: " . count($backup['subscriptions']) . "\n";
-echo "Categories: " . count($backup['categories']) . "\n";
-echo "Balances: " . count($backup['balances']) . "\n";
+echo 'Tenant: '.($backup['tenant']['name'] ?? 'N/A')."\n";
+echo 'WhatsApp Numbers: '.count($backup['whatsapp_mappings'])."\n";
+echo 'Transactions: '.count($backup['transactions'])."\n";
+echo 'Subscriptions: '.count($backup['subscriptions'])."\n";
+echo 'Categories: '.count($backup['categories'])."\n";
+echo 'Balances: '.count($backup['balances'])."\n";
 
 echo "\n=== DONE ===\n";
 echo "Upload this file to VPS and run:\n";

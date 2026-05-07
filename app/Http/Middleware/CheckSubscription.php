@@ -16,6 +16,7 @@ class CheckSubscription
     protected array $allowedRoutes = [
         'subscription.expired',
         'subscriptions.index',
+        'subscriptions.wizard',
         'subscriptions.request',
         'subscriptions.upload-payment-proof',
         'checkout',
@@ -34,7 +35,7 @@ class CheckSubscription
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-        
+
         // Skip for super admin
         if ($user && $user->is_super_admin) {
             return $next($request);
@@ -47,12 +48,12 @@ class CheckSubscription
         }
 
         // Check if user has tenant
-        if (!$request->tenant_id) {
+        if (! $request->tenant_id) {
             return $next($request);
         }
 
         $tenant = Tenant::find($request->tenant_id);
-        if (!$tenant) {
+        if (! $tenant) {
             return $next($request);
         }
 
@@ -69,30 +70,35 @@ class CheckSubscription
         $isInTrial = $tenant->trial_ends_at && $tenant->trial_ends_at->isFuture();
 
         // If no active subscription and not in trial, redirect to expired page
-        if (!$hasActiveSubscription && !$isInTrial) {
+        if (! $hasActiveSubscription && ! $isInTrial) {
             // Check if they ever had a paid subscription
             $hadPaidSubscription = Subscription::where('tenant_id', $tenant->id)
                 ->whereNotIn('plan', ['free', 'trial'])
                 ->exists();
 
             if ($hadPaidSubscription) {
-                // Had paid subscription but expired
+                // Had paid subscription but expired or no active subscription found
+
+                if ($request->expectsJson() || $request->is('api/*')) {
+                    return response()->json([
+                        'message' => 'Subscription expired',
+                        'subscription_status' => 'expired',
+                        'redirect_url' => route('subscription.expired'),
+                    ], 403);
+                }
+
                 return redirect()->route('subscription.expired');
             }
 
-            // Check if free plan has expired
-            $freeSubscription = Subscription::where('tenant_id', $tenant->id)
-                ->where('plan', 'free')
-                ->where('status', 'active')
-                ->whereNotNull('ends_at')
-                ->where('ends_at', '<', now())
-                ->first();
-
-            if ($freeSubscription) {
-                // Free plan expired - update status and redirect
-                $freeSubscription->update(['status' => 'expired']);
-                return redirect()->route('subscription.expired');
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'message' => 'Subscription expired',
+                    'subscription_status' => 'expired',
+                    'redirect_url' => route('subscription.expired'),
+                ], 403);
             }
+
+            return redirect()->route('subscription.expired');
         }
 
         return $next($request);

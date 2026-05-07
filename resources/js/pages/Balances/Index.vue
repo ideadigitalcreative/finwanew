@@ -180,15 +180,15 @@ const setDefaultBalance = (balance: Balance) => {
 
 const deleteBalance = (balance: Balance) => {
     showDeleteConfirm(
-        'Hapus Saldo Akun?',
-        `Apakah Anda yakin ingin menghapus saldo akun "${balance.account_name}"?`
+        'Hapus dompet permanen?',
+        `Dompet "${balance.account_name}" akan dihapus dari database dan tidak bisa dikembalikan. Riwayat transaksi tetap ada, tetapi tidak lagi terhubung ke dompet ini.`
     ).then((confirmed) => {
         if (confirmed) {
             isDeleting.value = true;
             router.delete(`/balances/${balance.id}`, {
                 preserveScroll: true,
                 onSuccess: () => {
-                    showSuccess('Berhasil', 'Saldo akun berhasil dihapus');
+                    showSuccess('Berhasil', 'Dompet berhasil dihapus permanen');
                 },
                 onError: () => {
                     showError('Error', 'Gagal menghapus saldo akun');
@@ -236,7 +236,7 @@ const totalBalance = computed(() => {
             </div>
 
             <!-- Total Balance Card -->
-            <div class="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-[13px] p-6 md:p-8 shadow-xl shadow-emerald-500/20 text-white border border-emerald-500/20">
+            <div class="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-[13px] p-6 md:p-8 text-white border border-emerald-500/20">
                 <div class="flex items-center justify-between">
                     <div>
                         <p class="text-sm font-medium text-emerald-100">Total Saldo Keseluruhan</p>
@@ -255,7 +255,7 @@ const totalBalance = computed(() => {
                 <div
                     v-for="balance in activeBalances"
                     :key="balance.id"
-                    class="group relative overflow-hidden rounded-[13px] bg-card/60 backdrop-blur-2xl p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-xl shadow-primary/5 transition-all hover:shadow-2xl hover:shadow-primary/10"
+                    class="group relative overflow-hidden rounded-[13px] bg-card/60 backdrop-blur-2xl p-6 border border-gray-200/50 dark:border-gray-700/30 transition-all hover:bg-card/80"
                     :class="{ 'ring-2 ring-emerald-500/30': balance.is_default }"
                 >
                     <div class="flex items-start justify-between mb-4">
@@ -282,7 +282,7 @@ const totalBalance = computed(() => {
 
                     <div class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-gray-700">
                         <p class="text-xs text-gray-400">Update: {{ formatDate(balance.balance_date) }}</p>
-                        <div class="flex gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <div class="flex gap-2">
                             <button 
                                 @click="openDialog(balance)"
                                 class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
@@ -321,26 +321,39 @@ const totalBalance = computed(() => {
                 </button>
             </div>
 
-            <!-- Inactive Balances -->
+            <!-- Legacy soft-deactivated accounts (before permanent delete); can be removed or edited -->
             <div v-if="balances.filter(b => !b.is_active).length > 0" class="mt-8">
-                <h3 class="mb-4 text-lg font-bold text-gray-800 dark:text-white">Akun Nonaktif</h3>
+                <h3 class="mb-4 text-lg font-bold text-gray-800 dark:text-white">Akun Nonaktif (data lama)</h3>
+                <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                    Akun yang sebelumnya dinonaktifkan. Anda bisa menghapus permanen atau mengaktifkan kembali lewat Edit.
+                </p>
                 <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                     <div
                         v-for="balance in balances.filter(b => !b.is_active)"
                         :key="balance.id"
                         class="rounded-2xl border border-gray-200 bg-gray-50 p-6 opacity-75 dark:border-gray-700 dark:bg-gray-800/50"
                     >
-                        <div class="flex items-center justify-between">
-                            <div>
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="min-w-0 flex-1">
                                 <h4 class="font-semibold text-gray-700 dark:text-gray-300">{{ balance.account_name }}</h4>
                                 <p class="text-sm text-gray-500">{{ formatCurrency(balance.balance) }}</p>
                             </div>
-                            <button
-                                @click="openDialog(balance)"
-                                class="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-                            >
-                                Edit
-                            </button>
+                            <div class="flex shrink-0 gap-1">
+                                <button
+                                    @click="openDialog(balance)"
+                                    class="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                                >
+                                    Edit
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="deleteBalance(balance)"
+                                    class="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30"
+                                    title="Hapus permanen"
+                                >
+                                    <Trash2 class="h-4 w-4" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

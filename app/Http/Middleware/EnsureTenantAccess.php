@@ -19,7 +19,7 @@ class EnsureTenantAccess
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             abort(403, 'User must be authenticated');
         }
 
@@ -28,14 +28,15 @@ class EnsureTenantAccess
             // For super admin, set a default tenant_id if needed, but don't enforce tenant membership
             $currentTenantId = session('current_tenant_id', $user->tenant_id ?? 1);
             $request->merge(['tenant_id' => $currentTenantId]);
+
             return $next($request);
         }
 
         // Get current tenant from session or use default
         $currentTenantId = session('current_tenant_id', $user->tenant_id);
-        
+
         // Check if user belongs to this tenant
-        if (!$user->belongsToTenant($currentTenantId)) {
+        if (! $user->belongsToTenant($currentTenantId)) {
             // Fallback to first active tenant
             $firstTenant = $user->activeTenants()->first();
             if ($firstTenant) {
@@ -48,19 +49,19 @@ class EnsureTenantAccess
 
         // Get tenant and verify it's active
         $tenant = Tenant::find($currentTenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             abort(403, 'Tenant not found');
         }
-        
+
         // Allow access to tenant with pending subscription (user just registered)
         // Tenant is not active but user can still access dashboard to upload payment proof
-        if (!$tenant->is_active) {
+        if (! $tenant->is_active) {
             // Check if tenant has pending subscription
             $hasPendingSubscription = \App\Models\Subscription::where('tenant_id', $tenant->id)
                 ->where('status', 'pending')
                 ->exists();
-            
-            if (!$hasPendingSubscription) {
+
+            if (! $hasPendingSubscription) {
                 // No pending subscription, reject access
                 abort(403, 'Tenant is not active');
             }

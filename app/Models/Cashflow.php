@@ -15,7 +15,7 @@ class Cashflow extends Model
         'total_expense',
         'net_cashflow',
         'summary',
-        'breakdown'
+        'breakdown',
     ];
 
     protected $casts = [
@@ -25,7 +25,7 @@ class Cashflow extends Model
         'total_expense' => 'decimal:2',
         'net_cashflow' => 'decimal:2',
         'summary' => 'array',
-        'breakdown' => 'array'
+        'breakdown' => 'array',
     ];
 
     public function tenant(): BelongsTo

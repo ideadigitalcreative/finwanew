@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import BackgroundAccents from '@/components/Landing/BackgroundAccents.vue';
 import { home } from '@/routes';
 import { Link } from '@inertiajs/vue3';
-import BackgroundAccents from '@/components/Landing/BackgroundAccents.vue';
 
 defineProps<{
     title?: string;

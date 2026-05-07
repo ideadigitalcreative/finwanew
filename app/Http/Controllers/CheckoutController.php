@@ -14,50 +14,41 @@ class CheckoutController extends Controller
      */
     public function show(Request $request): Response
     {
-        $plan = $request->query('plan', 'paid'); // Default: paid plan
-        
-        // Check if free plan
+        $plan = $request->query('plan', 'lite'); // Default: lite plan
+
+        // Get plan details
         if ($plan === 'free') {
             $planDetails = [
-                'name' => 'Paket Ujicoba',
+                'name' => 'Paket Gratis',
                 'monthly_price' => 0,
             ];
-            
-            // Free plan: only 3 days trial
-            $durations = [
-                ['months' => 1, 'label' => '3 Hari', 'discount' => 0],
-            ];
-            
-            // No banks needed for free plan
+            $durations = [['months' => 1, 'label' => 'Gratis Selamanya', 'discount' => 0]];
             $banks = [];
-        } else {
-            // Paid plan: Paket Lengkap (20rb/bulan)
+        } elseif ($plan === 'pro') {
             $planDetails = [
-                'name' => 'Paket Lengkap',
-                'monthly_price' => 20000,
+                'name' => 'Paket PRO',
+                'monthly_price' => 45000,
             ];
-            
-            // Duration options with discounts
             $durations = [
                 ['months' => 1, 'label' => '1 Bulan', 'discount' => 0],
-                ['months' => 3, 'label' => '3 Bulan', 'discount' => 5], // 5% discount
-                ['months' => 6, 'label' => '6 Bulan', 'discount' => 10], // 10% discount
-                ['months' => 12, 'label' => '12 Bulan', 'discount' => 15], // 15% discount
+                ['months' => 3, 'label' => '3 Bulan', 'discount' => 5],
+                ['months' => 6, 'label' => '6 Bulan', 'discount' => 10],
+                ['months' => 12, 'label' => '12 Bulan', 'discount' => 15],
             ];
-
-            // Get active banks for payment
-            $banks = Bank::where('is_active', true)
-                ->orderBy('name')
-                ->get()
-                ->map(function ($bank) {
-                    return [
-                        'id' => $bank->id,
-                        'name' => $bank->name,
-                        'account_number' => $bank->account_number,
-                        'account_name' => $bank->account_name,
-                        'description' => $bank->description,
-                    ];
-                });
+            $banks = $this->getActiveBanks();
+        } else {
+            // Default: Paket Lite (Growth)
+            $planDetails = [
+                'name' => 'Paket Lite',
+                'monthly_price' => 20000,
+            ];
+            $durations = [
+                ['months' => 1, 'label' => '1 Bulan', 'discount' => 0],
+                ['months' => 3, 'label' => '3 Bulan', 'discount' => 5],
+                ['months' => 6, 'label' => '6 Bulan', 'discount' => 10],
+                ['months' => 12, 'label' => '12 Bulan', 'discount' => 15],
+            ];
+            $banks = $this->getActiveBanks();
         }
 
         return Inertia::render('Checkout/Index', [
@@ -65,7 +56,25 @@ class CheckoutController extends Controller
             'durations' => $durations,
             'banks' => $banks,
             'isFreePlan' => $plan === 'free',
+            'planSlug' => $plan,
         ]);
+    }
+
+    /**
+     * Get active banks for payment
+     */
+    private function getActiveBanks()
+    {
+        return Bank::where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($bank) => [
+                'id' => $bank->id,
+                'name' => $bank->name,
+                'account_number' => $bank->account_number,
+                'account_name' => $bank->account_name,
+                'description' => $bank->description,
+            ]);
     }
 
     /**
@@ -84,4 +93,3 @@ class CheckoutController extends Controller
         return redirect()->route('register');
     }
 }
-

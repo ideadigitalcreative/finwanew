@@ -25,7 +25,7 @@ return new class extends Migration
             $table->timestamp('signed_url_expires_at')->nullable();
             $table->boolean('is_encrypted')->default(false);
             $table->timestamps();
-            
+
             $table->index(['tenant_id', 'message_id']);
             $table->index(['type']);
         });

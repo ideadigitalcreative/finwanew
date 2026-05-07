@@ -1,54 +1,142 @@
 <template>
     <div ref="mockupContainer" class="flex justify-center items-center">
         <!-- WhatsApp Chat Container -->
-        <div class="relative w-[380px] md:w-[420px] h-[580px] md:h-[650px] bg-[#e5ddd5] rounded-2xl overflow-hidden shadow-xl">
-            <!-- Header -->
-            <div class="bg-[#075e54] px-4 py-3 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <img src="/finwalogo.png" alt="FinWa" class="w-10 h-10 rounded-full bg-white p-1" width="40" height="40" loading="lazy" decoding="async">
-                    <div>
-                        <div class="text-white font-medium text-sm">FinWa</div>
-                        <div class="text-white/80 text-xs">online</div>
+        <div class="relative w-[380px] md:w-[420px] h-[580px] md:h-[650px] wa-chat-bg rounded-2xl overflow-hidden shadow-xl">
+            <!-- Header (sedikit lebih ringkas di md+ agar tidak terpotong di mockup desktop) -->
+            <div
+                class="flex shrink-0 items-center justify-between bg-[#075e54] px-3 py-2 md:px-2.5 md:py-1.5"
+            >
+                <div class="flex min-w-0 flex-1 items-center gap-2 md:gap-1.5">
+                    <img
+                        src="/finwalogo.png"
+                        alt="FinWa"
+                        class="h-9 w-9 shrink-0 rounded-full bg-white p-0.5 md:h-8 md:w-8 md:p-px"
+                        width="36"
+                        height="36"
+                        loading="lazy"
+                        decoding="async"
+                    />
+                    <div class="min-w-0">
+                        <div class="flex min-w-0 items-center gap-1">
+                            <span class="truncate text-sm font-medium text-white md:text-xs">FinWa</span>
+                            <img
+                                src="/verify.png"
+                                alt="Verified"
+                                class="h-3.5 w-3.5 shrink-0 md:h-3 md:w-3"
+                                title="Verified"
+                                width="14"
+                                height="14"
+                                loading="lazy"
+                            />
+                        </div>
+                        <div class="text-[11px] text-white/80 md:text-[10px]">online</div>
                     </div>
                 </div>
-                <div class="flex items-center gap-4">
+                <div class="flex shrink-0 items-center gap-2 md:gap-1.5">
                     <!-- Video Call Icon -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/>
-                        <rect x="2" y="6" width="14" height="12" rx="2"/>
+                    <svg
+                        class="h-[18px] w-[18px] shrink-0 md:h-4 md:w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="white"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
+                        <rect x="2" y="6" width="14" height="12" rx="2" />
                     </svg>
                     <!-- Phone Call Icon -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                    <svg
+                        class="h-[18px] w-[18px] shrink-0 md:h-4 md:w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="white"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <path
+                            d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
+                        />
                     </svg>
                     <!-- Search Icon -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"/>
-                        <path d="m21 21-4.3-4.3"/>
+                    <svg
+                        class="h-[18px] w-[18px] shrink-0 md:h-4 md:w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="white"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                    >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.3-4.3" />
                     </svg>
                 </div>
             </div>
 
             <!-- Chat Area -->
-            <div ref="chatContainer" class="h-[470px] md:h-[540px] overflow-y-auto px-4 py-3 space-y-3">
-                <!-- Date Separator -->
-                <div class="flex justify-center mb-4">
-                    <div class="bg-white/90 px-3 py-1 rounded-full text-xs text-gray-600 shadow-sm">
-                        Mon, 14 Apr
+            <div ref="chatContainer" class="h-[470px] md:h-[540px] overflow-y-auto px-2 py-2 sm:px-3 space-y-1">
+                <!-- Date Separator (gaya WA) -->
+                <div class="flex justify-center mb-3">
+                    <div class="rounded-lg bg-[#ffffffd9] px-3 py-1.5 text-xs font-medium text-[#54656f] shadow-[0_1px_1px_rgba(0,0,0,0.08)]">
+                        Senin, 13 April 2026
                     </div>
                 </div>
 
                 <!-- Messages -->
                 <TransitionGroup name="message">
                     <div v-for="(msg, index) in visibleMessages" :key="index">
-                        <!-- User Message -->
-                        <div v-if="msg.type === 'user'" class="flex justify-end mb-2">
-                            <div class="max-w-[80%] bg-[#dcf8c6] rounded-lg rounded-tr-none px-3 py-2 shadow-sm">
-                                <p class="text-sm text-gray-800">{{ msg.text }}</p>
-                                <div class="flex items-center justify-end gap-1 mt-1">
-                                    <span class="text-[10px] text-gray-600">{{ msg.timestamp }}</span>
-                                    <!-- Double Check Mark -->
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4fc3f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <!-- Pemisah waktu di tengah (seperti label waktu WA) -->
+                        <div v-if="msg.type === 'time'" class="flex justify-center py-2">
+                            <span class="text-[11px] font-medium text-[#667781]">{{ msg.text }}</span>
+                        </div>
+
+                        <!-- Pemisah tanggal (pill seperti WA) -->
+                        <div v-else-if="msg.type === 'date'" class="mb-3 flex justify-center">
+                            <div
+                                class="rounded-lg bg-[#ffffffd9] px-3 py-1.5 text-xs font-medium text-[#54656f] shadow-[0_1px_1px_rgba(0,0,0,0.08)]"
+                            >
+                                {{ msg.text }}
+                            </div>
+                        </div>
+
+                        <!-- User: kirim foto struk -->
+                        <div v-else-if="msg.type === 'user_image'" class="mb-1.5 flex justify-end px-1">
+                            <div class="wa-bubble-user max-w-[88%] px-1.5 pb-1 pt-1">
+                                <img
+                                    :src="msg.imageUrl"
+                                    alt="Struk belanja"
+                                    class="block max-h-52 w-auto max-w-[min(100%,260px)] rounded-md object-cover"
+                                    width="260"
+                                    height="200"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                                <div class="mt-1 flex items-center justify-end gap-1">
+                                    <span class="text-[11px] text-[#667781] tabular-nums">{{ msg.timestamp }}</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#53bdeb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+                                        <path d="M18 6 7 17l-5-5"/>
+                                        <path d="m22 10-7.5 7.5L13 16"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- User Message (WA: radius 7.5px kecuali pojok bawah-kanan “ekor”) -->
+                        <div v-else-if="msg.type === 'user'" class="flex justify-end mb-1.5 px-1">
+                            <div class="wa-bubble-user max-w-[85%] px-2 py-1.5">
+                                <p class="text-[14.22px] leading-[1.412] text-[#111b21]">{{ msg.text }}</p>
+                                <div class="flex items-center justify-end gap-1 mt-0.5">
+                                    <span class="text-[11px] text-[#667781] tabular-nums">{{ msg.timestamp }}</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#53bdeb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
                                         <path d="M18 6 7 17l-5-5"/>
                                         <path d="m22 10-7.5 7.5L13 16"/>
                                     </svg>
@@ -57,8 +145,8 @@
                         </div>
 
                         <!-- Typing Indicator -->
-                        <div v-else-if="msg.type === 'typing'" class="flex justify-start mb-2">
-                            <div class="bg-white rounded-lg rounded-tl-none px-4 py-3 shadow-sm">
+                        <div v-else-if="msg.type === 'typing'" class="flex justify-start mb-1.5 px-1">
+                            <div class="wa-incoming-bubble px-4 py-3">
                                 <div class="flex gap-1">
                                     <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
                                     <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
@@ -67,35 +155,78 @@
                             </div>
                         </div>
 
-                        <!-- Bot Message with Transaction Card -->
-                        <div v-else-if="msg.type === 'bot' && msg.transaction" class="flex justify-start mb-2">
-                            <div class="max-w-[80%] bg-white rounded-lg rounded-tl-none px-3 py-2 shadow-md">
-                                <!-- Transaction Card -->
-                                <div class="bg-gradient-to-br from-emerald-50 to-cyan-50 rounded-lg p-3 border border-emerald-100">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="text-xs font-medium text-emerald-700">Transaksi Tercatat</span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-600">
-                                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                                            <path d="m9 11 3 3L22 4"/>
-                                        </svg>
-                                    </div>
-                                    <div class="space-y-1.5">
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-lg font-bold text-gray-800">💰 Rp {{ formatNumber(msg.transaction.amount) }}</span>
-                                        </div>
-                                        <div class="text-xs text-gray-600 space-y-0.5">
-                                            <div><span class="font-medium">Kategori:</span> {{ msg.transaction.category }}</div>
-                                            <div><span class="font-medium">Dompet:</span> {{ msg.transaction.wallet }}</div>
-                                            <div><span class="font-medium">Keterangan:</span> {{ msg.transaction.description }}</div>
-                                            <div class="flex gap-3 mt-1">
-                                                <span>📅 {{ msg.transaction.date }}</span>
-                                                <span>🕐 {{ msg.transaction.time }}</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                        <!-- Bot: balasan OCR struk (gaya WA / FinWa) -->
+                        <div v-else-if="msg.type === 'bot' && msg.receipt" class="mb-1.5 flex justify-start px-1">
+                            <div class="wa-incoming-bubble max-w-[92%] px-2 py-1.5">
+                                <div class="wa-bot-rich break-words text-[14.22px] font-normal leading-[1.42] text-[#111b21]">
+                                    <p class="m-0">
+                                        🧾 <strong>Struk Tercatat!</strong> ✅
+                                    </p>
+                                    <p class="m-0 mt-0.5">
+                                        🏪 <strong>{{ msg.receipt.merchant }}</strong>
+                                    </p>
+                                    <p class="m-0 mt-0.5">📅 {{ msg.receipt.receiptDate }}</p>
+                                    <p class="m-0 mt-0.5">🛒 Kategori: {{ msg.receipt.category }}</p>
+                                    <p class="m-0 mt-0.5">📋 <strong>Rincian Belanja:</strong></p>
+                                    <p
+                                        v-for="(line, li) in msg.receipt.lines"
+                                        :key="li"
+                                        class="m-0 mt-0.5 pl-0.5"
+                                    >
+                                        {{ li + 1 }}. {{ line.label }} —
+                                        <em>Rp {{ formatNumber(line.amount) }}</em>
+                                    </p>
+                                    <p class="m-0 my-1 text-center text-[11px] tracking-tight text-[#8696a0]">━━━━━━━━━━━━━━━</p>
+                                    <p class="m-0 mt-0.5">
+                                        💵 <strong>TOTAL: Rp {{ formatNumber(msg.receipt.total) }}</strong>
+                                    </p>
+                                    <p class="m-0 mt-0.5">
+                                        👛 Sisa saldo {{ msg.receipt.wallet }}: Rp
+                                        <span class="wa-mock-link cursor-default font-medium">{{
+                                            formatNumber(msg.receipt.balanceAfter)
+                                        }}</span>
+                                    </p>
+                                    <p class="m-0 mt-0.5">
+                                        📊 Belanja {{ msg.receipt.monthLabel }}: Rp
+                                        {{ formatNumber(msg.receipt.monthCategoryTotal) }}
+                                    </p>
                                 </div>
-                                <div class="flex items-center justify-end gap-1 mt-1">
-                                    <span class="text-[10px] text-gray-600">{{ msg.timestamp }}</span>
+                                <div class="mt-0.5 flex justify-end">
+                                    <span class="text-[11.45px] leading-none text-[#667781] tabular-nums">{{ msg.timestamp }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bot: gaya pesan FinWa di WA (✅ Berhasil Dicatat, bold/italic, saldo, ringkasan) -->
+                        <div v-else-if="msg.type === 'bot' && msg.transaction" class="flex justify-start mb-1.5 px-1">
+                            <div class="wa-incoming-bubble max-w-[92%] px-2 py-1.5">
+                                <div class="wa-bot-rich break-words text-[14.22px] font-normal leading-[1.42] text-[#111b21]">
+                                    <p class="m-0">
+                                        ✅ <strong>Berhasil Dicatat!</strong> 🎉
+                                    </p>
+                                    <p class="m-0 mt-0.5">
+                                        💸 <strong>Pengeluaran</strong>
+                                    </p>
+                                    <p class="m-0 mt-0.5">💵 Rp {{ formatNumber(msg.transaction.amount) }}</p>
+                                    <p class="m-0 mt-0.5">
+                                        {{ categoryEmoji(msg.transaction) }} {{ categoryDisplayLine(msg.transaction) }}
+                                        <span class="text-[#667781]"> • </span>
+                                        <em>{{ msg.transaction.description }}</em>
+                                    </p>
+                                    <p v-if="msg.transaction.balanceAfter != null" class="m-0 mt-0.5">
+                                        👛 Sisa saldo {{ msg.transaction.wallet }}: Rp
+                                        <span class="wa-mock-link cursor-default font-medium">{{ formatNumber(msg.transaction.balanceAfter) }}</span>
+                                    </p>
+                                    <p v-if="msg.transaction.monthExpenseTotal != null && msg.transaction.monthLabel" class="m-0 mt-0.5">
+                                        📊
+                                        <em>
+                                            Total pengeluaran {{ msg.transaction.monthLabel }}: Rp
+                                            {{ formatNumber(msg.transaction.monthExpenseTotal) }}
+                                        </em>
+                                    </p>
+                                </div>
+                                <div class="mt-0.5 flex justify-end">
+                                    <span class="text-[11.45px] leading-none text-[#667781] tabular-nums">{{ msg.timestamp }}</span>
                                 </div>
                             </div>
                         </div>
@@ -104,7 +235,7 @@
             </div>
 
             <!-- Input Area -->
-            <div class="absolute bottom-0 left-0 right-0 bg-[#f0f0f0] px-3 py-2 flex items-center gap-2">
+            <div class="absolute bottom-0 left-0 right-0 border-t border-black/[0.06] bg-[#f0f2f5] px-2 py-2 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-500">
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
@@ -130,6 +261,23 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, onUnmounted } from 'vue'
 
+interface ReceiptLine {
+    label: string
+    amount: number
+}
+
+interface ReceiptParsed {
+    merchant: string
+    receiptDate: string
+    category: string
+    lines: ReceiptLine[]
+    total: number
+    wallet: string
+    balanceAfter: number
+    monthLabel: string
+    monthCategoryTotal: number
+}
+
 interface Transaction {
     amount: number
     category: string
@@ -137,12 +285,21 @@ interface Transaction {
     description: string
     date: string
     time: string
+    /** Label kategori panjang, mis. "Makanan & Minuman" */
+    categoryDisplay?: string
+    categoryEmoji?: string
+    /** Saldo setelah transaksi (contoh WA) */
+    balanceAfter?: number
+    monthExpenseTotal?: number
+    monthLabel?: string
 }
 
 interface Message {
-    type: 'user' | 'bot' | 'typing'
+    type: 'user' | 'bot' | 'typing' | 'time' | 'date' | 'user_image'
     text?: string
+    imageUrl?: string
     transaction?: Transaction
+    receipt?: ReceiptParsed
     timestamp?: string
 }
 
@@ -151,53 +308,91 @@ const mockupContainer = ref<HTMLElement | null>(null)
 const visibleMessages = ref<Message[]>([])
 const hasAnimated = ref(false)
 
+/**
+ * Urutan: (1) chat sayur + tercatat → (2) struk foto + Struk Tercatat → (3) parkir + tercatat.
+ * Waktu naik supaya satu hari (pill tanggal tetap di atas).
+ */
 const allMessages: Message[] = [
-    { type: 'user', text: 'bensin 200 ribu', timestamp: '08:56' },
+    { type: 'time', text: '08:57' },
+    { type: 'user', text: 'beli sayur 50 rb', timestamp: '08:57' },
     { type: 'typing' },
-    { 
-        type: 'bot',
-        timestamp: '08:56',
-        transaction: {
-            amount: 200000,
-            category: 'Transportasi',
-            wallet: 'Cash',
-            description: 'bensin 200 ribu',
-            date: '2025-04-13',
-            time: '08:56:00'
-        }
-    },
-    { type: 'user', text: 'makan siang 50rb', timestamp: '08:57' },
-    { type: 'typing' },
-    { 
+    {
         type: 'bot',
         timestamp: '08:57',
         transaction: {
             amount: 50000,
             category: 'Makanan',
-            wallet: 'Cash',
-            description: 'makan siang 50rb',
-            date: '2025-04-13',
-            time: '08:56:00'
-        }
+            categoryDisplay: 'Makanan & Minuman',
+            categoryEmoji: '🍽️',
+            wallet: 'BRI',
+            description: 'beli sayur 50 rb',
+            date: '2026-04-13',
+            time: '08:57:00',
+            balanceAfter: 4_706_000,
+            monthExpenseTotal: 793_000,
+            monthLabel: 'April',
+        },
     },
-    { type: 'user', text: 'parkir 15rb', timestamp: '08:58' },
+    { type: 'time', text: '09:02' },
+    { type: 'user_image', imageUrl: '/struk.jpeg', timestamp: '09:02' },
     { type: 'typing' },
-    { 
+    {
         type: 'bot',
-        timestamp: '08:58',
+        timestamp: '09:02',
+        receipt: {
+            merchant: 'PERTAMINA',
+            receiptDate: '26 April 2026',
+            category: 'Belanja',
+            lines: [{ label: 'Pertamax', amount: 300_000 }],
+            total: 300_000,
+            wallet: 'BRI',
+            balanceAfter: 4_456_000,
+            monthLabel: 'April',
+            monthCategoryTotal: 743_000,
+        },
+    },
+    { type: 'time', text: '09:05' },
+    { type: 'user', text: 'parkir 15rb', timestamp: '09:05' },
+    { type: 'typing' },
+    {
+        type: 'bot',
+        timestamp: '09:06',
         transaction: {
             amount: 15000,
             category: 'Transportasi',
+            categoryDisplay: 'Transportasi',
+            categoryEmoji: '🚗',
             wallet: 'Cash',
             description: 'parkir 15rb',
-            date: '2025-04-13',
-            time: '08:56:00'
-        }
-    }
+            date: '2026-04-13',
+            time: '09:06:00',
+            balanceAfter: 485_000,
+            monthExpenseTotal: 808_000,
+            monthLabel: 'April',
+        },
+    },
 ]
 
 const formatNumber = (num: number): string => {
     return num.toLocaleString('id-ID')
+}
+
+const categoryDisplayLine = (t: Transaction): string => {
+    return t.categoryDisplay ?? t.category
+}
+
+const categoryEmoji = (t: Transaction): string => {
+    if (t.categoryEmoji) {
+        return t.categoryEmoji
+    }
+    const c = t.category.toLowerCase()
+    if (c.includes('makan')) {
+        return '🍽️'
+    }
+    if (c.includes('transport')) {
+        return '🚗'
+    }
+    return '📌'
 }
 
 const scrollToBottom = () => {
@@ -267,6 +462,36 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Latar chat mirip WA (warna + tekstur halus) */
+.wa-chat-bg {
+    background-color: #e6ded4;
+    background-image: radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.12) 0, transparent 45%),
+        radial-gradient(circle at 80% 70%, rgba(0, 0, 0, 0.03) 0, transparent 40%);
+}
+
+/* Keluar: hijau WA, pojok bawah-kanan rata (ekor) */
+.wa-bubble-user {
+    background-color: #d9fdd3;
+    box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+    border-radius: 7.5px 7.5px 0 7.5px;
+}
+
+/* Masuk: putih WA Web — radius standar (kiri atas 0) */
+.wa-incoming-bubble {
+    background-color: #fff;
+    box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+    border-radius: 0 7.5px 7.5px 7.5px;
+}
+
+.wa-bot-rich em {
+    font-style: italic;
+}
+
+/* Mirip link nominal di WA Web (non-klik di mockup) */
+.wa-mock-link {
+    color: #039be5;
+}
+
 /* Smooth scrollbar */
 .overflow-y-auto::-webkit-scrollbar {
     width: 6px;

@@ -1,4 +1,5 @@
 <?php
+
 $phone = '6285179849922';
 $lid = '81733663870987';
 
@@ -9,7 +10,7 @@ $mapDeleted = App\Models\UserWhatsAppNumber::where('whatsapp_number', $lid)->del
 echo "LID mapping deleted: $mapDeleted\n";
 
 $user = App\Models\User::where('whatsapp_number', $phone)->first();
-if (!$user) {
+if (! $user) {
     echo "❌ User tidak ditemukan.\n";
     exit;
 }
@@ -31,7 +32,9 @@ $user->delete();
 
 // Hapus Tenant
 $tenant = App\Models\Tenant::find($tenantId);
-if ($tenant) $tenant->delete();
+if ($tenant) {
+    $tenant->delete();
+}
 
 echo "✅ User, Tenant, dan LID mapping berhasil dihapus.\n";
 echo "   Silakan daftar ulang.\n";

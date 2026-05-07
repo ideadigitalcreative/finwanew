@@ -11,13 +11,15 @@ import BalanceCard from '@/components/dashboard/BalanceCard.vue';
 import IncomeCard from '@/components/dashboard/IncomeCard.vue';
 import ExpenseCard from '@/components/dashboard/ExpenseCard.vue';
 import MoneyFlowChart from '@/components/dashboard/MoneyFlowChart.vue';
-import RemainingMonthly from '@/components/dashboard/RemainingMonthly.vue';
 import TransactionHistory from '@/components/dashboard/TransactionHistory.vue';
 import ExpensePieChart from '@/components/dashboard/ExpensePieChart.vue';
 import FinanceTrendCard from '@/components/dashboard/FinanceTrendCard.vue';
 import { Lock } from 'lucide-vue-next';
 import ActivityCard from '@/components/dashboard/ActivityCard.vue';
 import MobileWeekCalendar from '@/components/dashboard/MobileWeekCalendar.vue';
+import QuickInsightCard from '@/components/dashboard/QuickInsightCard.vue';
+import FloatingActionButton from '@/components/dashboard/FloatingActionButton.vue';
+import QuickAddTransactionModal from '@/components/dashboard/QuickAddTransactionModal.vue';
 
 interface Props {
     cashflow?: {
@@ -54,7 +56,8 @@ interface Props {
         endsAt: string | null;
     };
     budgetSummary?: { totalBudget: number; totalSpending: number; remaining: number; usagePercentage: number; };
-    monthlyTransactions?: Array<{ transaction_date: string; }>;
+    monthlyTransactions?: Array<{ transaction_date: string; type: string; amount: number; }>;
+    insights?: Array<{ icon: string; type: string; title: string; message: string; priority: number; }>;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -67,6 +70,7 @@ const props = withDefaults(defineProps<Props>(), {
     hasWhatsAppNumber: true,
     subscription: () => ({ isOnTrial: false, trialEndsAt: null, trialDaysRemaining: null, hasActiveSubscription: false, plan: 'free', endsAt: null }),
     monthlyTransactions: () => [],
+    insights: () => [],
 });
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Dashboard', href: '/dashboard' }];
@@ -88,12 +92,18 @@ const lastActivityDate = computed(() => {
 
 
 // Computed data for components
-const balanceData = computed(() => ({
-    balance: props.cashflow?.net_cashflow || 0,
-    lastIncome: props.cashflow?.total_income || 0,
-    bonus: 0, // Removed as per request
-    period: props.period?.label || ''
-}));
+const balanceData = computed(() => {
+    const totalBalance = props.balances?.reduce((sum, b) => sum + b.balance, 0) || 0;
+    const lastIncomeTx = props.recentTransactions?.find(tx => tx.type === 'income');
+    return {
+        balance: totalBalance,
+        lastIncome: lastIncomeTx?.amount || props.cashflow?.total_income || 0,
+        lastIncomeDate: lastIncomeTx?.transaction_date || null,
+        cashflow: props.cashflow?.net_cashflow || 0,
+        bonus: 0,
+        period: props.period?.label || 'Bulan ini'
+    };
+});
 
 const incomeData = computed(() => {
     const topIncomes = props.topCategories
@@ -121,26 +131,6 @@ const expenseData = computed(() => ({
     saved: props.budgetSummary?.remaining || 0,
     targetPercent: props.budgetSummary?.usagePercentage || 0
 }));
-
-const remainingData = computed(() => {
-    const topExpenses = props.topCategories
-        ?.filter(c => c.total_expense > 0)
-        .sort((a, b) => b.total_expense - a.total_expense)
-        .slice(0, 3)
-        .map(c => ({
-            label: c.category_name,
-            amount: c.total_expense,
-            percent: props.cashflow?.total_expense ? Math.round((c.total_expense / props.cashflow.total_expense) * 100) : 0
-        })) || [];
-
-    return {
-        percentage: (props.budgetSummary?.totalBudget || 0) > 0 
-            ? Math.round(((props.budgetSummary?.remaining || 0) / (props.budgetSummary?.totalBudget || 1)) * 100) 
-            : 0,
-        averageChange: props.cashflow?.net_change || 0,
-        categories: topExpenses
-    };
-});
 
 // Expense categories for pie chart
 const expenseCategoryData = computed(() => {
@@ -211,29 +201,12 @@ const weeklyTrendData = computed(() => {
         }
     });
     
-    // If all values are 0 but we have cashflow data, distribute it for visualization
-    const hasNoData = last7Days.every(d => d.income === 0 && d.expense === 0);
-    if (hasNoData && props.cashflow) {
-        const totalIncome = props.cashflow.total_income || 0;
-        const totalExpense = props.cashflow.total_expense || 0;
-        
-        // Put all income on today (last day) and distribute expense
-        if (totalIncome > 0 || totalExpense > 0) {
-            last7Days[6].income = totalIncome; // Today's income
-            last7Days[6].expense = totalExpense * 0.3; // Today's expense (30%)
-            last7Days[5].expense = totalExpense * 0.2;
-            last7Days[4].expense = totalExpense * 0.15;
-            last7Days[3].expense = totalExpense * 0.15;
-            last7Days[2].expense = totalExpense * 0.1;
-            last7Days[1].expense = totalExpense * 0.05;
-            last7Days[0].expense = totalExpense * 0.05;
-        }
-    }
-    
+    // If all values are 0, return zeros (no fake distribution)
     return last7Days;
 });
 
 const showWhatsAppModal = ref(false);
+const showQuickAddModal = ref(false);
 const page = usePage();
 const auth = computed(() => page.props.auth as any);
 const isSuperAdmin = computed(() => (auth.value?.user as any)?.is_super_admin ?? false);
@@ -266,7 +239,7 @@ onMounted(() => {
         <div class="bg-background flex h-full flex-1 flex-col gap-4 md:gap-6 overflow-hidden p-4 md:p-6" v-if="cashflow">
             <!-- WhatsApp Modal -->
             <div v-if="showWhatsAppModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl dark:bg-gray-800">
+                <div class="w-full max-w-md rounded-xl bg-white p-6 border border-gray-200/50 dark:bg-gray-800 dark:border-gray-700/50">
                     <div class="text-center">
                         <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -297,7 +270,7 @@ onMounted(() => {
             </div>
 
             <!-- Upgrade Banner -->
-            <div v-if="subscription.plan === 'free' || subscription.plan === 'trial'" class="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-green-400 p-4 shadow-lg relative z-10">
+            <div v-if="subscription.plan === 'free' || subscription.plan === 'trial'" class="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-green-400 p-4 border border-emerald-400/20 relative z-10">
                 <div class="absolute right-0 top-0 h-full w-1/2 overflow-hidden pointer-events-none">
                     <div class="absolute -right-[20%] -top-[60%] h-[300px] w-[300px] rounded-full bg-white/5"></div>
                     <div class="absolute -right-[15%] -top-[45%] h-[240px] w-[240px] rounded-full bg-white/10"></div>
@@ -328,33 +301,8 @@ onMounted(() => {
                      <ActivityCard :transactions="monthlyTransactions" class="h-full" />
                 </div>
 
-                <!-- 2. Remaining Monthly -->
-                <div class="lg:col-span-1 relative group overflow-hidden rounded-[13px]">
-                    <RemainingMonthly 
-                        v-bind="remainingData"
-                        :class="{ 'blur-md opacity-50 grayscale-[0.3] pointer-events-none select-none': subscription.plan === 'free' }"
-                    />
-                    
-                    <div v-if="subscription.plan === 'free'" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/5 dark:bg-black/20 backdrop-blur-[2px] p-6 text-center transition-all duration-500">
-                        <div class="relative mb-3">
-                            <div class="w-14 h-14 bg-white/20 dark:bg-white/5 backdrop-blur-2xl rounded-2xl flex items-center justify-center border border-white/30 dark:border-white/10 shadow-lg relative z-10 overflow-hidden group-hover:scale-110 transition-transform duration-500">
-                                <div class="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent"></div>
-                                <Lock class="w-7 h-7 text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-                            </div>
-                            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-emerald-500/20 rounded-full blur-2xl -z-0"></div>
-                        </div>
-
-                        <div class="emerald-glass-card px-4 py-3 rounded-xl border border-white/20 shadow-xl scale-95 group-hover:scale-100 transition-transform duration-500">
-                            <h3 class="text-sm font-bold text-foreground mb-0.5">Sisa Bulanan</h3>
-                            <p class="text-muted-foreground text-[10px]">
-                                Pantau sisa anggaran tiap kategori.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 3. Money Flow Chart -->
-                <div class="lg:col-span-1 relative group overflow-hidden rounded-[13px]">
+                <!-- 2. Money Flow Chart -->
+                <div class="lg:col-span-2 relative group overflow-hidden rounded-[13px]">
                     <MoneyFlowChart 
                         :data="chartData || []" 
                         :class="{ 'blur-md opacity-50 grayscale-[0.3] pointer-events-none select-none': subscription.plan === 'free' }"
@@ -363,13 +311,12 @@ onMounted(() => {
                     <div v-if="subscription.plan === 'free'" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/5 dark:bg-black/20 backdrop-blur-[2px] p-6 text-center transition-all duration-500">
                         <div class="relative mb-3">
                             <div class="w-14 h-14 bg-white/20 dark:bg-white/5 backdrop-blur-2xl rounded-2xl flex items-center justify-center border border-white/30 dark:border-white/10 shadow-lg relative z-10 overflow-hidden group-hover:scale-110 transition-transform duration-500">
-                                <div class="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent"></div>
-                                <Lock class="w-7 h-7 text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                                <Lock class="w-7 h-7 text-emerald-500" />
                             </div>
                             <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-emerald-500/20 rounded-full blur-2xl -z-0"></div>
                         </div>
 
-                        <div class="emerald-glass-card px-4 py-3 rounded-xl border border-white/20 shadow-xl scale-95 group-hover:scale-100 transition-transform duration-500">
+                        <div class="emerald-glass-card px-4 py-3 rounded-xl border border-white/20 scale-95 group-hover:scale-100 transition-transform duration-500">
                             <h3 class="text-sm font-bold text-foreground mb-0.5">Arus Uang (Pro)</h3>
                             <p class="text-muted-foreground text-[10px]">
                                 Visualisasi arus kas otomatis.
@@ -392,13 +339,12 @@ onMounted(() => {
                     <div v-if="subscription.plan === 'free'" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/5 dark:bg-black/20 backdrop-blur-[2px] p-8 text-center transition-all duration-500">
                         <div class="relative mb-4">
                             <div class="w-16 h-16 bg-white/20 dark:bg-white/5 backdrop-blur-2xl rounded-2xl flex items-center justify-center border border-white/30 dark:border-white/10 shadow-lg relative z-10 overflow-hidden group-hover:scale-110 transition-transform duration-500">
-                                <div class="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent"></div>
-                                <Lock class="w-8 h-8 text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                                <Lock class="w-8 h-8 text-emerald-500" />
                             </div>
                             <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-emerald-500/20 rounded-full blur-2xl -z-0"></div>
                         </div>
 
-                        <div class="emerald-glass-card px-6 py-5 rounded-2xl border border-white/20 shadow-xl scale-95 group-hover:scale-100 transition-transform duration-500">
+                        <div class="emerald-glass-card px-6 py-5 rounded-2xl border border-white/20 scale-95 group-hover:scale-100 transition-transform duration-500">
                             <h3 class="text-lg font-bold text-foreground mb-1">Kategori Pengeluaran</h3>
                             <p class="text-muted-foreground text-xs">
                                 Lihat distribusi pengeluaran per kategori secara visual.
@@ -418,13 +364,12 @@ onMounted(() => {
                     <div v-if="subscription.plan === 'free'" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/5 dark:bg-black/20 backdrop-blur-[2px] p-8 text-center transition-all duration-500">
                         <div class="relative mb-4">
                             <div class="w-16 h-16 bg-white/20 dark:bg-white/5 backdrop-blur-2xl rounded-2xl flex items-center justify-center border border-white/30 dark:border-white/10 shadow-lg relative z-10 overflow-hidden group-hover:scale-110 transition-transform duration-500">
-                                <div class="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent"></div>
-                                <Lock class="w-8 h-8 text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                                <Lock class="w-8 h-8 text-emerald-500" />
                             </div>
                             <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-emerald-500/20 rounded-full blur-2xl -z-0"></div>
                         </div>
 
-                        <div class="emerald-glass-card px-6 py-5 rounded-2xl border border-white/20 shadow-xl scale-95 group-hover:scale-100 transition-transform duration-500">
+                        <div class="emerald-glass-card px-6 py-5 rounded-2xl border border-white/20 scale-95 group-hover:scale-100 transition-transform duration-500">
                             <h3 class="text-lg font-bold text-foreground mb-1">Tren Keuangan</h3>
                             <p class="text-muted-foreground text-xs">
                                 Bandingkan pemasukan dan pengeluaran secara visual.
@@ -434,11 +379,26 @@ onMounted(() => {
                 </div>
             </div>
 
+            <!-- Quick Insight Card -->
+            <div class="relative z-10">
+                <QuickInsightCard :insights="insights || []" />
+            </div>
+
             <!-- Transaction History -->
             <div class="relative z-10">
                 <TransactionHistory :transactions="recentTransactions || []" />
             </div>
         </div>
+
+        <!-- Floating Action Button -->
+        <FloatingActionButton @click="showQuickAddModal = true" />
+
+        <!-- Quick Add Transaction Modal -->
+        <QuickAddTransactionModal
+            :show="showQuickAddModal"
+            @close="showQuickAddModal = false"
+            @saved="showQuickAddModal = false"
+        />
     </AppLayout>
 </template>
 

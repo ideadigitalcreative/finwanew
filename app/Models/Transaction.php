@@ -22,7 +22,7 @@ class Transaction extends Model
         'status',
         'reviewed_by',
         'reviewed_at',
-        'metadata'
+        'metadata',
     ];
 
     protected $casts = [
@@ -30,7 +30,7 @@ class Transaction extends Model
         'transaction_date' => 'date',
         'confidence_score' => 'decimal:2',
         'reviewed_at' => 'datetime',
-        'metadata' => 'array'
+        'metadata' => 'array',
     ];
 
     public function tenant(): BelongsTo

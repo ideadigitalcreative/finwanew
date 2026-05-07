@@ -6,19 +6,19 @@ $app = require_once __DIR__.'/bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-use App\Models\User;
-use App\Models\Transaction;
 use App\Models\Balance;
+use App\Models\Transaction;
+use App\Models\User;
 
-if (!isset($argv[1])) {
-    die("❌ Error used: php reset_user_account.php [NOMOR_WA]\n");
+if (! isset($argv[1])) {
+    exit("❌ Error used: php reset_user_account.php [NOMOR_WA]\n");
 }
 
 $rawNumber = $argv[1];
 // Normalize Number (08 -> 628)
 $waNumber = $rawNumber;
 if (str_starts_with($rawNumber, '08')) {
-    $waNumber = '62' . substr($rawNumber, 1);
+    $waNumber = '62'.substr($rawNumber, 1);
 }
 
 echo "=== RESET AKUN USER ===\n";
@@ -26,7 +26,7 @@ echo "Target: $waNumber (Raw: $rawNumber)\n";
 
 $user = User::where('whatsapp_number', $waNumber)->first();
 
-if (!$user) {
+if (! $user) {
     echo "❌ User tidak ditemukan dengan nomor $waNumber!\n";
     // Coba cari di UserWhatsAppNumber
     $mapping = \App\Models\UserWhatsAppNumber::where('whatsapp_number', $waNumber)->first();
@@ -38,15 +38,15 @@ if (!$user) {
         echo "Searching in Message Log...\n";
         $msg = \App\Models\Message::where('sender_id', 'like', "%{$rawNumber}%")
             ->orWhere('sender_id', 'like', "%{$waNumber}%")
-            ->orWhere('sender_id', 'like', "%" . substr($rawNumber, -8) . "%")
+            ->orWhere('sender_id', 'like', '%'.substr($rawNumber, -8).'%')
             ->latest()
             ->first();
-            
+
         if ($msg) {
-             $user = User::find($msg->tenant_id);
-             echo "✅ Ditemukan via Message History! Tenant ID {$user->tenant_id} ({$user->name})\n";
+            $user = User::find($msg->tenant_id);
+            echo "✅ Ditemukan via Message History! Tenant ID {$user->tenant_id} ({$user->name})\n";
         } else {
-             die("User benar-benar tidak ditemukan di Database.\n");
+            exit("User benar-benar tidak ditemukan di Database.\n");
         }
     }
 }
@@ -60,15 +60,15 @@ $totalSaldo = $balances->sum('balance');
 
 echo "Data yang akan DIHAPUS/RESET:\n";
 echo "- $txCount Transaksi\n";
-echo "- " . $balances->count() . " Dompet (Total Saldo: Rp " . number_format($totalSaldo, 0, ',', '.') . ")\n";
+echo '- '.$balances->count().' Dompet (Total Saldo: Rp '.number_format($totalSaldo, 0, ',', '.').")\n";
 
 echo "\n⚠️  PERINGATAN KERAS: Data akan hilang permanen!\n";
 echo "Ketik 'RESET' untuk melanjutkan: ";
 
-$handle = fopen ("php://stdin","r");
+$handle = fopen('php://stdin', 'r');
 $line = trim(fgets($handle));
-if($line !== 'RESET'){
-    die("Dibatalkan.\n");
+if ($line !== 'RESET') {
+    exit("Dibatalkan.\n");
 }
 
 echo "Processing...\n";

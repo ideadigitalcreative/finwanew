@@ -28,7 +28,7 @@ return new class extends Migration
             $table->timestamp('reviewed_at')->nullable();
             $table->json('metadata')->nullable();
             $table->timestamps();
-            
+
             $table->index(['tenant_id', 'transaction_date']);
             $table->index(['tenant_id', 'type', 'transaction_date']);
             $table->index(['tenant_id', 'category_id']);

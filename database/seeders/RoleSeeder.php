@@ -5,7 +5,6 @@ namespace Database\Seeders;
 use App\Models\Role;
 use App\Models\Tenant;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
 
 class RoleSeeder extends Seeder
 {
@@ -87,7 +86,7 @@ class RoleSeeder extends Seeder
 
         // Create roles for each tenant
         $tenants = Tenant::all();
-        
+
         if ($tenants->isEmpty()) {
             // If no tenants exist, create a default tenant first
             $tenant = Tenant::create([

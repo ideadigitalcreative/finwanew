@@ -76,7 +76,13 @@ interface Props {
         is_active: boolean;
         trial_ends_at: string | null;
     };
-    planDetails: PlanDetails;
+    plans: Record<string, {
+        slug: string;
+        name: string;
+        monthly_price: number;
+        description: string;
+        features: string[];
+    }>;
     durationOptions: Duration[];
     banks: Bank[];
     pendingRequest: {
@@ -110,6 +116,7 @@ const uploadForm = useForm({
 
 const durationOptions = computed<Duration[]>(() => props.durationOptions);
 
+const selectedPlan = ref(props.plans['lite'] || Object.values(props.plans)[0]);
 const selectedDuration = ref<Duration>(durationOptions.value[0] || { value: 1, label: '1 Bulan', discount: 0 });
 const upgradeNotes = ref('');
 
@@ -118,14 +125,14 @@ const extensionNotes = ref('');
 
 const upgradeRequestForm = useForm({
     request_type: 'upgrade',
-    plan: 'growth', // Fixed to growth (Paket Lengkap)
+    plan: selectedPlan.value.slug,
     duration_months: selectedDuration.value.value,
     notes: '',
 });
 
 const extensionRequestForm = useForm({
     request_type: 'extend',
-    plan: 'growth', // Fixed to growth (Paket Lengkap)
+    plan: props.subscription?.package === 'pro' ? 'pro' : 'growth',
     duration_months: extensionDuration.value.value,
     notes: '',
 });
@@ -145,27 +152,31 @@ const formatDate = (date: string | null) => {
 };
 
 const formatPackage = (pkg: string) => {
-    const fallback: Record<string, string> = {
-        starter: 'Starter',
-        growth: 'Paket Lengkap',
-        pro: 'Pro',
-        enterprise: 'Enterprise',
-        free: 'Free Trial',
-    };
-    return fallback[pkg] || pkg || '-';
+    if (pkg === 'growth') return 'Paket Lite';
+    if (pkg === 'pro') return 'Paket PRO';
+    if (pkg === 'free') return 'Free Trial';
+    if (pkg === 'paid') return 'Paket Premium'; // Legacy mapping
+    
+    // Check in plans prop
+    for (const key in props.plans) {
+        if (props.plans[key].slug === pkg) return props.plans[key].name;
+    }
+    
+    return pkg || '-';
 };
 
 const getPackageFeatures = (pkg: string) => {
-    return [
-        '5 WhatsApp Numbers',
-        'All Basic Features',
-        'Priority Support',
+    const planKey = pkg === 'growth' ? 'lite' : pkg;
+    return props.plans[planKey]?.features || [
+        'Unlimited Transactions',
+        'Multi-device support',
+        'Standard Support',
     ];
 };
 
 // Calculate totals like checkout page
 const upgradeSubtotal = computed(() => {
-    return props.planDetails.monthly_price * selectedDuration.value.value;
+    return selectedPlan.value.monthly_price * selectedDuration.value.value;
 });
 
 const upgradeDiscount = computed(() => {
@@ -179,7 +190,10 @@ const upgradeTotal = computed(() => {
 
 const extensionSubtotal = computed(() => {
     if (!props.subscription) return 0;
-    return props.planDetails.monthly_price * extensionDuration.value.value;
+    const pkg = props.subscription.package;
+    const planKey = pkg === 'pro' ? 'pro' : 'lite';
+    const monthlyPrice = props.plans[planKey]?.monthly_price || 20000;
+    return monthlyPrice * extensionDuration.value.value;
 });
 
 const extensionDiscount = computed(() => {
@@ -192,6 +206,11 @@ const extensionTotal = computed(() => {
 });
 
 const hasPendingRequest = computed(() => !!props.pendingRequest);
+
+const updatePlan = (plan: typeof selectedPlan.value) => {
+    selectedPlan.value = plan;
+    upgradeRequestForm.plan = plan.slug;
+};
 
 const updateDuration = (duration: Duration) => {
     selectedDuration.value = duration;
@@ -318,7 +337,7 @@ const openExtensionDialog = () => {
 
 const submitUpgradeRequest = () => {
     upgradeRequestForm.request_type = 'upgrade';
-    upgradeRequestForm.plan = 'growth';
+    upgradeRequestForm.plan = selectedPlan.value.slug;
     upgradeRequestForm.duration_months = selectedDuration.value.value;
     upgradeRequestForm.notes = upgradeNotes.value;
     upgradeRequestForm.post('/subscriptions', {
@@ -338,7 +357,7 @@ const submitUpgradeRequest = () => {
 const submitExtensionRequest = () => {
     if (!props.subscription) return;
     extensionRequestForm.request_type = 'extend';
-    extensionRequestForm.plan = 'growth';
+    extensionRequestForm.plan = props.subscription.package === 'pro' ? 'pro' : 'growth';
     extensionRequestForm.duration_months = extensionDuration.value.value;
     extensionRequestForm.notes = extensionNotes.value;
     extensionRequestForm.post('/subscriptions', {
@@ -618,15 +637,23 @@ const copyToClipboard = async (text: string) => {
                     <DialogDescription class="text-sm text-gray-500">Pilih durasi langganan dan metode pembayaran</DialogDescription>
                 </DialogHeader>
                 <div class="p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
-                    <!-- Plan Info -->
-                    <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h4 class="text-base font-bold text-gray-900 dark:text-white">{{ planDetails.name }}</h4>
-                                <p class="text-sm text-gray-500">
-                                    {{ formatCurrency(planDetails.monthly_price) }}/bulan
-                                </p>
-                            </div>
+                    <!-- Plan Selection -->
+                    <div>
+                        <Label class="mb-3 block text-sm font-medium text-gray-700 dark:text-gray-300">Pilih Paket</Label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button
+                                v-for="plan in plans"
+                                :key="plan.slug"
+                                type="button"
+                                @click="updatePlan(plan)"
+                                class="p-4 rounded-xl border transition-all text-left relative"
+                                :class="selectedPlan.slug === plan.slug
+                                    ? 'border-green-500 bg-green-50 ring-1 ring-green-500 dark:bg-green-900/20 dark:border-green-500'
+                                    : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600'"
+                            >
+                                <p class="text-sm font-bold text-gray-900 dark:text-white" :class="plan.slug === 'pro' ? 'text-orange-600 dark:text-orange-400' : ''">{{ plan.name }}</p>
+                                <p class="text-xs text-gray-500 mt-1">{{ formatCurrency(plan.monthly_price) }}/bln</p>
+                            </button>
                         </div>
                     </div>
 
@@ -645,9 +672,14 @@ const copyToClipboard = async (text: string) => {
                                     : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600'"
                             >
                                 <p class="text-sm font-bold text-gray-900 dark:text-white">{{ duration.label }}</p>
-                                <p v-if="duration.discount > 0" class="text-xs font-medium text-green-600 dark:text-green-400 mt-1">
-                                    Hemat {{ duration.discount }}%
-                                </p>
+                                <div class="mt-1 flex items-center gap-2">
+                                    <p class="text-sm font-bold text-green-600 dark:text-green-400">
+                                        {{ formatCurrency(selectedPlan.monthly_price * duration.value * (1 - duration.discount/100)) }}
+                                    </p>
+                                    <p v-if="duration.discount > 0" class="text-[10px] text-gray-400 line-through">
+                                        {{ formatCurrency(selectedPlan.monthly_price * duration.value) }}
+                                    </p>
+                                </div>
                             </button>
                         </div>
                     </div>
@@ -831,9 +863,9 @@ const copyToClipboard = async (text: string) => {
                     <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
                         <div class="flex items-center justify-between">
                             <div>
-                                <h4 class="text-base font-bold text-gray-900 dark:text-white">{{ subscription ? formatPackage(subscription.package) : 'Paket Lengkap' }}</h4>
+                                <h4 class="text-base font-bold text-gray-900 dark:text-white">{{ subscription ? formatPackage(subscription.package) : 'Paket Lite' }}</h4>
                                 <p class="text-sm text-gray-500">
-                                    {{ formatCurrency(planDetails.monthly_price) }}/bulan
+                                    {{ formatCurrency(subscription?.package === 'pro' ? plans['pro']?.monthly_price : plans['lite']?.monthly_price) }}/bulan
                                 </p>
                             </div>
                         </div>
@@ -854,9 +886,14 @@ const copyToClipboard = async (text: string) => {
                                     : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600'"
                             >
                                 <p class="text-sm font-bold text-gray-900 dark:text-white">{{ duration.label }}</p>
-                                <p v-if="duration.discount > 0" class="text-xs font-medium text-green-600 dark:text-green-400 mt-1">
-                                    Hemat {{ duration.discount }}%
-                                </p>
+                                <div class="mt-1 flex items-center gap-2">
+                                    <p class="text-sm font-bold text-green-600 dark:text-green-400">
+                                        {{ formatCurrency((subscription?.package === 'pro' ? plans['pro']?.monthly_price : plans['lite']?.monthly_price) * duration.value * (1 - duration.discount/100)) }}
+                                    </p>
+                                    <p v-if="duration.discount > 0" class="text-[10px] text-gray-400 line-through">
+                                        {{ formatCurrency((subscription?.package === 'pro' ? plans['pro']?.monthly_price : plans['lite']?.monthly_price) * duration.value) }}
+                                    </p>
+                                </div>
                             </button>
                         </div>
                     </div>

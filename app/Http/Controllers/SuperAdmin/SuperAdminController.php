@@ -3,16 +3,15 @@
 namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use App\Models\Tenant;
-use App\Models\Subscription;
 use App\Models\Bank;
-use App\Models\Transaction;
 use App\Models\Channel;
+use App\Models\Subscription;
+use App\Models\Tenant;
+use App\Models\Transaction;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Support\Facades\DB;
 
 class SuperAdminController extends Controller
 {
@@ -42,7 +41,7 @@ class SuperAdminController extends Controller
 
         // Subscription conversion rate (active subscriptions / total tenants with users)
         $tenantsWithUsers = Tenant::has('users')->count();
-        $conversionRate = $tenantsWithUsers > 0 
+        $conversionRate = $tenantsWithUsers > 0
             ? round((Subscription::where('status', 'active')->count() / $tenantsWithUsers) * 100, 1)
             : 0;
 
@@ -110,7 +109,7 @@ class SuperAdminController extends Controller
                 ->whereMonth('created_at', $month->month)
                 ->whereYear('created_at', $month->year)
                 ->sum('price');
-            
+
             $monthlyRevenue[] = [
                 'month' => $month->format('M Y'),
                 'revenue' => (float) $revenue,

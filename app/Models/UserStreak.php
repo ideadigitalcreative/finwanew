@@ -34,12 +34,12 @@ class UserStreak extends Model
     {
         $today = now()->toDateString();
         $yesterday = now()->subDay()->toDateString();
-        
+
         // Already recorded today
         if ($this->last_activity_date && $this->last_activity_date->toDateString() === $today) {
             return false;
         }
-        
+
         // Check if streak continues or resets
         if ($this->last_activity_date && $this->last_activity_date->toDateString() === $yesterday) {
             // Continue streak
@@ -48,15 +48,15 @@ class UserStreak extends Model
             // Reset streak (gap in days)
             $this->current_streak = 1;
         }
-        
+
         // Update longest streak if needed
         if ($this->current_streak > $this->longest_streak) {
             $this->longest_streak = $this->current_streak;
         }
-        
+
         $this->last_activity_date = $today;
         $this->save();
-        
+
         return true;
     }
 }

@@ -3,20 +3,20 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use App\Models\Tenant;
-use App\Models\Role;
-use App\Models\UserTenant;
-use App\Models\Subscription;
 use App\Models\Category;
-use App\Services\WhatsAppNotificationService;
+use App\Models\Role;
+use App\Models\Subscription;
+use App\Models\Tenant;
+use App\Models\User;
+use App\Models\UserTenant;
+use App\Services\TenantProvisioningService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
-use Carbon\Carbon;
 
 class SocialAuthController extends Controller
 {
@@ -37,6 +37,7 @@ class SocialAuthController extends Controller
             $googleUser = Socialite::driver('google')->user();
         } catch (\Exception $e) {
             Log::error('Google OAuth failed', ['error' => $e->getMessage()]);
+
             return redirect()->route('login')->with('error', 'Gagal autentikasi dengan Google. Silakan coba lagi.');
         }
 
@@ -45,7 +46,7 @@ class SocialAuthController extends Controller
 
         if ($user) {
             // Update Google ID if not set
-            if (!$user->google_id) {
+            if (! $user->google_id) {
                 $user->update([
                     'google_id' => $googleUser->getId(),
                     'avatar' => $googleUser->getAvatar(),
@@ -53,7 +54,7 @@ class SocialAuthController extends Controller
             }
 
             // Mark email as verified if not already
-            if (!$user->hasVerifiedEmail()) {
+            if (! $user->hasVerifiedEmail()) {
                 $user->markEmailAsVerified();
             }
 
@@ -70,36 +71,39 @@ class SocialAuthController extends Controller
         // Create new user with transaction
         $user = DB::transaction(function () use ($googleUser) {
             // Generate unique slug for tenant
-            $baseSlug = Str::slug($googleUser->getName() . "-org");
+            $baseSlug = Str::slug($googleUser->getName().'-org');
             $slug = $baseSlug;
             $counter = 1;
-            
+
             while (Tenant::where('slug', $slug)->exists()) {
-                $slug = $baseSlug . '-' . $counter;
+                $slug = $baseSlug.'-'.$counter;
                 $counter++;
             }
 
             // Create tenant for the user
             $tenant = Tenant::create([
-                'name' => $googleUser->getName() . "'s Organization",
+                'name' => $googleUser->getName()."'s Organization",
                 'slug' => $slug,
                 'is_active' => true, // Free trial is immediately active
+                'trial_ends_at' => Carbon::now()->addDays(3),
             ]);
 
             // Create default categories for this tenant
             $this->createCategoriesForTenant($tenant->id);
 
+            app(TenantProvisioningService::class)->ensureDefaultWallet($tenant->id, 'google_oauth');
+
             // Get or create Owner role for this tenant
             $ownerRole = Role::firstOrCreate(
                 [
                     'tenant_id' => $tenant->id,
-                    'slug' => 'owner'
+                    'slug' => 'owner',
                 ],
                 [
                     'name' => 'Owner',
                     'permissions' => ['*'], // Full access
                     'description' => 'Tenant owner with full access',
-                    'is_system' => true
+                    'is_system' => true,
                 ]
             );
 
@@ -123,23 +127,20 @@ class SocialAuthController extends Controller
                 'is_active' => true,
             ]);
 
-            // Create FREE trial subscription (3 days)
-            $startsAt = Carbon::now();
-            $endsAt = Carbon::now()->addDays(3);
-
+            // Create permanent free plan subscription
             $subscription = Subscription::create([
                 'tenant_id' => $tenant->id,
                 'plan' => 'free',
-                'duration_months' => 1,
+                'duration_months' => 0,
                 'price' => 0,
                 'status' => 'active',
-                'starts_at' => $startsAt,
-                'ends_at' => $endsAt,
+                'starts_at' => Carbon::now(),
+                'ends_at' => null,
                 'payment_provider' => 'internal',
                 'metadata' => [
                     'registered_from' => 'google_oauth',
                     'registered_at' => Carbon::now()->toIso8601String(),
-                    'is_trial' => true,
+                    'is_free_plan' => true,
                 ],
             ]);
 
@@ -164,8 +165,9 @@ class SocialAuthController extends Controller
             ['type' => 'pendapatan_gaji', 'name' => 'Gaji', 'slug' => 'gaji', 'icon' => '💰', 'color' => '#10b981'],
             ['type' => 'pendapatan_bonus', 'name' => 'Bonus', 'slug' => 'bonus', 'icon' => '🎁', 'color' => '#10b981'],
             ['type' => 'pendapatan_investasi', 'name' => 'Investasi', 'slug' => 'investasi', 'icon' => '📈', 'color' => '#10b981'],
+            ['type' => 'pendapatan_transfer', 'name' => 'Transfer Masuk', 'slug' => 'transfer-masuk', 'icon' => '📥', 'color' => '#10b981'],
             ['type' => 'pendapatan_lainnya', 'name' => 'Pendapatan Lainnya', 'slug' => 'pendapatan-lainnya', 'icon' => '💵', 'color' => '#10b981'],
-            
+
             // Pengeluaran
             ['type' => 'pengeluaran_makanan', 'name' => 'Makanan & Minuman', 'slug' => 'makanan-minuman', 'icon' => '🍽️', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_transport', 'name' => 'Transport', 'slug' => 'transport', 'icon' => '🚗', 'color' => '#ef4444'],
@@ -179,8 +181,11 @@ class SocialAuthController extends Controller
             ['type' => 'pengeluaran_tagihan', 'name' => 'Tagihan', 'slug' => 'tagihan', 'icon' => '📄', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_investasi', 'name' => 'Investasi', 'slug' => 'investasi-pengeluaran', 'icon' => '💼', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_pinjaman', 'name' => 'Pinjaman', 'slug' => 'pinjaman', 'icon' => '💳', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_cicilan', 'name' => 'Cicilan', 'slug' => 'cicilan', 'icon' => '🏦', 'color' => '#dc2626'],
             ['type' => 'pengeluaran_asuransi', 'name' => 'Asuransi', 'slug' => 'asuransi', 'icon' => '🛡️', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_pajak', 'name' => 'Pajak', 'slug' => 'pajak', 'icon' => '📊', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_operasional', 'name' => 'Operasional', 'slug' => 'operasional', 'icon' => '⚙️', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_transfer', 'name' => 'Transfer Keluar', 'slug' => 'transfer-keluar', 'icon' => '📤', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_donasi', 'name' => 'Donasi', 'slug' => 'donasi', 'icon' => '❤️', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_lainnya', 'name' => 'Pengeluaran Lainnya', 'slug' => 'pengeluaran-lainnya', 'icon' => '📝', 'color' => '#ef4444'],
         ];
@@ -189,6 +194,7 @@ class SocialAuthController extends Controller
             'pendapatan_gaji' => 'Pendapatan dari gaji bulanan',
             'pendapatan_bonus' => 'Pendapatan dari bonus atau komisi',
             'pendapatan_investasi' => 'Pendapatan dari investasi',
+            'pendapatan_transfer' => 'Pendapatan dari transfer masuk',
             'pendapatan_lainnya' => 'Pendapatan lainnya',
             'pengeluaran_makanan' => 'Pengeluaran untuk makanan dan minuman',
             'pengeluaran_transport' => 'Pengeluaran untuk transportasi',
@@ -202,6 +208,7 @@ class SocialAuthController extends Controller
             'pengeluaran_tagihan' => 'Pengeluaran untuk tagihan rutin',
             'pengeluaran_investasi' => 'Pengeluaran untuk investasi',
             'pengeluaran_pinjaman' => 'Pengeluaran untuk pembayaran pinjaman',
+            'pengeluaran_cicilan' => 'Pengeluaran untuk cicilan dan angsuran (motor, mobil, rumah, KPR, dll)',
             'pengeluaran_asuransi' => 'Pengeluaran untuk asuransi',
             'pengeluaran_pajak' => 'Pengeluaran untuk pajak',
             'pengeluaran_donasi' => 'Pengeluaran untuk donasi dan sumbangan',

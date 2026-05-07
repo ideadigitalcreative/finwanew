@@ -75,10 +75,10 @@ class HandleInertiaRequests extends Middleware
                         ->get()
                         ->map(function ($userTenant) use ($user) {
                             $tenant = $userTenant->tenant;
-                            if (!$tenant) {
+                            if (! $tenant) {
                                 return null;
                             }
-                            
+
                             return [
                                 'id' => $tenant->id,
                                 'name' => $tenant->name,

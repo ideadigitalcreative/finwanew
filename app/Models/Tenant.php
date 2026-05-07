@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tenant extends Model
 {
@@ -16,13 +16,13 @@ class Tenant extends Model
         'domain',
         'settings',
         'is_active',
-        'trial_ends_at'
+        'trial_ends_at',
     ];
 
     protected $casts = [
         'settings' => 'array',
         'is_active' => 'boolean',
-        'trial_ends_at' => 'datetime'
+        'trial_ends_at' => 'datetime',
     ];
 
     public function users(): HasMany

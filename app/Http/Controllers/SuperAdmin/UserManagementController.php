@@ -3,13 +3,13 @@
 namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Inertia\Response;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class UserManagementController extends Controller
 {
@@ -87,25 +87,25 @@ class UserManagementController extends Controller
 
         // If tenant_id is not provided and user is not super admin, create a new tenant
         $tenantId = $validated['tenant_id'] ?? null;
-        
-        if (!$tenantId && !($validated['is_super_admin'] ?? false)) {
+
+        if (! $tenantId && ! ($validated['is_super_admin'] ?? false)) {
             // Create new tenant with unique slug
-            $baseSlug = \Illuminate\Support\Str::slug($validated['name'] . '-org');
+            $baseSlug = \Illuminate\Support\Str::slug($validated['name'].'-org');
             $slug = $baseSlug;
             $counter = 1;
-            
+
             // Ensure slug is unique
             while (Tenant::where('slug', $slug)->exists()) {
-                $slug = $baseSlug . '-' . $counter;
+                $slug = $baseSlug.'-'.$counter;
                 $counter++;
             }
-            
+
             $tenant = Tenant::create([
-                'name' => $validated['name'] . "'s Organization",
+                'name' => $validated['name']."'s Organization",
                 'slug' => $slug,
                 'is_active' => true,
             ]);
-            
+
             $tenantId = $tenant->id;
         }
 
@@ -144,7 +144,7 @@ class UserManagementController extends Controller
             'is_super_admin' => $validated['is_super_admin'] ?? false,
         ]);
 
-        if (!empty($validated['password'])) {
+        if (! empty($validated['password'])) {
             $user->update([
                 'password' => Hash::make($validated['password']),
             ]);

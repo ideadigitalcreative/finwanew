@@ -1,12 +1,26 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { format, addDays, subDays, isSameDay, addWeeks, subWeeks } from 'date-fns';
+import { format, addDays, subDays, isSameDay } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight } from 'lucide-vue-next';
 
 const props = defineProps<{
-    transactions?: Array<{ transaction_date: string }>;
+    transactions?: Array<{ transaction_date: string; type?: string; amount?: number }>;
 }>();
+
+// Format currency in compact form (e.g., 50rb, 1.2jt)
+const formatCompact = (amount: number): string => {
+    if (amount === 0) return '';
+    if (amount >= 1_000_000) {
+        const val = amount / 1_000_000;
+        return val % 1 === 0 ? `${val}jt` : `${val.toFixed(1)}jt`;
+    }
+    if (amount >= 1_000) {
+        const val = amount / 1_000;
+        return val % 1 === 0 ? `${val}rb` : `${val.toFixed(0)}rb`;
+    }
+    return `${amount}`;
+};
 
 // Reference date for centering (today is in the middle)
 const centerDate = ref(new Date());
@@ -32,10 +46,14 @@ const weekDays = computed(() => {
     
     // Group transactions by date
     const txCounts: Record<string, number> = {};
+    const txExpenses: Record<string, number> = {};
     (props.transactions || []).forEach(tx => {
         if (!tx.transaction_date) return;
         const dateStr = tx.transaction_date.substring(0, 10);
         txCounts[dateStr] = (txCounts[dateStr] || 0) + 1;
+        if (tx.type === 'expense' && tx.amount) {
+            txExpenses[dateStr] = (txExpenses[dateStr] || 0) + tx.amount;
+        }
     });
 
     // Start 3 days before center date so center date is in middle
@@ -44,6 +62,7 @@ const weekDays = computed(() => {
     for (let i = 0; i < 7; i++) {
         const date = addDays(startDate, i);
         const dateStr = format(date, 'yyyy-MM-dd');
+        const expense = txExpenses[dateStr] || 0;
         days.push({
             date,
             dayName: format(date, 'EEE', { locale: id }),
@@ -51,7 +70,9 @@ const weekDays = computed(() => {
             isToday: isSameDay(date, today),
             isCenterDate: isSameDay(date, centerDate.value),
             hasActivity: (txCounts[dateStr] || 0) > 0,
-            activityCount: txCounts[dateStr] || 0
+            activityCount: txCounts[dateStr] || 0,
+            expense,
+            expenseLabel: formatCompact(expense)
         });
     }
     return days;
@@ -234,6 +255,14 @@ const isActive = computed(() => {
                             ></span>
                         </div>
                     </div>
+
+                    <!-- Daily expense label below circle -->
+                    <span 
+                        v-if="day.expenseLabel"
+                        class="text-[11px] font-bold mt-1.5 text-red-500 dark:text-red-400 leading-none"
+                    >
+                        -{{ day.expenseLabel }}
+                    </span>
                 </div>
             </div>
         </div>

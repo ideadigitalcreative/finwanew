@@ -97,7 +97,7 @@ export function useSweetAlert() {
         return Swal.fire({
             ...defaultOptions,
             title,
-            text,
+            html: text,
             icon: 'success',
         } as SwalOptions);
     };
@@ -106,7 +106,7 @@ export function useSweetAlert() {
         return Swal.fire({
             ...defaultOptions,
             title,
-            text,
+            html: text,
             icon: 'error',
         } as SwalOptions);
     };
@@ -115,7 +115,7 @@ export function useSweetAlert() {
         return Swal.fire({
             ...defaultOptions,
             title,
-            text,
+            html: text,
             icon: 'warning',
         } as SwalOptions);
     };
@@ -124,7 +124,7 @@ export function useSweetAlert() {
         return Swal.fire({
             ...defaultOptions,
             title,
-            text,
+            html: text,
             icon: 'info',
         } as SwalOptions);
     };
@@ -133,7 +133,7 @@ export function useSweetAlert() {
         return Swal.fire({
             ...defaultOptions,
             title,
-            text,
+            html: text,
             icon: 'question',
         } as SwalOptions);
     };

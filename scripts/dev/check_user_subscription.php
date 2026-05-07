@@ -11,25 +11,25 @@ $mapping = \App\Models\UserWhatsAppNumber::where('whatsapp_number', '62857147251
 if ($mapping) {
     $user = \App\Models\User::find($mapping->user_id);
     $tenant = \App\Models\Tenant::find($mapping->tenant_id);
-    
+
     echo "User: {$user->name} (ID: {$user->id})\n";
     echo "Tenant: {$tenant->name} (ID: {$tenant->id})\n";
     echo "Email: {$user->email}\n\n";
-    
+
     $subscription = \App\Models\Subscription::where('tenant_id', $tenant->id)
         ->where('status', 'active')
         ->first();
-    
+
     if ($subscription) {
         echo "✅ ACTIVE SUBSCRIPTION:\n";
         echo "  Plan: {$subscription->plan}\n";
         echo "  Status: {$subscription->status}\n";
         echo "  Starts: {$subscription->starts_at}\n";
         echo "  Ends: {$subscription->ends_at}\n";
-        
+
         $daysRemaining = $subscription->ends_at->diffInDays(now());
         $isExpired = $subscription->ends_at < now();
-        
+
         if ($isExpired) {
             echo "  ❌ EXPIRED {$daysRemaining} days ago!\n";
         } else {
@@ -41,7 +41,7 @@ if ($mapping) {
         $allSubs = \App\Models\Subscription::where('tenant_id', $tenant->id)
             ->orderBy('created_at', 'desc')
             ->get();
-        
+
         foreach ($allSubs as $sub) {
             $status = $sub->status;
             $expired = $sub->ends_at < now() ? '(EXPIRED)' : '';

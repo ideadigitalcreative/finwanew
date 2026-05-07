@@ -4,32 +4,31 @@ namespace App\Services\Savings;
 
 use App\Models\Message;
 use App\Models\SavingsGoal;
+use App\Services\Transaction\TransactionExtractorService;
 use Illuminate\Support\Facades\Log;
 
 /**
  * SavingsGoalService - Handles savings goal commands
- * 
+ *
  * REFACTORED FROM: App\Jobs\ProcessIncomingMessage
  * REFACTORING TYPE: Structural only (no logic changes)
- * 
+ *
  * Methods moved as-is without any modification to logic, conditionals,
  * or return values. Only namespace and class structure changed.
  */
 class SavingsGoalService
 {
     protected Message $message;
+
     protected $sendReplyCallback;
 
-    /**
-     * Constructor
-     * 
-     * @param Message $message The message being processed
-     * @param callable $sendReplyCallback Callback to send reply via WhatsApp
-     */
-    public function __construct(Message $message, callable $sendReplyCallback)
+    protected TransactionExtractorService $transactionExtractor;
+
+    public function __construct(Message $message, callable $sendReplyCallback, ?TransactionExtractorService $transactionExtractor = null)
     {
         $this->message = $message;
         $this->sendReplyCallback = $sendReplyCallback;
+        $this->transactionExtractor = $transactionExtractor ?? new TransactionExtractorService;
     }
 
     /**
@@ -42,7 +41,7 @@ class SavingsGoalService
 
     /**
      * Handle set savings target request (set target 10jt, target nabung 5jt)
-     * 
+     *
      * MOVED FROM: ProcessIncomingMessage::handleSetSavingsTarget()
      * LINES: 5818-5897
      * MODIFICATION: None (structural move only)
@@ -53,21 +52,21 @@ class SavingsGoalService
             // Extract amount from message
             $nominal = null;
             $name = 'Target Tabungan';
-            
+
             // Pattern 1: set target [nominal] [optional: untuk nama]
             // e.g., "set target 50jt untuk nikah", "target nabung 10jt untuk umroh"
             if (preg_match('/(?:set\s+target|target\s+(?:tabungan|nabung|saving)|mau\s+nabung|buat\s+target)\s*(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?(?:\s+(?:untuk|buat)\s+(.+))?/i', $messageText, $matches)) {
                 $numericValue = str_replace(['.', ','], '', $matches[1]);
                 $nominal = (float) $numericValue;
-                
+
                 $multiplier = strtolower($matches[2] ?? '');
                 if (in_array($multiplier, ['rb', 'ribu', 'k'])) {
                     $nominal *= 1000;
                 } elseif (in_array($multiplier, ['jt', 'juta'])) {
                     $nominal *= 1000000;
                 }
-                
-                if (!empty($matches[3])) {
+
+                if (! empty($matches[3])) {
                     $name = ucfirst(trim($matches[3]));
                 }
             }
@@ -76,31 +75,32 @@ class SavingsGoalService
             elseif (preg_match('/(?:tabung|nabung)\s+(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?\s+(?:untuk|buat)\s+(.+)/i', $messageText, $matches)) {
                 $numericValue = str_replace(['.', ','], '', $matches[1]);
                 $nominal = (float) $numericValue;
-                
+
                 $multiplier = strtolower($matches[2] ?? '');
                 if (in_array($multiplier, ['rb', 'ribu', 'k'])) {
                     $nominal *= 1000;
                 } elseif (in_array($multiplier, ['jt', 'juta'])) {
                     $nominal *= 1000000;
                 }
-                
-                if (!empty($matches[3])) {
+
+                if (! empty($matches[3])) {
                     $name = ucfirst(trim($matches[3]));
                 }
             }
-            
-            if (!$nominal || $nominal <= 0) {
+
+            if (! $nominal || $nominal <= 0) {
                 $this->sendReply(
-                    "🎯 *Set Target Tabungan*\n\n" .
-                    "Untuk mengatur target, ketik:\n\n" .
-                    "• _\"set target 10jt\"_\n" .
-                    "• _\"target nabung 5jt untuk liburan\"_\n" .
-                    "• _\"mau nabung 2jt untuk iPhone\"_\n\n" .
-                    "💡 Target membantu Anda fokus pada tujuan keuangan."
+                    "🎯 *Set Target Tabungan*\n\n".
+                    "Untuk mengatur target, ketik:\n\n".
+                    "• _\"set target 10jt\"_\n".
+                    "• _\"target nabung 5jt untuk liburan\"_\n".
+                    "• _\"mau nabung 2jt untuk iPhone\"_\n\n".
+                    '💡 Target membantu Anda fokus pada tujuan keuangan.'
                 );
+
                 return;
             }
-            
+
             // Create savings goal
             $goal = SavingsGoal::create([
                 'tenant_id' => $this->message->tenant_id,
@@ -110,42 +110,42 @@ class SavingsGoalService
                 'status' => 'active',
                 'icon' => '🎯',
             ]);
-            
+
             $formattedAmount = number_format($nominal, 0, ',', '.');
-            
+
             $this->sendReply(
-                "✅ *Target Tabungan Dibuat!*\n\n" .
-                "🎯 {$name}\n" .
-                "💵 Target: Rp {$formattedAmount}\n" .
-                "📊 Progress: 0%\n\n" .
-                $goal->getProgressBar() . "\n\n" .
-                "💡 *Cara menabung:*\n" .
-                "_\"tabung 500rb\"_ atau _\"nabung 1jt\"_\n\n" .
-                "Cek progress: _\"cek target\"_"
+                "✅ *Target Tabungan Dibuat!*\n\n".
+                "🎯 {$name}\n".
+                "💵 Target: Rp {$formattedAmount}\n".
+                "📊 Progress: 0%\n\n".
+                $goal->getProgressBar()."\n\n".
+                "💡 *Cara menabung:*\n".
+                "_\"tabung 500rb\"_ atau _\"nabung 1jt\"_\n\n".
+                'Cek progress: _"cek target"_'
             );
-            
+
             Log::info('Savings target created', [
                 'message_id' => $this->message->id,
                 'goal_id' => $goal->id,
-                'amount' => $nominal
+                'amount' => $nominal,
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error creating savings target', [
                 'message_id' => $this->message->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             $this->sendReply(
-                "⚠️ *Gagal membuat target*\n\n" .
-                "Terjadi kesalahan. Silakan coba lagi."
+                "⚠️ *Gagal membuat target*\n\n".
+                'Terjadi kesalahan. Silakan coba lagi.'
             );
         }
     }
-    
+
     /**
      * Handle check savings target request (cek target, lihat target)
-     * 
+     *
      * MOVED FROM: ProcessIncomingMessage::handleCheckSavingsTarget()
      * LINES: 5899-5971
      * MODIFICATION: None (structural move only)
@@ -157,36 +157,37 @@ class SavingsGoalService
                 ->where('status', 'active')
                 ->orderBy('created_at', 'desc')
                 ->get();
-            
+
             if ($goals->isEmpty()) {
                 $this->sendReply(
-                    "🎯 *Target Tabungan*\n\n" .
-                    "Belum ada target aktif.\n\n" .
-                    "Buat target baru:\n" .
-                    "_\"set target 10jt untuk liburan\"_\n" .
-                    "_\"target nabung 5jt\"_"
+                    "🎯 *Target Tabungan*\n\n".
+                    "Belum ada target aktif.\n\n".
+                    "Buat target baru:\n".
+                    "_\"set target 10jt untuk liburan\"_\n".
+                    '_"target nabung 5jt"_'
                 );
+
                 return;
             }
-            
+
             $message = "🎯 *Target Tabungan Anda*\n";
             $message .= "━━━━━━━━━━━━━━━\n\n";
-            
+
             foreach ($goals as $index => $goal) {
                 $num = $index + 1;
                 $targetFormatted = number_format($goal->target_amount, 0, ',', '.');
                 $currentFormatted = number_format($goal->current_amount, 0, ',', '.');
                 $remainingFormatted = number_format($goal->getRemainingAmount(), 0, ',', '.');
                 $percentage = round($goal->getProgressPercentage());
-                
+
                 $message .= "{$num}. {$goal->icon} *{$goal->name}*\n";
                 $message .= "   💵 Target: Rp {$targetFormatted}\n";
                 $message .= "   💰 Terkumpul: Rp {$currentFormatted}\n";
-                $message .= "   📊 " . $goal->getProgressBar(15) . "\n";
-                
+                $message .= '   📊 '.$goal->getProgressBar(15)."\n";
+
                 if ($goal->getRemainingAmount() > 0) {
                     $message .= "   📌 Kurang: Rp {$remainingFormatted}\n";
-                    
+
                     // Suggested monthly savings if deadline exists
                     $suggested = $goal->getSuggestedMonthlySavings();
                     if ($suggested) {
@@ -198,32 +199,32 @@ class SavingsGoalService
                 }
                 $message .= "\n";
             }
-            
-            $message .= "_Tambah tabungan: \"tabung 500rb\"_";
-            
+
+            $message .= '_Tambah tabungan: "tabung 500rb"_';
+
             $this->sendReply($message);
-            
+
             Log::info('Savings targets viewed', [
                 'message_id' => $this->message->id,
-                'goals_count' => $goals->count()
+                'goals_count' => $goals->count(),
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error viewing savings targets', [
                 'message_id' => $this->message->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             $this->sendReply(
-                "⚠️ *Gagal memuat target*\n\n" .
-                "Terjadi kesalahan. Silakan coba lagi."
+                "⚠️ *Gagal memuat target*\n\n".
+                'Terjadi kesalahan. Silakan coba lagi.'
             );
         }
     }
-    
+
     /**
      * Handle add savings request (tabung 500rb, nabung 1jt)
-     * 
+     *
      * MOVED FROM: ProcessIncomingMessage::handleAddSavings()
      * LINES: 5973-6065
      * MODIFICATION: None (structural move only)
@@ -233,11 +234,11 @@ class SavingsGoalService
         try {
             // Extract amount
             $nominal = null;
-            
+
             if (preg_match('/(?:tabung|nabung)\s+(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?/i', $messageText, $matches)) {
                 $numericValue = str_replace(['.', ','], '', $matches[1]);
                 $nominal = (float) $numericValue;
-                
+
                 $multiplier = strtolower($matches[2] ?? '');
                 if (in_array($multiplier, ['rb', 'ribu', 'k'])) {
                     $nominal *= 1000;
@@ -245,83 +246,85 @@ class SavingsGoalService
                     $nominal *= 1000000;
                 }
             }
-            
-            if (!$nominal || $nominal <= 0) {
+
+            if (! $nominal || $nominal <= 0) {
                 $this->sendReply(
-                    "💰 *Menabung*\n\n" .
-                    "Format: _tabung 500rb_ atau _nabung 1jt_\n\n" .
-                    "Contoh:\n" .
-                    "• _tabung 100rb_\n" .
-                    "• _nabung 500rb_\n" .
-                    "• _tabung 2jt_"
+                    "💰 *Menabung*\n\n".
+                    "Format: _tabung 500rb_ atau _nabung 1jt_\n\n".
+                    "Contoh:\n".
+                    "• _tabung 100rb_\n".
+                    "• _nabung 500rb_\n".
+                    '• _tabung 2jt_'
                 );
+
                 return;
             }
-            
+
             // Get active savings goal
             $goal = SavingsGoal::where('tenant_id', $this->message->tenant_id)
                 ->where('status', 'active')
                 ->orderBy('created_at', 'desc')
                 ->first();
-            
-            if (!$goal) {
+
+            if (! $goal) {
                 $this->sendReply(
-                    "❌ *Belum ada target tabungan*\n\n" .
-                    "Buat target dulu:\n" .
-                    "_\"set target 10jt untuk liburan\"_\n\n" .
-                    "Setelah itu baru bisa menabung!"
+                    "❌ *Belum ada target tabungan*\n\n".
+                    "Buat target dulu:\n".
+                    "_\"set target 10jt untuk liburan\"_\n\n".
+                    'Setelah itu baru bisa menabung!'
                 );
+
                 return;
             }
-            
+
             // Add savings
             $previousAmount = $goal->current_amount;
             $goal->addSavings($nominal);
-            
+
             $formattedNominal = number_format($nominal, 0, ',', '.');
             $formattedCurrent = number_format($goal->current_amount, 0, ',', '.');
             $formattedTarget = number_format($goal->target_amount, 0, ',', '.');
             $formattedRemaining = number_format($goal->getRemainingAmount(), 0, ',', '.');
-            
+
             $message = "✅ *Tabungan Ditambahkan!*\n\n";
             $message .= "🎯 {$goal->name}\n";
             $message .= "💵 +Rp {$formattedNominal}\n\n";
             $message .= "📊 Progress:\n";
-            $message .= $goal->getProgressBar() . "\n\n";
+            $message .= $goal->getProgressBar()."\n\n";
             $message .= "💰 Terkumpul: Rp {$formattedCurrent}\n";
             $message .= "🎯 Target: Rp {$formattedTarget}\n";
-            
+
             if ($goal->isCompleted()) {
                 $message .= "\n🎉🎉 *SELAMAT! TARGET TERCAPAI!* 🎉🎉";
             } else {
                 $message .= "📌 Kurang: Rp {$formattedRemaining}";
             }
-            
+
             $this->sendReply($message);
-            
+
             Log::info('Savings added', [
                 'message_id' => $this->message->id,
                 'goal_id' => $goal->id,
                 'amount' => $nominal,
-                'new_total' => $goal->current_amount
+                'new_total' => $goal->current_amount,
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error adding savings', [
                 'message_id' => $this->message->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             $this->sendReply(
-                "⚠️ *Gagal menambah tabungan*\n\n" .
-                "Terjadi kesalahan. Silakan coba lagi."
+                "⚠️ *Gagal menambah tabungan*\n\n".
+                'Terjadi kesalahan. Silakan coba lagi.'
             );
         }
     }
-    
+
     /**
      * Handle set target request (set target tabungan)
-     * 
+     *
      * MOVED FROM: ProcessIncomingMessage::handleSetTarget()
      * LINES: 8439-8487
      * MODIFICATION: None (structural move only)
@@ -330,52 +333,53 @@ class SavingsGoalService
     {
         try {
             $nominal = $finwaEntities['nominal'] ?? null;
-            
-            if (!$nominal) {
+
+            if (! $nominal) {
                 $this->sendReply(
-                    "🎯 *Set Target Tabungan*\n\n" .
-                    "Untuk mengatur target, ketik:\n\n" .
-                    "• _\"set target 10jt\"_\n" .
-                    "• _\"mau nabung 5jt bulan ini\"_\n" .
-                    "• _\"target tabung 2jt untuk liburan\"_\n\n" .
-                    "💡 Target membantu Anda fokus pada tujuan keuangan."
+                    "🎯 *Set Target Tabungan*\n\n".
+                    "Untuk mengatur target, ketik:\n\n".
+                    "• _\"set target 10jt\"_\n".
+                    "• _\"mau nabung 5jt bulan ini\"_\n".
+                    "• _\"target tabung 2jt untuk liburan\"_\n\n".
+                    '💡 Target membantu Anda fokus pada tujuan keuangan.'
                 );
+
                 return;
             }
-            
+
             // Note: Full target feature would need a SavingsTarget model
             // For now, just acknowledge the request
-            
+
             $this->sendReply(
-                "✅ *Target Tabungan Diatur!*\n\n" .
-                "🎯 Target Anda:\n" .
-                "💵 Rp " . number_format($nominal, 0, ',', '.') . "\n\n" .
-                "Terus pantau progress Anda dengan:\n" .
-                "_\"cek target\"_\n\n" .
-                "💪 Semangat mencapai target!"
+                "✅ *Target Tabungan Diatur!*\n\n".
+                "🎯 Target Anda:\n".
+                '💵 Rp '.number_format($nominal, 0, ',', '.')."\n\n".
+                "Terus pantau progress Anda dengan:\n".
+                "_\"cek target\"_\n\n".
+                '💪 Semangat mencapai target!'
             );
-            
+
             Log::info('Savings target set via chat', [
                 'message_id' => $this->message->id,
-                'amount' => $nominal
+                'amount' => $nominal,
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error setting target', [
                 'message_id' => $this->message->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             $this->sendReply(
-                "⚠️ *Gagal mengatur target*\n\n" .
-                "Terjadi kesalahan. Silakan coba lagi."
+                "⚠️ *Gagal mengatur target*\n\n".
+                'Terjadi kesalahan. Silakan coba lagi.'
             );
         }
     }
-    
+
     /**
      * Handle delete savings target request (hapus target menikah, hapus tabungan nikah)
-     * 
+     *
      * ADDED: New function to delete specific savings targets
      */
     public function handleDeleteSavingsTarget(string $messageText): void
@@ -384,29 +388,30 @@ class SavingsGoalService
             // Extract target name from message
             // Patterns: "hapus target menikah", "hapus tabungan nikah", "hapus target tabungan menikah"
             $targetName = null;
-            
+
             // Pattern handles: "hapus target tabungan X", "hapus target X", "hapus tabungan X"
             if (preg_match('/(?:hapus|delete|batalkan|remove|hilangkan)\s+(?:target\s+tabungan|target|tabungan|saving)\s+(.+)/i', $messageText, $matches)) {
                 $targetName = trim($matches[1]);
             }
-            
-            if (!$targetName) {
+
+            if (! $targetName) {
                 // Show list of targets that can be deleted
                 $goals = SavingsGoal::where('tenant_id', $this->message->tenant_id)
                     ->where('status', 'active')
                     ->orderBy('created_at', 'desc')
                     ->get();
-                
+
                 if ($goals->isEmpty()) {
                     $this->sendReply(
-                        "🎯 *Hapus Target Tabungan*\n\n" .
-                        "Belum ada target tabungan aktif.\n\n" .
-                        "Buat target baru:\n" .
-                        "_\"set target 10jt untuk liburan\"_"
+                        "🎯 *Hapus Target Tabungan*\n\n".
+                        "Belum ada target tabungan aktif.\n\n".
+                        "Buat target baru:\n".
+                        '_"set target 10jt untuk liburan"_'
                     );
+
                     return;
                 }
-                
+
                 $message = "🗑️ *Hapus Target Tabungan*\n\n";
                 $message .= "Target yang tersedia:\n";
                 foreach ($goals as $index => $goal) {
@@ -415,42 +420,43 @@ class SavingsGoalService
                 }
                 $message .= "\nUntuk menghapus, ketik:\n";
                 $message .= "_\"hapus target [nama target]\"_\n\n";
-                $message .= "Contoh: _hapus target menikah_";
-                
+                $message .= 'Contoh: _hapus target menikah_';
+
                 $this->sendReply($message);
+
                 return;
             }
-            
+
             // Search for the target by name (case-insensitive, fuzzy match)
             $goals = SavingsGoal::where('tenant_id', $this->message->tenant_id)
                 ->where('status', 'active')
                 ->get();
-            
+
             $matchedGoal = null;
             $similarGoals = [];
-            
+
             foreach ($goals as $goal) {
                 $goalNameLower = strtolower($goal->name);
                 $targetNameLower = strtolower($targetName);
-                
+
                 // Exact match
                 if ($goalNameLower === $targetNameLower) {
                     $matchedGoal = $goal;
                     break;
                 }
-                
+
                 // Partial match (target name contains search term or vice versa)
                 if (str_contains($goalNameLower, $targetNameLower) || str_contains($targetNameLower, $goalNameLower)) {
                     $similarGoals[] = $goal;
                 }
             }
-            
+
             // If no exact match but one similar goal found, use it
-            if (!$matchedGoal && count($similarGoals) === 1) {
+            if (! $matchedGoal && count($similarGoals) === 1) {
                 $matchedGoal = $similarGoals[0];
             }
-            
-            if (!$matchedGoal) {
+
+            if (! $matchedGoal) {
                 if (count($similarGoals) > 1) {
                     // Multiple similar matches found
                     $message = "⚠️ *Ditemukan beberapa target serupa:*\n\n";
@@ -459,15 +465,16 @@ class SavingsGoalService
                         $message .= "{$num}. {$goal->icon} {$goal->name}\n";
                     }
                     $message .= "\nSebutkan nama yang lebih spesifik:\n";
-                    $message .= "_\"hapus target [nama lengkap]\"_";
+                    $message .= '_"hapus target [nama lengkap]"_';
                     $this->sendReply($message);
+
                     return;
                 }
-                
+
                 // No match found
                 $message = "❌ *Target tidak ditemukan*\n\n";
                 $message .= "Target \"{$targetName}\" tidak ada.\n\n";
-                
+
                 if ($goals->isNotEmpty()) {
                     $message .= "Target yang tersedia:\n";
                     foreach ($goals as $index => $goal) {
@@ -475,48 +482,231 @@ class SavingsGoalService
                         $message .= "{$num}. {$goal->icon} {$goal->name}\n";
                     }
                 }
-                
+
                 $this->sendReply($message);
+
                 return;
             }
-            
+
             // Delete the target (soft delete by setting status to 'cancelled')
             $deletedName = $matchedGoal->name;
             $deletedIcon = $matchedGoal->icon;
             $currentAmount = $matchedGoal->current_amount;
             $targetAmount = $matchedGoal->target_amount;
-            
+
             $matchedGoal->status = 'cancelled';
             $matchedGoal->save();
-            
+
             $formattedCurrent = number_format($currentAmount, 0, ',', '.');
             $formattedTarget = number_format($targetAmount, 0, ',', '.');
-            
+
             $this->sendReply(
-                "✅ *Target Berhasil Dihapus!*\n\n" .
-                "{$deletedIcon} *{$deletedName}*\n" .
-                "💰 Terkumpul: Rp {$formattedCurrent}\n" .
-                "🎯 Target: Rp {$formattedTarget}\n\n" .
-                "Target tabungan ini sudah dihapus.\n\n" .
-                "_Lihat target lain: \"cek target\"_\n" .
-                "_Buat target baru: \"set target 10jt untuk liburan\"_"
+                "✅ *Target Berhasil Dihapus!*\n\n".
+                "{$deletedIcon} *{$deletedName}*\n".
+                "💰 Terkumpul: Rp {$formattedCurrent}\n".
+                "🎯 Target: Rp {$formattedTarget}\n\n".
+                "Target tabungan ini sudah dihapus.\n\n".
+                "_Lihat target lain: \"cek target\"_\n".
+                '_Buat target baru: "set target 10jt untuk liburan"_'
             );
-            
+
             Log::info('Savings target deleted', [
                 'message_id' => $this->message->id,
                 'goal_id' => $matchedGoal->id,
-                'goal_name' => $deletedName
+                'goal_name' => $deletedName,
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error deleting savings target', [
+                'message_id' => $this->message->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->sendReply(
+                "⚠️ *Gagal menghapus target*\n\n".
+                'Terjadi kesalahan. Silakan coba lagi.'
+            );
+        }
+    }
+
+    /**
+     * Handle add savings to a specific target by name.
+     *
+     * MOVED FROM: ProcessIncomingMessage::handleAddSavingsToTarget()
+     */
+    public function handleAddSavingsToTarget(string $messageText): void
+    {
+        try {
+            $nominal = null;
+            $targetName = null;
+
+            if (preg_match('/(?:masuk|setor|tambah|isi)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(?:ke\s+)?(?:tabung|tabungan|target)\s+(.+)/i', $messageText, $matches)) {
+                $nominal = $this->transactionExtractor->extractAmountFromText($matches[1]);
+                $targetName = trim($matches[2]);
+            }
+
+            if (! $nominal || $nominal <= 0) {
+                $this->sendReply(
+                    "💰 *Menabung ke Target Spesifik*\n\n".
+                    "Format: _masuk [nominal] ke tabung [nama target]_\n\n".
+                    "Contoh:\n".
+                    "• _masuk 600rb ke tabung menikah_\n".
+                    "• _setor 1jt ke tabungan nikah_\n".
+                    '• _tambah 500rb ke target umroh_'
+                );
+
+                return;
+            }
+
+            if (! $targetName) {
+                $this->sendReply(
+                    "⚠️ *Nama target tidak terdeteksi*\n\n".
+                    "Sebutkan nama target tabungan:\n".
+                    "• _masuk 600rb ke tabung menikah_\n".
+                    '• _setor 1jt ke tabungan liburan_'
+                );
+
+                return;
+            }
+
+            $goals = SavingsGoal::where('tenant_id', $this->message->tenant_id)
+                ->where('status', 'active')
+                ->get();
+
+            $matchedGoal = null;
+            $similarGoals = [];
+
+            foreach ($goals as $goal) {
+                $goalNameLower = strtolower($goal->name);
+                $targetNameLower = strtolower($targetName);
+
+                if ($goalNameLower === $targetNameLower) {
+                    $matchedGoal = $goal;
+                    break;
+                }
+
+                if (str_contains($goalNameLower, $targetNameLower) || str_contains($targetNameLower, $goalNameLower)) {
+                    $similarGoals[] = $goal;
+                }
+            }
+
+            if (! $matchedGoal && count($similarGoals) === 1) {
+                $matchedGoal = $similarGoals[0];
+            }
+
+            if (! $matchedGoal) {
+                if (count($similarGoals) > 1) {
+                    $message = "⚠️ *Ditemukan beberapa target serupa:*\n\n";
+                    foreach ($similarGoals as $index => $goal) {
+                        $num = $index + 1;
+                        $message .= "{$num}. {$goal->icon} {$goal->name}\n";
+                    }
+                    $message .= "\nSebutkan nama yang lebih spesifik:\n";
+                    $message .= '_"masuk 600rb ke tabung [nama lengkap]"_';
+                    $this->sendReply($message);
+
+                    return;
+                }
+
+                if ($goals->isEmpty()) {
+                    $this->sendReply(
+                        "❌ *Belum ada target tabungan*\n\n".
+                        "Buat target dulu:\n".
+                        "_\"tabung 50jt untuk menikah\"_\n\n".
+                        'Setelah itu baru bisa menabung!'
+                    );
+                } else {
+                    $message = "❌ *Target \"{$targetName}\" tidak ditemukan*\n\n";
+                    $message .= "Target yang tersedia:\n";
+                    foreach ($goals as $index => $goal) {
+                        $num = $index + 1;
+                        $message .= "{$num}. {$goal->icon} {$goal->name}\n";
+                    }
+                    $message .= "\nContoh: _masuk 600rb ke tabung {$goals->first()->name}_";
+                    $this->sendReply($message);
+                }
+
+                return;
+            }
+
+            $previousAmount = $matchedGoal->current_amount;
+            $matchedGoal->addSavings($nominal);
+
+            $formattedNominal = number_format($nominal, 0, ',', '.');
+            $formattedCurrent = number_format($matchedGoal->current_amount, 0, ',', '.');
+            $formattedTarget = number_format($matchedGoal->target_amount, 0, ',', '.');
+            $formattedRemaining = number_format($matchedGoal->getRemainingAmount(), 0, ',', '.');
+            $percentage = round($matchedGoal->getProgressPercentage());
+
+            $message = "✅ *Tabungan Ditambahkan!*\n\n";
+            $message .= "🎯 {$matchedGoal->icon} *{$matchedGoal->name}*\n";
+            $message .= "💵 +Rp {$formattedNominal}\n\n";
+            $message .= "📊 Progress: {$percentage}%\n";
+            $message .= $matchedGoal->getProgressBar()."\n\n";
+            $message .= "💰 Terkumpul: Rp {$formattedCurrent}\n";
+            $message .= "🎯 Target: Rp {$formattedTarget}\n";
+
+            if ($matchedGoal->isCompleted()) {
+                $message .= "\n🎉🎉 *SELAMAT! TARGET TERCAPAI!* 🎉🎉";
+            } else {
+                $message .= "📌 Kurang: Rp {$formattedRemaining}";
+            }
+
+            $this->sendReply($message);
+
+            Log::info('Savings added to specific target', [
+                'message_id' => $this->message->id,
+                'goal_id' => $matchedGoal->id,
+                'goal_name' => $matchedGoal->name,
+                'amount' => $nominal,
+                'new_total' => $matchedGoal->current_amount,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error adding savings to target', [
+                'message_id' => $this->message->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $this->sendReply(
+                "⚠️ *Gagal menambah tabungan*\n\n".
+                'Terjadi kesalahan. Silakan coba lagi.'
+            );
+        }
+    }
+
+    /**
+     * Handle check target request (cek target)
+     *
+     * MOVED FROM: ProcessIncomingMessage::handleCheckTarget()
+     */
+    public function handleCheckTarget(): void
+    {
+        try {
+            $reply = "🎯 *Target Tabungan Anda*\n";
+            $reply .= "━━━━━━━━━━━━━━━\n\n";
+            
+            $totalBalance = \App\Models\Balance::where('tenant_id', $this->message->tenant_id)
+                ->sum('current_balance');
+            
+            $reply .= "💰 *Tabungan saat ini*: Rp " . number_format($totalBalance, 0, ',', '.') . "\n\n";
+            
+            $reply .= "━━━━━━━━━━━━━━━\n";
+            $reply .= "💡 *Set target:*\n";
+            $reply .= "_\"set target 10jt untuk liburan\"_\n";
+            $reply .= "_\"mau nabung 5jt bulan ini\"_";
+            
+            $this->sendReply($reply);
+            
+        } catch (\Exception $e) {
+            Log::error('Error checking target', [
                 'message_id' => $this->message->id,
                 'error' => $e->getMessage()
             ]);
             
             $this->sendReply(
-                "⚠️ *Gagal menghapus target*\n\n" .
-                "Terjadi kesalahan. Silakan coba lagi."
+                "⚠️ *Gagal memuat target*\n\n" .
+                "Terjadi kesalahan. Silakan coba lagi nanti."
             );
         }
     }

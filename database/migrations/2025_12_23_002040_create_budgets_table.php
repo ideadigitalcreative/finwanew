@@ -24,7 +24,7 @@ return new class extends Migration
             $table->integer('alert_threshold')->default(80); // Alert at 80% usage
             $table->json('metadata')->nullable(); // For future extensions
             $table->timestamps();
-            
+
             // Indexes for performance
             $table->index(['tenant_id', 'category_id', 'period']);
             $table->index(['tenant_id', 'is_active']);

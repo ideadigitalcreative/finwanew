@@ -4,6 +4,8 @@ import { ChevronDown, Wallet, TrendingUp } from 'lucide-vue-next';
 interface Props {
     balance: number;
     lastIncome: number;
+    lastIncomeDate?: string | null;
+    cashflow: number;
     bonus: number;
     period?: string;
 }
@@ -18,10 +20,24 @@ const formatCurrency = (amount: number) => {
         maximumFractionDigits: 0
     }).format(amount);
 };
+
+const currentMonthLabel = () => {
+    const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const now = new Date();
+    return months[now.getMonth()];
+};
+
+const formatShortDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getDate()} ${months[d.getMonth()]}`;
+};
 </script>
 
 <template>
-    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 shadow-xl shadow-primary/5 transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10 animate-fade-in-up" style="animation-delay: 0.1s">
+    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 transition-all duration-500 animate-fade-in-up" style="animation-delay: 0.1s">
         <div class="flex items-center justify-between mb-3 md:mb-4">
             <h3 class="text-sm md:text-base font-medium text-muted-foreground">Saldo Saya</h3>
             <button class="flex items-center gap-1 md:gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors bg-muted/30 backdrop-blur-sm px-2 py-1 rounded-full">
@@ -35,12 +51,26 @@ const formatCurrency = (amount: number) => {
         </div>
         
         <div class="space-y-2 md:space-y-3">
+            <!-- Last Income -->
             <div class="flex items-center gap-3 p-2.5 rounded-xl bg-accent/30 backdrop-blur-sm border border-accent/20 group-hover:bg-accent/40 transition-all">
                 <div class="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-accent/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
                     <Wallet class="w-4 h-4 md:w-4.5 md:h-4.5 text-accent-foreground" />
                 </div>
-                <span class="text-sm text-muted-foreground flex-1 min-w-0 truncate">Pendapatan terakhir</span>
+                <span class="text-sm text-muted-foreground flex-1 min-w-0 truncate">
+                    Pendapatan terakhir{{ lastIncomeDate ? ' (' + formatShortDate(lastIncomeDate) + ')' : '' }}
+                </span>
                 <span class="text-sm font-semibold text-primary flex-shrink-0">+{{ formatCurrency(lastIncome) }}</span>
+            </div>
+
+            <!-- Monthly Cashflow -->
+            <div class="flex items-center gap-3 p-2.5 rounded-xl bg-accent/30 backdrop-blur-sm border border-accent/20 group-hover:bg-accent/40 transition-all">
+                <div class="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-accent/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                    <TrendingUp class="w-4 h-4 md:w-4.5 md:h-4.5 text-accent-foreground" />
+                </div>
+                <span class="text-sm text-muted-foreground flex-1 min-w-0 truncate">Arus kas ({{ currentMonthLabel() }})</span>
+                <span class="text-sm font-semibold flex-shrink-0" :class="cashflow >= 0 ? 'text-emerald-500' : 'text-red-500'">
+                    {{ cashflow >= 0 ? '+' : '' }}{{ formatCurrency(cashflow) }}
+                </span>
             </div>
         </div>
     </div>

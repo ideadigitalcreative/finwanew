@@ -2,13 +2,12 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use App\Models\Tenant;
-use App\Models\UserTenant;
 use App\Models\Role;
+use App\Models\Tenant;
+use App\Models\User;
+use App\Models\UserTenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class SuperAdminSeeder extends Seeder
 {
@@ -30,13 +29,13 @@ class SuperAdminSeeder extends Seeder
         $ownerRole = Role::firstOrCreate(
             [
                 'tenant_id' => $tenant->id,
-                'slug' => 'owner'
+                'slug' => 'owner',
             ],
             [
                 'name' => 'Owner',
                 'permissions' => ['*'], // Full access
                 'description' => 'Tenant owner with full access',
-                'is_system' => true
+                'is_system' => true,
             ]
         );
 
@@ -54,7 +53,7 @@ class SuperAdminSeeder extends Seeder
         );
 
         // Ensure is_super_admin is set to true (in case user already exists)
-        if (!$superAdmin->is_super_admin) {
+        if (! $superAdmin->is_super_admin) {
             $superAdmin->is_super_admin = true;
             $superAdmin->save();
         }

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Laravel\Fortify\Contracts\LogoutResponse;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 
@@ -20,7 +21,16 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Default Fortify mengarahkan logout ke "/" (landing). Untuk PWA & alur app, ke halaman login.
+        $this->app->singleton(LogoutResponse::class, function () {
+            return new class implements LogoutResponse
+            {
+                public function toResponse($request)
+                {
+                    return redirect('/login');
+                }
+            };
+        });
     }
 
     /**
@@ -79,14 +89,23 @@ class FortifyServiceProvider extends ServiceProvider
     private function configureRateLimiting(): void
     {
         RateLimiter::for('two-factor', function (Request $request) {
-            return Limit::perMinute(5)->by($request->session()->get('login.id'));
+            return Limit::perMinute(3)->by($request->session()->get('login.id'));
         });
 
         RateLimiter::for('login', function (Request $request) {
             $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
 
-            return Limit::perMinute(5)->by($throttleKey);
+            return Limit::perMinute(3)->by($throttleKey);
+        });
+
+        // Global rate limiting untuk semua request
+        RateLimiter::for('global', function (Request $request) {
+            return Limit::perMinute(100)->by($request->ip());
+        });
+
+        // Rate limiting untuk API auth endpoints
+        RateLimiter::for('api-auth', function (Request $request) {
+            return Limit::perMinute(10)->by($request->ip());
         });
     }
-
 }

@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('users', function (Blueprint $table) {
             $table->foreignId('tenant_id')->nullable()->after('id')->constrained()->onDelete('cascade');
             $table->foreignId('role_id')->nullable()->after('tenant_id')->constrained()->onDelete('set null');
-            
+
             $table->index(['tenant_id', 'role_id']);
         });
     }

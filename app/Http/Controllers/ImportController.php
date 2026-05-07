@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Transaction;
 use App\Models\Category;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -18,7 +18,7 @@ class ImportController extends Controller
 
         $request->validate([
             'file' => 'required|file|mimes:csv,xlsx,xls|max:10240', // 10MB max
-            'skip_header' => 'boolean'
+            'skip_header' => 'boolean',
         ]);
 
         $file = $request->file('file');
@@ -46,6 +46,7 @@ class ImportController extends Controller
                     // Expected format: Tanggal, Tipe, Kategori, Jumlah, Sumber/Tujuan, Deskripsi, No. Referensi
                     if (count($row) < 4) {
                         $errors[] = "Baris {$rowNumber}: Data tidak lengkap";
+
                         continue;
                     }
 
@@ -57,18 +58,21 @@ class ImportController extends Controller
                     $description = trim($row[5] ?? '');
                     $referenceNumber = trim($row[6] ?? '');
 
-                    if (!$date) {
+                    if (! $date) {
                         $errors[] = "Baris {$rowNumber}: Tanggal tidak valid";
+
                         continue;
                     }
 
-                    if (!in_array($type, ['income', 'expense'])) {
+                    if (! in_array($type, ['income', 'expense'])) {
                         $errors[] = "Baris {$rowNumber}: Tipe harus 'income' atau 'expense'";
+
                         continue;
                     }
 
                     if ($amount <= 0) {
                         $errors[] = "Baris {$rowNumber}: Jumlah harus lebih dari 0";
+
                         continue;
                     }
 
@@ -76,18 +80,18 @@ class ImportController extends Controller
                     $category = Category::where('tenant_id', $tenant->id)
                         ->where(function ($q) use ($categoryName) {
                             $q->where('name', $categoryName)
-                              ->orWhere('slug', \Str::slug($categoryName));
+                                ->orWhere('slug', \Str::slug($categoryName));
                         })
                         ->first();
 
-                    if (!$category) {
+                    if (! $category) {
                         // Create category if not found
                         $category = Category::create([
                             'tenant_id' => $tenant->id,
                             'type' => $type === 'income' ? 'pendapatan_lainnya' : 'pengeluaran_lainnya',
                             'name' => $categoryName,
                             'slug' => \Str::slug($categoryName),
-                            'is_system' => false
+                            'is_system' => false,
                         ]);
                     }
 
@@ -101,17 +105,17 @@ class ImportController extends Controller
                         'description' => $description ?: 'Imported transaction',
                         'reference_number' => $referenceNumber ?: null,
                         'status' => 'confirmed',
-                        'confidence_score' => 1.0 // Manual import = 100% confidence
+                        'confidence_score' => 1.0, // Manual import = 100% confidence
                     ]);
 
                     $imported++;
 
                 } catch (\Exception $e) {
-                    $errors[] = "Baris {$rowNumber}: " . $e->getMessage();
+                    $errors[] = "Baris {$rowNumber}: ".$e->getMessage();
                     Log::error('Import error', [
                         'row' => $rowNumber,
                         'error' => $e->getMessage(),
-                        'data' => $row
+                        'data' => $row,
                     ]);
                 }
             }
@@ -123,26 +127,26 @@ class ImportController extends Controller
                 'message' => "Berhasil mengimpor {$imported} transaksi",
                 'imported' => $imported,
                 'errors' => $errors,
-                'total_rows' => count($rows)
+                'total_rows' => count($rows),
             ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Import failed', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'error' => 'Gagal mengimpor: ' . $e->getMessage()
+                'error' => 'Gagal mengimpor: '.$e->getMessage(),
             ], 500);
         }
     }
 
     protected function parseDate($value): ?\Carbon\Carbon
     {
-        if (!$value) {
+        if (! $value) {
             return null;
         }
 

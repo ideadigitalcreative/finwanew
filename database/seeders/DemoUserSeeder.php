@@ -2,13 +2,12 @@
 
 namespace Database\Seeders;
 
-use App\Models\Tenant;
 use App\Models\Role;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Models\UserTenant;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class DemoUserSeeder extends Seeder
 {
@@ -41,36 +40,36 @@ class DemoUserSeeder extends Seeder
             ->first();
 
         // If roles don't exist, create them
-        if (!$ownerRole) {
+        if (! $ownerRole) {
             $ownerRole = Role::create([
                 'tenant_id' => $demoTenant->id,
                 'name' => 'Owner',
                 'slug' => 'owner',
                 'permissions' => ['*'],
                 'description' => 'Tenant owner with full access',
-                'is_system' => true
+                'is_system' => true,
             ]);
         }
 
-        if (!$financeRole) {
+        if (! $financeRole) {
             $financeRole = Role::create([
                 'tenant_id' => $demoTenant->id,
                 'name' => 'Finance',
                 'slug' => 'finance',
                 'permissions' => ['transactions.view', 'transactions.create', 'transactions.update', 'reports.view'],
                 'description' => 'Finance staff with transaction access',
-                'is_system' => true
+                'is_system' => true,
             ]);
         }
 
-        if (!$staffRole) {
+        if (! $staffRole) {
             $staffRole = Role::create([
                 'tenant_id' => $demoTenant->id,
                 'name' => 'Staff',
                 'slug' => 'staff',
                 'permissions' => ['transactions.view', 'transactions.create'],
                 'description' => 'Staff with limited access',
-                'is_system' => true
+                'is_system' => true,
             ]);
         }
 

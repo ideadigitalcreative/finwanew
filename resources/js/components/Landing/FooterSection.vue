@@ -20,6 +20,7 @@
                 <div>
                     <p class="text-sm font-medium text-neutral-900">Bantuan</p>
                     <ul class="mt-3 space-y-2 text-sm text-neutral-500">
+                        <li><a class="hover:text-neutral-900 transition-colors" href="/tentang-kami">Tentang Kami</a></li>
                         <li><a class="hover:text-neutral-900 transition-colors" href="/bantuan">Pusat Bantuan</a></li>
                         <li><a class="hover:text-neutral-900 transition-colors" href="/panduan-umkm">Panduan UMKM</a></li>
                         <li><a class="hover:text-neutral-900 transition-colors" href="/changelog">Changelog</a></li>

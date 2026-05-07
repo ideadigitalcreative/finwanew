@@ -2,24 +2,35 @@
 
 namespace App\Services\Category;
 
-/**
- * CategoryMappingService - Handles category mapping and detection
- * 
- * REFACTORED FROM: App\Jobs\ProcessIncomingMessage
- * REFACTORING TYPE: Structural only (no logic changes)
- * 
- * Methods moved as-is without any modification to logic, conditionals,
- * or return values. Only namespace and class structure changed.
- */
 class CategoryMappingService
 {
+    protected ?CategoryCorrectionService $correctionService;
+
+    public function __construct(?CategoryCorrectionService $correctionService = null)
+    {
+        $this->correctionService = $correctionService;
+    }
+
+    /**
+     * Normalize text before category matching.
+     * Strips punctuation, collapses whitespace, trims.
+     */
+    protected static function normalizeText(string $text): string
+    {
+        $text = mb_strtolower($text);
+        $text = preg_replace('/[^\w\s]/u', ' ', $text);
+        $text = preg_replace('/\s+/', ' ', $text);
+
+        return trim($text);
+    }
+
     /**
      * Map FinWa-AI kategori to system category_type format
-     * 
-     * @param string|null $kategori The kategori from FinWa-AI (e.g., 'makan', 'transport', 'gaji')
-     * @param bool $isIncome Whether this is an income transaction
+     *
+     * @param  string|null  $kategori  The kategori from FinWa-AI (e.g., 'makan', 'transport', 'gaji')
+     * @param  bool  $isIncome  Whether this is an income transaction
      * @return string The mapped category_type (e.g., 'pengeluaran_makanan', 'pendapatan_gaji')
-     * 
+     *
      * MOVED FROM: ProcessIncomingMessage::mapFinwaKategoriToCategoryType()
      * LINES: 4966-5101
      * MODIFICATION: None (structural move only)
@@ -29,324 +40,391 @@ class CategoryMappingService
         if (empty($kategori)) {
             return $isIncome ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
         }
-        
+
         $kategoriLower = strtolower(trim($kategori));
-        
-        // Mapping for expense categories
-        $expenseMapping = [
-            'makan' => 'pengeluaran_makanan',
-            'makanan' => 'pengeluaran_makanan',
-            'minuman' => 'pengeluaran_makanan',
-            'food' => 'pengeluaran_makanan',
-            'transport' => 'pengeluaran_transport',
-            'transportasi' => 'pengeluaran_transport',
-            'bensin' => 'pengeluaran_transport',
-            'parkir' => 'pengeluaran_transport',
-            'ojek' => 'pengeluaran_transport',
-            'grab' => 'pengeluaran_transport',
-            'gojek' => 'pengeluaran_transport',
-            'hunian' => 'pengeluaran_hunian',
-            'rumah' => 'pengeluaran_hunian',
-            'kos' => 'pengeluaran_hunian',
-            'sewa' => 'pengeluaran_hunian',
-            'utilitas' => 'pengeluaran_utilitas',
-            'listrik' => 'pengeluaran_utilitas',
-            'air' => 'pengeluaran_utilitas',
-            'internet' => 'pengeluaran_utilitas',
-            'wifi' => 'pengeluaran_utilitas',
-            'kesehatan' => 'pengeluaran_kesehatan',
-            'obat' => 'pengeluaran_kesehatan',
-            'dokter' => 'pengeluaran_kesehatan',
-            'pendidikan' => 'pengeluaran_pendidikan',
-            'sekolah' => 'pengeluaran_pendidikan',
-            'buku' => 'pengeluaran_pendidikan',
-            'belanja' => 'pengeluaran_belanja',
-            'shopping' => 'pengeluaran_belanja',
-            'hiburan' => 'pengeluaran_hiburan',
-            'entertainment' => 'pengeluaran_hiburan',
-            'nonton' => 'pengeluaran_hiburan',
-            'game' => 'pengeluaran_hiburan',
-            'pulsa' => 'pengeluaran_pulsa_token',
-            'token' => 'pengeluaran_pulsa_token',
-            'kuota' => 'pengeluaran_pulsa_token',
-            'tagihan' => 'pengeluaran_tagihan',
-            'bill' => 'pengeluaran_tagihan',
-            'investasi' => 'pengeluaran_investasi',
-            'invest' => 'pengeluaran_investasi',
-            'pinjaman' => 'pengeluaran_pinjaman',
-            'cicilan' => 'pengeluaran_pinjaman',
-            'kredit' => 'pengeluaran_pinjaman',
-            'asuransi' => 'pengeluaran_asuransi',
-            'insurance' => 'pengeluaran_asuransi',
-            'pajak' => 'pengeluaran_pajak',
-            'tax' => 'pengeluaran_pajak',
-            'donasi' => 'pengeluaran_donasi',
-            'sedekah' => 'pengeluaran_donasi',
-            'zakat' => 'pengeluaran_donasi',
-            'gaji' => 'pengeluaran_gaji',
-            'upah' => 'pengeluaran_gaji',
-            'honor' => 'pengeluaran_gaji',
-            'transfer' => 'pengeluaran_lainnya',
-            'kirim' => 'pengeluaran_lainnya',
-            'setor' => 'pengeluaran_lainnya',
-            // Kategori Gaji/Upah (pembayaran ke karyawan)
-            'gaji' => 'pengeluaran_gaji',
-            'upah' => 'pengeluaran_gaji',
-            'honor' => 'pengeluaran_gaji',
-            // Kategori Keluarga
-            'keluarga' => 'pengeluaran_keluarga',
-            'orang tua' => 'pengeluaran_keluarga',
-            'ortu' => 'pengeluaran_keluarga',
-            'ibu' => 'pengeluaran_keluarga',
-            'bapak' => 'pengeluaran_keluarga',
-            'ayah' => 'pengeluaran_keluarga',
-            'mama' => 'pengeluaran_keluarga',
-            'papa' => 'pengeluaran_keluarga',
-            'istri' => 'pengeluaran_keluarga',
-            'suami' => 'pengeluaran_keluarga',
-            'anak' => 'pengeluaran_keluarga',
-            'adik' => 'pengeluaran_keluarga',
-            'kakak' => 'pengeluaran_keluarga',
-            'kasih' => 'pengeluaran_keluarga',
-            'lainnya' => 'pengeluaran_lainnya',
-        ];
-        
-        // Mapping for income categories
-        $incomeMapping = [
-            'gaji' => 'pendapatan_gaji',
-            'salary' => 'pendapatan_gaji',
-            'upah' => 'pendapatan_gaji',
-            'bonus' => 'pendapatan_bonus',
-            'thr' => 'pendapatan_bonus',
-            'komisi' => 'pendapatan_bonus',
-            'hadiah' => 'pendapatan_bonus',
-            'angpao' => 'pendapatan_bonus',
-            'investasi' => 'pendapatan_investasi',
-            'dividen' => 'pendapatan_investasi',
-            'bunga' => 'pendapatan_investasi',
-            'lainnya' => 'pendapatan_lainnya',
-            'freelance' => 'pendapatan_lainnya',
-            'proyek' => 'pendapatan_lainnya',
-            'dikasih' => 'pendapatan_lainnya',
-            'kiriman' => 'pendapatan_lainnya',
-            'keluarga' => 'pendapatan_lainnya',
-            'papi' => 'pendapatan_lainnya',
-            'mama' => 'pendapatan_lainnya',
-            'ortu' => 'pendapatan_lainnya',
-        ];
-        
-        // Use appropriate mapping based on transaction type
-        $mapping = $isIncome ? $incomeMapping : $expenseMapping;
-        
-        // Check direct match
-        if (isset($mapping[$kategoriLower])) {
-            return $mapping[$kategoriLower];
-        }
-        
-        // Try partial match (kategori contains keyword)
-        foreach ($mapping as $keyword => $categoryType) {
-            if (str_contains($kategoriLower, $keyword) || str_contains($keyword, $kategoriLower)) {
-                return $categoryType;
+
+        $aiMap = config('finwa_category_rules.ai_category_map', []);
+
+        if (isset($aiMap[$kategoriLower])) {
+            $candidates = (array) $aiMap[$kategoriLower];
+            foreach ($candidates as $candidate) {
+                if ($isIncome && str_starts_with($candidate, 'pendapatan_')) {
+                    return $candidate;
+                }
+                if (! $isIncome && str_starts_with($candidate, 'pengeluaran_')) {
+                    return $candidate;
+                }
+            }
+            if (! empty($candidates)) {
+                return $candidates[0];
             }
         }
-        
-        // Default fallback
+
+        $keywordMap = $isIncome
+            ? config('finwa_category_rules.income_keywords', [])
+            : config('finwa_category_rules.expense_keywords', []);
+
+        $weightedMatch = self::resolveCategoryByWeightedMatch($kategoriLower, $keywordMap);
+        if ($weightedMatch !== null) {
+            return $weightedMatch;
+        }
+
+        $reverseMap = [];
+        $kategoriNormalized = self::normalizeText($kategoriLower);
+        foreach ($keywordMap as $keyword => $categoryType) {
+            $kwNormalized = self::normalizeText($keyword);
+            if (str_contains($kwNormalized, $kategoriNormalized) && $kategoriNormalized !== $kwNormalized) {
+                $reverseMap[$keyword] = $categoryType;
+            }
+        }
+        if (! empty($reverseMap)) {
+            $reverseMatch = self::resolveCategoryByWeightedMatch($kategoriLower, $reverseMap);
+            if ($reverseMatch !== null) {
+                return $reverseMatch;
+            }
+
+            return reset($reverseMap);
+        }
+
         return $isIncome ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
     }
 
     /**
      * Determine category from description text
-     * 
+     *
      * MOVED FROM: ProcessIncomingMessage::determineCategoryFromDescription()
-     * LINES: 3145-3198
-     * MODIFICATION: None (structural move only)
+     * REFACTORED: Now delegates to resolveCategory() which reads from config.
+     *
+     * @param  string  $description  Transaction description
+     * @param  string|null  $merchant  Optional merchant name for better accuracy
+     * @param  int|null  $amount  Optional amount for nominal disambiguation
+     * @param  int|null  $tenantId  Optional tenant ID for feedback loop
      */
-    public function determineCategoryFromDescription(string $description): string
+    public function determineCategoryFromDescription(string $description, ?string $merchant = null, ?int $amount = null, ?int $tenantId = null): string
     {
-        $descLower = strtolower($description);
-        
-        // Category mapping based on keywords
-        $categoryMap = [
-            // Makanan
-            'makan' => 'pengeluaran_makanan',
-            'makanan' => 'pengeluaran_makanan',
-            'minum' => 'pengeluaran_makanan',
-            'kopi' => 'pengeluaran_makanan',
-            'sarapan' => 'pengeluaran_makanan',
-            'lunch' => 'pengeluaran_makanan',
-            'dinner' => 'pengeluaran_makanan',
-            
-            // Transport
-            'grab' => 'pengeluaran_transport',
-            'gojek' => 'pengeluaran_transport',
-            'bensin' => 'pengeluaran_transport',
-            'parkir' => 'pengeluaran_transport',
-            'ojek' => 'pengeluaran_transport',
-            'taxi' => 'pengeluaran_transport',
-            
-            // Belanja
-            'beli' => 'pengeluaran_belanja',
-            'belanja' => 'pengeluaran_belanja',
-            'shopping' => 'pengeluaran_belanja',
-            'bayar' => 'pengeluaran_belanja',
-            
-            // Tagihan
-            'listrik' => 'pengeluaran_tagihan',
-            'air' => 'pengeluaran_tagihan',
-            'internet' => 'pengeluaran_tagihan',
-            'wifi' => 'pengeluaran_tagihan',
-            
-            // Pulsa
-            'pulsa' => 'pengeluaran_pulsa_token',
-            'kuota' => 'pengeluaran_pulsa_token',
-            'token' => 'pengeluaran_pulsa_token',
-            
-            // Donasi/Amal
-            'sedekah' => 'pengeluaran_donasi',
-            'donasi' => 'pengeluaran_donasi',
-            'infaq' => 'pengeluaran_donasi',
-            'infak' => 'pengeluaran_donasi',
-            'zakat' => 'pengeluaran_donasi',
-            'sumbangan' => 'pengeluaran_donasi',
-            'amal' => 'pengeluaran_donasi',
-        ];
-        
-        // Check for keywords
-        foreach ($categoryMap as $keyword => $category) {
-            if (str_contains($descLower, $keyword)) {
-                return $category;
-            }
-        }
-        
-        // Default to general expense
-        return 'pengeluaran_lainnya';
+        return $this->resolveCategory($description, false, null, $merchant, $amount, $tenantId);
     }
-    
+
     /**
      * Determine category from description text (extended version)
-     * 
+     *
      * MOVED FROM: ProcessIncomingMessage::determineCategoryFromText()
-     * LINES: 7130-7240
-     * MODIFICATION: None (structural move only)
+     * REFACTORED: Now delegates to resolveCategory() which reads from config.
+     *
+     * @param  string  $description  Transaction description
+     * @param  bool  $isIncome  Whether income
+     * @param  string|null  $merchant  Optional merchant name for better accuracy
+     * @param  int|null  $amount  Optional amount for nominal disambiguation
+     * @param  int|null  $tenantId  Optional tenant ID for feedback loop
      */
-    public function determineCategoryFromText(string $description, bool $isIncome = false): string
+    public function determineCategoryFromText(string $description, bool $isIncome = false, ?string $merchant = null, ?int $amount = null, ?int $tenantId = null): string
     {
-        $textLower = strtolower($description);
-        
-        if ($isIncome) {
-            $incomeMap = [
-                'gaji' => 'pendapatan_gaji',
-                'bonus' => 'pendapatan_bonus',
-                'honor' => 'pendapatan_gaji',
-                'upah' => 'pendapatan_gaji',
-                'freelance' => 'pendapatan_lainnya',
-                'proyek' => 'pendapatan_lainnya',
-            ];
-            
-            foreach ($incomeMap as $keyword => $category) {
-                if (str_contains($textLower, $keyword)) {
-                    return $category;
+        return $this->resolveCategory($description, $isIncome, null, $merchant, $amount, $tenantId);
+    }
+
+    /**
+     * Resolve category using weighted keyword matching.
+     *
+     * Automatically prioritizes longer phrase matches over shorter ones,
+     * regardless of the order in which keywords are provided.
+     *
+     * This eliminates the "first-match-wins" bug where "bayar" (1 word)
+     * could incorrectly override "bayar makan siang" (3 words) simply
+     * because it appeared earlier in the mapping array.
+     *
+     * @param  string  $text  The input text (description/message)
+     * @param  array  $keywordMap  Associative array of keyword => category
+     * @return string|null The matched category, or null if no match
+     */
+    public static function resolveCategoryByWeightedMatch(string $text, array $keywordMap): ?string
+    {
+        $textNormalized = self::normalizeText($text);
+        if (empty($textNormalized)) {
+            return null;
+        }
+
+        $bestMatch = null;
+        $bestLength = 0;
+
+        foreach ($keywordMap as $keyword => $category) {
+            $keywordNormalized = self::normalizeText($keyword);
+            if (str_contains($textNormalized, $keywordNormalized)) {
+                $len = mb_strlen($keywordNormalized);
+                if ($len > $bestLength) {
+                    $bestLength = $len;
+                    $bestMatch = $category;
                 }
             }
-            
-            return 'pendapatan_lainnya';
         }
-        
-        // Expense categories
-        $expenseMap = [
-            // Makanan
-            'makan' => 'pengeluaran_makanan',
-            'sarapan' => 'pengeluaran_makanan',
-            'lunch' => 'pengeluaran_makanan',
-            'dinner' => 'pengeluaran_makanan',
-            'kopi' => 'pengeluaran_makanan',
-            'coffee' => 'pengeluaran_makanan',
-            'jajan' => 'pengeluaran_makanan',
-            'snack' => 'pengeluaran_makanan',
-            'cemilan' => 'pengeluaran_makanan',
-            'risol' => 'pengeluaran_makanan',
-            'martabak' => 'pengeluaran_makanan',
-            'bakso' => 'pengeluaran_makanan',
-            'mie' => 'pengeluaran_makanan',
-            'nasi' => 'pengeluaran_makanan',
-            'ayam' => 'pengeluaran_makanan',
-            'minuman' => 'pengeluaran_makanan',
-            'air' => 'pengeluaran_makanan',
-            
-            // Hiburan
-            'game' => 'pengeluaran_hiburan',
-            'steam' => 'pengeluaran_hiburan',
-            'topup game' => 'pengeluaran_hiburan',
-            'voucher game' => 'pengeluaran_hiburan',
-            'nonton' => 'pengeluaran_hiburan',
-            'bioskop' => 'pengeluaran_hiburan',
-            'cinema' => 'pengeluaran_hiburan',
-            'netflix' => 'pengeluaran_hiburan',
-            'spotify' => 'pengeluaran_hiburan',
-            'karaoke' => 'pengeluaran_hiburan',
-            
-            // Transport
-            'grab' => 'pengeluaran_transport',
-            'gojek' => 'pengeluaran_transport',
-            'ojol' => 'pengeluaran_transport',
-            'ojek' => 'pengeluaran_transport',
-            'taxi' => 'pengeluaran_transport',
-            'taksi' => 'pengeluaran_transport',
-            'bensin' => 'pengeluaran_transport',
-            'parkir' => 'pengeluaran_transport',
-            'transport' => 'pengeluaran_transport',
-            'ongkos' => 'pengeluaran_transport',
-            'pulang' => 'pengeluaran_transport',
-            'pergi' => 'pengeluaran_transport',
-            
-            // Belanja
-            'belanja' => 'pengeluaran_belanja',
-            'beli' => 'pengeluaran_belanja',
-            'shopee' => 'pengeluaran_belanja',
-            'tokped' => 'pengeluaran_belanja',
-            'kantong' => 'pengeluaran_belanja', // kantong asi, kantong plastik, dll
-            'asi' => 'pengeluaran_belanja',
-            'popok' => 'pengeluaran_belanja',
-            'pampers' => 'pengeluaran_belanja',
-            'diapers' => 'pengeluaran_belanja',
-            'susu' => 'pengeluaran_belanja', // bisa susu bayi atau minuman
-            
-            // Laundry & Rumah
-            'laundry' => 'pengeluaran_lainnya',
-            'cuci' => 'pengeluaran_lainnya',
-            'setrika' => 'pengeluaran_lainnya',
-            
-            // Tagihan
-            'listrik' => 'pengeluaran_tagihan',
-            'pln' => 'pengeluaran_tagihan',
-            'air pdam' => 'pengeluaran_tagihan',
-            'internet' => 'pengeluaran_tagihan',
-            'wifi' => 'pengeluaran_tagihan',
-            
-            // Pulsa
-            'pulsa' => 'pengeluaran_pulsa_token',
-            'kuota' => 'pengeluaran_pulsa_token',
-            'topup' => 'pengeluaran_pulsa_token',
-            
-            // Sosial/Amal - Donasi
-            'sedekah' => 'pengeluaran_donasi',
-            'infaq' => 'pengeluaran_donasi',
-            'infak' => 'pengeluaran_donasi',
-            'zakat' => 'pengeluaran_donasi',
-            'donasi' => 'pengeluaran_donasi',
-            'sumbangan' => 'pengeluaran_donasi',
-            'amal' => 'pengeluaran_donasi',
-            'kasih' => 'pengeluaran_lainnya',
-            'ngasih' => 'pengeluaran_lainnya',
-            'kirimin' => 'pengeluaran_lainnya',
+
+        return $bestMatch;
+    }
+
+    /**
+     * Resolve category from merchant name.
+     *
+     * Looks up merchant/brand name in config('merchant_categories.merchants')
+     * and returns the mapped category_type.
+     *
+     * @param  string  $merchant  The merchant name (e.g., 'KFC', 'Indomaret', 'Grab')
+     * @return string|null The category_type, or null if no merchant match
+     */
+    public static function resolveByMerchant(string $merchant): ?string
+    {
+        if (empty(trim($merchant))) {
+            return null;
+        }
+
+        $merchantLower = strtolower(trim($merchant));
+        $merchantMap = config('merchant_categories.merchants', []);
+
+        return self::resolveCategoryByWeightedMatch($merchantLower, $merchantMap);
+    }
+
+    /**
+     * Resolve category from nominal amount as disambiguation signal.
+     *
+     * When the primary keyword match yields a generic/ambiguous category
+     * (e.g., 'pengeluaran_belanja', 'pengeluaran_lainnya'), the nominal
+     * amount can help refine the category.
+     *
+     * @param  string  $text  The original text for context
+     * @param  int  $amount  The transaction amount
+     * @param  string  $currentCategory  The current (possibly generic) category
+     * @return string The refined category (or same if no refinement)
+     */
+    public static function resolveByNominal(string $text, int $amount, string $currentCategory): string
+    {
+        if ($amount <= 0) {
+            return $currentCategory;
+        }
+
+        $textLower = strtolower(trim($text));
+
+        $genericCategories = [
+            'pengeluaran_belanja',
+            'pengeluaran_lainnya',
+            'pendapatan_lainnya',
         ];
-        
-        foreach ($expenseMap as $keyword => $category) {
-            if (str_contains($textLower, $keyword)) {
-                return $category;
+
+        if (! in_array($currentCategory, $genericCategories, true)) {
+            return $currentCategory;
+        }
+
+        $hasBayarBeli = str_contains($textLower, 'bayar') || str_contains($textLower, 'beli')
+            || str_contains($textLower, 'belanja');
+
+        if (! $hasBayarBeli) {
+            return $currentCategory;
+        }
+
+        if ($amount >= 500000) {
+            $billPatterns = ['tagihan', 'cicilan', 'angsuran', 'kredit', 'kpr', 'sewa', 'kos', 'listrik', 'air', 'internet', 'wifi', 'bpjs', 'asuransi', 'pajak'];
+            foreach ($billPatterns as $pattern) {
+                if (str_contains($textLower, $pattern)) {
+                    return 'pengeluaran_tagihan';
+                }
+            }
+            if (str_contains($textLower, 'bayar') && ! str_contains($textLower, 'makan') && ! str_contains($textLower, 'beli')) {
+                return 'pengeluaran_tagihan';
             }
         }
-        
-        return 'pengeluaran_lainnya';
+
+        if ($amount <= 15000 && $currentCategory === 'pengeluaran_belanja') {
+            return 'pengeluaran_makanan';
+        }
+
+        return $currentCategory;
+    }
+
+    public static function getCategoryConfidence(string $method, int $matchLength = 0, string $text = ''): float
+    {
+        switch ($method) {
+            case 'learned':
+                return 0.95;
+            case 'ai':
+                return 0.90;
+            case 'merchant':
+                return 0.85;
+            case 'keyword_exact':
+                return 0.80;
+            case 'keyword_partial':
+                $lenRatio = $matchLength > 0 ? min($matchLength / max(mb_strlen($text), 1), 1.0) : 0.3;
+
+                return round(0.50 + ($lenRatio * 0.25), 2);
+            case 'nominal_refined':
+                return 0.55;
+            case 'default':
+            default:
+                return 0.30;
+        }
+    }
+
+    /**
+     * Unified category resolver — single source of truth.
+     *
+     * Resolution priority:
+     *   0. User feedback loop (learned corrections — highest priority)
+     *   1. AI category (if provided with high confidence)
+     *   2. Merchant-based lookup (if merchant is known)
+     *   3. Weighted keyword matching from config
+     *   4. Nominal-based disambiguation (refine generic categories)
+     *   5. Default category
+     *
+     * @param  string  $text  Input text (description/message)
+     * @param  bool  $isIncome  Whether transaction is income
+     * @param  string|null  $aiCategory  Category from AI (optional, used as high-confidence override)
+     * @param  string|null  $merchant  Merchant name (optional)
+     * @param  int|null  $amount  Transaction amount (optional, for nominal disambiguation)
+     * @param  int|null  $tenantId  Tenant ID (optional, for feedback loop lookup)
+     * @return string Resolved category_type
+     */
+    public function resolveCategory(string $text, bool $isIncome, ?string $aiCategory = null, ?string $merchant = null, ?int $amount = null, ?int $tenantId = null): string
+    {
+        $text = self::normalizeText($text);
+
+        // Step 0: Check learned corrections from user feedback
+        if ($tenantId !== null && $this->correctionService !== null) {
+            $learned = $this->correctionService->getLearnedCategory($tenantId, $text, $merchant);
+            if ($learned !== null) {
+                return $learned;
+            }
+        }
+
+        // Step 1: AI category (highest confidence)
+        if (! empty($aiCategory)) {
+            $aiMap = config('finwa_category_rules.ai_category_map', []);
+            $aiLower = strtolower(trim($aiCategory));
+            if (isset($aiMap[$aiLower])) {
+                $candidates = $aiMap[$aiLower];
+                foreach ($candidates as $candidate) {
+                    if ($isIncome && str_starts_with($candidate, 'pendapatan_')) {
+                        return $candidate;
+                    }
+                    if (! $isIncome && str_starts_with($candidate, 'pengeluaran_')) {
+                        return $candidate;
+                    }
+                }
+                if (! empty($candidates)) {
+                    return $candidates[0];
+                }
+            }
+        }
+
+        // Step 2: Merchant-based resolution
+        if (! empty($merchant) && ! $isIncome) {
+            $merchantCategory = self::resolveByMerchant($merchant);
+            if ($merchantCategory !== null) {
+                return $merchantCategory;
+            }
+        }
+
+        // Also check merchant keywords in the text itself
+        if (! $isIncome) {
+            $merchantFromText = self::resolveByMerchant($text);
+            if ($merchantFromText !== null) {
+                return $merchantFromText;
+            }
+        }
+
+        // Step 3: Weighted keyword matching from config
+        $keywordMap = $isIncome
+            ? config('finwa_category_rules.income_keywords', [])
+            : config('finwa_category_rules.expense_keywords', []);
+
+        $match = self::resolveCategoryByWeightedMatch($text, $keywordMap);
+        if ($match !== null) {
+            // Step 4: Nominal-based refinement for generic categories
+            if ($amount !== null && ! $isIncome) {
+                $match = self::resolveByNominal($text, $amount, $match);
+            }
+
+            return $match;
+        }
+
+        // Step 4b: Nominal-based fallback for unmatched text
+        if ($amount !== null && ! $isIncome) {
+            $default = 'pengeluaran_lainnya';
+
+            return self::resolveByNominal($text, $amount, $default);
+        }
+
+        // Step 5: Default
+        return $isIncome ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
+    }
+
+    public function resolveCategoryWithConfidence(string $text, bool $isIncome, ?string $aiCategory = null, ?string $merchant = null, ?int $amount = null, ?int $tenantId = null): array
+    {
+        if ($tenantId !== null && $this->correctionService !== null) {
+            $learned = $this->correctionService->getLearnedCategory($tenantId, $text, $merchant);
+            if ($learned !== null) {
+                return ['category' => $learned, 'confidence' => self::getCategoryConfidence('learned')];
+            }
+        }
+
+        if (! empty($aiCategory)) {
+            $aiMap = config('finwa_category_rules.ai_category_map', []);
+            $aiLower = strtolower(trim($aiCategory));
+            if (isset($aiMap[$aiLower])) {
+                $candidates = $aiMap[$aiLower];
+                foreach ($candidates as $candidate) {
+                    if ($isIncome && str_starts_with($candidate, 'pendapatan_')) {
+                        return ['category' => $candidate, 'confidence' => self::getCategoryConfidence('ai')];
+                    }
+                    if (! $isIncome && str_starts_with($candidate, 'pengeluaran_')) {
+                        return ['category' => $candidate, 'confidence' => self::getCategoryConfidence('ai')];
+                    }
+                }
+                if (! empty($candidates)) {
+                    return ['category' => $candidates[0], 'confidence' => self::getCategoryConfidence('ai')];
+                }
+            }
+        }
+
+        if (! empty($merchant) && ! $isIncome) {
+            $merchantCategory = self::resolveByMerchant($merchant);
+            if ($merchantCategory !== null) {
+                return ['category' => $merchantCategory, 'confidence' => self::getCategoryConfidence('merchant')];
+            }
+        }
+
+        if (! $isIncome) {
+            $merchantFromText = self::resolveByMerchant($text);
+            if ($merchantFromText !== null) {
+                return ['category' => $merchantFromText, 'confidence' => self::getCategoryConfidence('merchant')];
+            }
+        }
+
+        $keywordMap = $isIncome
+            ? config('finwa_category_rules.income_keywords', [])
+            : config('finwa_category_rules.expense_keywords', []);
+
+        $match = self::resolveCategoryByWeightedMatch($text, $keywordMap);
+        if ($match !== null) {
+            $matchLen = mb_strlen(explode(' → ', $match)[0] ?? '');
+            $isExact = isset($keywordMap[mb_strtolower(trim($text))]);
+            $method = $isExact ? 'keyword_exact' : 'keyword_partial';
+            $confidence = self::getCategoryConfidence($method, $matchLen, $text);
+            if ($amount !== null && ! $isIncome) {
+                $refined = self::resolveByNominal($text, $amount, $match);
+                if ($refined !== $match) {
+                    return ['category' => $refined, 'confidence' => self::getCategoryConfidence('nominal_refined')];
+                }
+            }
+
+            return ['category' => $match, 'confidence' => $confidence];
+        }
+
+        if ($amount !== null && ! $isIncome) {
+            $default = 'pengeluaran_lainnya';
+            $refined = self::resolveByNominal($text, $amount, $default);
+            if ($refined !== $default) {
+                return ['category' => $refined, 'confidence' => self::getCategoryConfidence('nominal_refined')];
+            }
+        }
+
+        $default = $isIncome ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
+
+        return ['category' => $default, 'confidence' => self::getCategoryConfidence('default')];
     }
 }

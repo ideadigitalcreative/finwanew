@@ -11,7 +11,7 @@ $content1 = str_replace(
 file_put_contents($file1, $content1);
 echo "✅ Updated: BroadcastController.php\n";
 
-// Update WhatsAppEngineWebhookController.php  
+// Update WhatsAppEngineWebhookController.php
 $file2 = 'app/Http/Controllers/Webhook/WhatsAppEngineWebhookController.php';
 if (file_exists($file2)) {
     $content2 = file_get_contents($file2);

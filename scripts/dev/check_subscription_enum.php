@@ -15,13 +15,13 @@ echo "=== CHECKING SUBSCRIPTION TABLE STRUCTURE ===\n\n";
 // Get table structure
 $columns = DB::select("SHOW COLUMNS FROM subscriptions WHERE Field = 'plan'");
 
-if (!empty($columns)) {
+if (! empty($columns)) {
     $column = $columns[0];
     echo "Column: {$column->Field}\n";
     echo "Type: {$column->Type}\n";
     echo "Null: {$column->Null}\n";
     echo "Default: {$column->Default}\n\n";
-    
+
     // Extract ENUM values
     if (preg_match("/^enum\((.+)\)$/", $column->Type, $matches)) {
         $values = str_getcsv($matches[1], ',', "'");

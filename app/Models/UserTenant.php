@@ -8,22 +8,22 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class UserTenant extends Model
 {
     protected $table = 'user_tenants';
-    
+
     protected $fillable = [
         'user_id',
         'tenant_id',
         'role_id',
         'is_active',
-        'joined_at'
+        'joined_at',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        'joined_at' => 'datetime'
+        'joined_at' => 'datetime',
     ];
 
     public $timestamps = true;
-    
+
     public $incrementing = true;
 
     public function user(): BelongsTo

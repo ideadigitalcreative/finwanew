@@ -8,10 +8,10 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
 
 class ProfileController extends Controller
 {
@@ -29,7 +29,6 @@ class ProfileController extends Controller
     /**
      * Update the user's profile information.
      */
-
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
         $user = $request->user();
@@ -49,11 +48,11 @@ class ProfileController extends Controller
                 $oldPath = str_replace('/storage/', '', $user->avatar);
                 Storage::disk('public')->delete($oldPath);
             }
-            
+
             // Store new avatar
             $path = $request->file('avatar')->store('avatars', 'public');
-            $user->avatar = '/storage/' . $path;
-            
+            $user->avatar = '/storage/'.$path;
+
             Log::info('Avatar uploaded', ['path' => $user->avatar]);
         }
 

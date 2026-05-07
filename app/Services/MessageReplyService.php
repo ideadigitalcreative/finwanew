@@ -2,8 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\Message;
 use App\Models\Channel;
+use App\Models\Message;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class MessageReplyService
@@ -22,23 +23,24 @@ class MessageReplyService
     {
         try {
             $channel = Channel::find($this->message->channel_id);
-            
-            if (!$channel) {
+
+            if (! $channel) {
                 Log::error('Channel not found for reply', [
                     'message_id' => $this->message->id,
-                    'channel_id' => $this->message->channel_id
+                    'channel_id' => $this->message->channel_id,
                 ]);
+
                 return;
             }
 
             $sessionId = $channel->config['session_id'] ?? "wa_{$channel->tenant_id}_{$channel->channel_account}";
-            
+
             // Get recipient - use sender_id for reply
             $recipient = $this->message->sender_id;
-            
+
             // Check for originalLid in metadata for LID routing
-            $metadata = is_array($this->message->metadata) 
-                ? $this->message->metadata 
+            $metadata = is_array($this->message->metadata)
+                ? $this->message->metadata
                 : json_decode($this->message->metadata ?? '{}', true);
             $originalLid = $metadata['original_sender_id'] ?? null;
 
@@ -46,10 +48,16 @@ class MessageReplyService
             $whatsappService = app(WhatsAppService::class);
             $whatsappService->sendMessage($sessionId, $recipient, $text, 'text', $originalLid);
 
+            // Mark that a reply was sent to this sender (used to suppress
+            // duplicate empty-body LID notifications in ProcessIncomingMessage)
+            $senderDigits = preg_replace('/\D/', '', $recipient);
+            $replyMarkerKey = "wa_reply_sent:{$this->message->tenant_id}:{$senderDigits}";
+            Cache::put($replyMarkerKey, true, now()->addSeconds(30));
+
         } catch (\Exception $e) {
             Log::error('Failed to send reply', [
                 'message_id' => $this->message->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
     }
@@ -61,20 +69,21 @@ class MessageReplyService
     {
         try {
             $channel = Channel::find($this->message->channel_id);
-            
-            if (!$channel) {
+
+            if (! $channel) {
                 Log::error('Channel not found for document send', [
-                    'message_id' => $this->message->id
+                    'message_id' => $this->message->id,
                 ]);
+
                 return;
             }
 
             $sessionId = $channel->config['session_id'] ?? "wa_{$channel->tenant_id}_{$channel->channel_account}";
             $recipient = $this->message->sender_id;
-            
+
             // Check for originalLid in metadata
-            $metadata = is_array($this->message->metadata) 
-                ? $this->message->metadata 
+            $metadata = is_array($this->message->metadata)
+                ? $this->message->metadata
                 : json_decode($this->message->metadata ?? '{}', true);
             $originalLid = $metadata['original_sender_id'] ?? null;
 
@@ -84,7 +93,7 @@ class MessageReplyService
         } catch (\Exception $e) {
             Log::error('Failed to send document', [
                 'message_id' => $this->message->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
     }
@@ -96,19 +105,20 @@ class MessageReplyService
     {
         try {
             $channel = Channel::find($this->message->channel_id);
-            
-            if (!$channel) {
+
+            if (! $channel) {
                 Log::error('Channel not found for image send', [
-                    'message_id' => $this->message->id
+                    'message_id' => $this->message->id,
                 ]);
+
                 return;
             }
 
             $sessionId = $channel->config['session_id'] ?? "wa_{$channel->tenant_id}_{$channel->channel_account}";
             $recipient = $this->message->sender_id;
-            
-            $metadata = is_array($this->message->metadata) 
-                ? $this->message->metadata 
+
+            $metadata = is_array($this->message->metadata)
+                ? $this->message->metadata
                 : json_decode($this->message->metadata ?? '{}', true);
             $originalLid = $metadata['original_sender_id'] ?? null;
 
@@ -118,7 +128,7 @@ class MessageReplyService
         } catch (\Exception $e) {
             Log::error('Failed to send image', [
                 'message_id' => $this->message->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
     }

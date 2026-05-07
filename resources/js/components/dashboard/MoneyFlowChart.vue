@@ -27,22 +27,27 @@ const filterOptions: FilterType[] = ['Harian', 'Mingguan', 'Bulanan'];
 // Chart Colors Map (Updated to match image reference)
 const chartColors = {
     dark: {
-        primary: 'hsl(142, 70%, 50%)',   // Income (Top) - Emerald
-        expense: 'hsl(85, 50%, 55%)',    // Expense (Middle) - Muted Lime
-        space:   'hsl(140, 10%, 85%)',   // Space (Bottom) - Pale Grayish Green
+        primary: 'hsl(142, 70%, 50%)',   // Income - Emerald
+        expense: 'hsl(30, 90%, 55%)',    // Expense - Orange
+        space:   '#3b82f6',              // Sisa - Blue
         border:  'hsla(217, 20%, 20%, 0.3)',
         text:    '#9ca3af'
     },
     light: {
-        primary: 'hsl(142, 71%, 45%)',   // Income (Top) - Emerald
-        expense: 'hsl(85, 60%, 65%)',    // Expense (Middle) - Pistachio
-        space:   'hsl(140, 20%, 90%)',   // Space (Bottom) - Very Pale Sage
-        border:  'hsla(214, 20%, 92%, 0.3)',
+        primary: 'rgb(33, 196, 93)',     // Income - Emerald
+        expense: 'rgb(251, 146, 60)',    // Expense - Orange
+        space:   '#3b82f6',              // Sisa - Blue
+        border:  'rgba(226, 232, 240, 0.8)',
         text:    '#6b7280'
     }
 };
 
 const colors = ref(chartColors.light);
+
+const isMobile = ref(false);
+const updateMobileStatus = () => {
+    isMobile.value = window.innerWidth < 768;
+};
 
 const updateTheme = () => {
     const isDark = document.documentElement.classList.contains('dark');
@@ -51,6 +56,9 @@ const updateTheme = () => {
 
 onMounted(() => {
     updateTheme();
+    updateMobileStatus();
+    window.addEventListener('resize', updateMobileStatus);
+    
     const observer = new MutationObserver(updateTheme);
     observer.observe(document.documentElement, { 
         attributes: true, 
@@ -60,39 +68,45 @@ onMounted(() => {
 
 // Chart Data
 const chartData = computed(() => {
-    const labels = props.data.map(d => d.month.split(' ')[0]);
+    const filteredData = filter.value === 'Harian' 
+        ? props.data.slice(-1) 
+        : filter.value === 'Mingguan' 
+            ? props.data.slice(-3) 
+            : props.data;
+    
+    const labels = filteredData.map(d => d.month.split(' ')[0]);
     
     return {
         labels,
         datasets: [
             {
                 label: 'Sisa',
-                data: props.data.map(d => d.net),
+                data: filteredData.map(d => d.net),
                 backgroundColor: colors.value.space,
                 borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 50, bottomRight: 50 }, // Increased rounding
                 borderSkipped: false,
                 barThickness: 'flex' as const,
-                maxBarThickness: 40,
+                maxBarThickness: isMobile.value ? 25 : 50,
                 stack: 'stack1',
             },
             {
                 label: 'Keluar',
-                data: props.data.map(d => d.expense),
+                data: filteredData.map(d => d.expense),
                 backgroundColor: colors.value.expense,
                 borderRadius: 0,
                 borderSkipped: false,
                 barThickness: 'flex' as const,
-                maxBarThickness: 40,
+                maxBarThickness: isMobile.value ? 25 : 50,
                 stack: 'stack1',
             },
             {
                 label: 'Masuk',
-                data: props.data.map(d => d.income),
+                data: filteredData.map(d => d.income),
                 backgroundColor: colors.value.primary,
                 borderRadius: { topLeft: 50, topRight: 50, bottomLeft: 0, bottomRight: 0 }, // Increased rounding
                 borderSkipped: false,
                 barThickness: 'flex' as const,
-                maxBarThickness: 40,
+                maxBarThickness: isMobile.value ? 25 : 50,
                 stack: 'stack1',
             }
         ]
@@ -175,7 +189,7 @@ const chartOptions = computed(() => {
 </script>
 
 <template>
-    <div class="bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 shadow-xl shadow-primary/5 transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10">
+    <div class="bg-card/60 backdrop-blur-2xl rounded-[13px] p-3 md:p-5 border border-gray-200/50 dark:border-gray-700/30 transition-all duration-500">
         <!-- Header -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 md:mb-6">
             <h3 class="text-sm md:text-base font-semibold text-foreground">Arus Uang</h3>
@@ -184,15 +198,15 @@ const chartOptions = computed(() => {
                 <!-- Legend -->
                 <div class="hidden sm:flex items-center gap-6">
                     <div class="flex items-center gap-1.5">
-                        <div class="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full shadow-lg" :style="{ backgroundColor: colors.primary, boxShadow: `0 0 10px ${colors.primary}80` }" />
+                        <div class="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full" :style="{ backgroundColor: colors.primary }" />
                         <span class="text-xs text-muted-foreground">Masuk</span>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <div class="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full shadow-lg" :style="{ backgroundColor: colors.expense, boxShadow: `0 0 10px ${colors.expense}80` }" />
+                        <div class="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full" :style="{ backgroundColor: colors.expense }" />
                         <span class="text-xs text-muted-foreground">Keluar</span>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <div class="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full shadow-lg" :style="{ backgroundColor: colors.space, boxShadow: `0 0 10px ${colors.space}80` }" />
+                        <div class="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full" :style="{ backgroundColor: colors.space }" />
                         <span class="text-xs text-muted-foreground">Sisa</span>
                     </div>
                 </div>
@@ -201,14 +215,14 @@ const chartOptions = computed(() => {
                 <div class="relative">
                     <button 
                         @click="isFilterOpen = !isFilterOpen"
-                        class="flex items-center gap-1.5 text-xs md:text-sm text-foreground font-medium hover:text-primary transition-colors px-4 py-2 rounded-full bg-primary/10 backdrop-blur-sm border border-primary/20 hover:bg-primary/20"
+                        class="flex items-center gap-1.5 text-xs md:text-sm text-foreground font-medium hover:text-primary transition-colors px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-primary/10 backdrop-blur-sm border border-primary/20 hover:bg-primary/20"
                     >
                         {{ filter }}
                         <ChevronDown class="w-3.5 h-3.5 md:w-4 md:h-4" />
                     </button>
                     
                     <!-- Dropdown Content -->
-                     <div v-if="isFilterOpen" class="absolute right-0 top-full mt-2 w-32 backdrop-blur-2xl bg-card/90 border border-border/30 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col p-1">
+                     <div v-if="isFilterOpen" class="absolute right-0 top-full mt-2 w-32 backdrop-blur-2xl bg-card/90 border border-border/30 rounded-xl z-50 overflow-hidden flex flex-col p-1">
                         <button 
                             v-for="opt in filterOptions" 
                             :key="opt"
@@ -224,7 +238,7 @@ const chartOptions = computed(() => {
         </div>
         
         <!-- Chart Container -->
-        <div class="h-[200px] md:h-[280px] w-full relative">
+        <div class="h-[170px] md:h-[280px] w-full relative">
              <Bar :data="chartData" :options="chartOptions" />
         </div>
     </div>

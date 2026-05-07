@@ -8,10 +8,13 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 // Props
 interface Props {
-    planDetails: {
+    plans: Record<string, {
+        slug: string;
         name: string;
         monthly_price: number;
-    };
+        description: string;
+        features: string[];
+    }>;
     durationOptions: Array<{
         value: number;
         label: string;
@@ -29,6 +32,7 @@ const props = defineProps<Props>();
 
 // State
 const currentStep = ref(1);
+const selectedPlan = ref(props.plans['lite'] || Object.values(props.plans)[0]);
 const selectedDuration = ref(props.durationOptions[0]);
 const selectedPaymentMethod = ref<'qris' | 'bank'>('qris');
 const selectedFile = ref<File | null>(null);
@@ -37,7 +41,7 @@ const showQrZoom = ref(false);
 
 // Form
 const subscriptionForm = useForm({
-    plan: 'growth',
+    plan: selectedPlan.value.slug,
     duration_months: selectedDuration.value.value,
     payment_method: 'qris',
     payment_proof: null as File | null,
@@ -46,7 +50,7 @@ const subscriptionForm = useForm({
 
 // Computed
 const subtotal = computed(() => {
-    return props.planDetails.monthly_price * selectedDuration.value.value;
+    return selectedPlan.value.monthly_price * selectedDuration.value.value;
 });
 
 const discount = computed(() => {
@@ -67,6 +71,11 @@ const formatCurrency = (amount: number) => {
 };
 
 // Methods
+const selectPlan = (plan: typeof selectedPlan.value) => {
+    selectedPlan.value = plan;
+    subscriptionForm.plan = plan.slug;
+};
+
 const selectDuration = (duration: typeof selectedDuration.value) => {
     selectedDuration.value = duration;
     subscriptionForm.duration_months = duration.value;
@@ -181,14 +190,41 @@ const copyToClipboard = async (text: string) => {
                 <!-- Step 1: Pilih Paket -->
                 <div v-show="currentStep === 1" class="space-y-6">
                     <div>
-                        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Pilih Durasi Langganan</h3>
-                        <p class="text-sm text-gray-500">Semakin lama durasi, semakin hemat!</p>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Pilih Paket & Durasi</h3>
+                        <p class="text-sm text-gray-500">Pilih paket yang sesuai dengan kebutuhan Anda</p>
                     </div>
 
-                    <!-- Plan Info -->
-                    <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-                        <h4 class="text-base font-bold text-gray-900 dark:text-white">{{ planDetails.name }}</h4>
-                        <p class="text-sm text-gray-500">{{ formatCurrency(planDetails.monthly_price) }}/bulan</p>
+                    <!-- Plan Selection -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <button
+                            v-for="plan in plans"
+                            :key="plan.slug"
+                            type="button"
+                            @click="selectPlan(plan)"
+                            class="p-5 rounded-xl border transition-all text-left relative hover:shadow-md flex flex-col h-full"
+                            :class="selectedPlan.slug === plan.slug
+                                ? 'border-green-500 bg-green-50 ring-1 ring-green-500 dark:bg-green-900/20'
+                                : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'"
+                        >
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <h4 class="font-bold text-gray-900 dark:text-white" :class="plan.slug === 'pro' ? 'text-orange-600 dark:text-orange-400' : ''">{{ plan.name }}</h4>
+                                    <p class="text-xs text-gray-500 truncate">{{ plan.description }}</p>
+                                </div>
+                                <div v-if="selectedPlan.slug === plan.slug" class="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
+                                    <Check class="w-3 h-3 text-white" />
+                                </div>
+                            </div>
+                            
+                            <div class="mt-auto">
+                                <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ formatCurrency(plan.monthly_price) }}<span class="text-sm font-normal text-gray-500">/bln</span></p>
+                            </div>
+                        </button>
+                    </div>
+
+                    <div class="pt-4 border-t border-gray-100 dark:border-gray-700">
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">Pilih Durasi Langganan</h3>
+                        <p class="text-sm text-gray-500 mb-4">Semakin lama durasi, semakin hemat!</p>
                     </div>
 
                     <!-- Duration Options -->
@@ -213,11 +249,11 @@ const copyToClipboard = async (text: string) => {
                                 </div>
                             </div>
                             <p class="text-lg sm:text-2xl font-bold text-green-600 dark:text-green-400">
-                                {{ formatCurrency(planDetails.monthly_price * duration.value - (planDetails.monthly_price * duration.value * duration.discount / 100)) }}
+                                {{ formatCurrency(selectedPlan.monthly_price * duration.value - (selectedPlan.monthly_price * duration.value * duration.discount / 100)) }}
                             </p>
                             <p class="text-xs sm:text-sm text-gray-500 mt-1">
-                                <span v-if="duration.discount > 0" class="line-through">{{ formatCurrency(planDetails.monthly_price * duration.value) }}</span>
-                                <span v-else>{{ formatCurrency(planDetails.monthly_price * duration.value) }}</span>
+                                <span v-if="duration.discount > 0" class="line-through">{{ formatCurrency(selectedPlan.monthly_price * duration.value) }}</span>
+                                <span v-else>{{ formatCurrency(selectedPlan.monthly_price * duration.value) }}</span>
                             </p>
                         </button>
                     </div>
@@ -402,7 +438,7 @@ const copyToClipboard = async (text: string) => {
                         <div class="space-y-2 text-sm">
                             <div class="flex justify-between">
                                 <span class="text-gray-600 dark:text-gray-400">Paket:</span>
-                                <span class="font-medium text-gray-900 dark:text-white">{{ planDetails.name }}</span>
+                                <span class="font-medium text-gray-900 dark:text-white">{{ selectedPlan.name }}</span>
                             </div>
                             <div class="flex justify-between">
                                 <span class="text-gray-600 dark:text-gray-400">Durasi:</span>

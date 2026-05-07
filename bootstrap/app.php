@@ -35,7 +35,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'superadmin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'subscription' => \App\Http\Middleware\CheckSubscription::class,
             'api.key' => \App\Http\Middleware\ApiKeyAuth::class,
+            'ddos' => \App\Http\Middleware\DdosProtection::class,
         ]);
+
+        // Global rate limiting untuk semua request (kecuali static files)
+        $middleware->web()->append(\Illuminate\Routing\Middleware\ThrottleRequests::class.':global');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Handle 404 untuk file serving dengan encoded slash
@@ -43,7 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
             // Check if this is a file serving request dengan encoded slash
             $requestUri = $request->getRequestUri();
             $path = $request->path();
-            
+
             // Log untuk debugging - termasuk semua 404 untuk debugging route issues
             \Illuminate\Support\Facades\Log::info('404 Exception Handler: Checking request', [
                 'request_uri' => $requestUri,
@@ -55,24 +59,27 @@ return Application::configure(basePath: dirname(__DIR__))
                 'user_id' => $request->user()?->id,
                 'is_super_admin' => $request->user()?->is_super_admin ?? false,
             ]);
-            
+
             // Check if this is a file serving request dengan encoded slash
             if ((str_starts_with($path, 'api/files') || str_starts_with($requestUri, '/api/files/')) && str_contains($requestUri, '%2F')) {
                 \Illuminate\Support\Facades\Log::info('404 Exception Handler: Handling file request with encoded slash', [
-                    'request_uri' => $requestUri
+                    'request_uri' => $requestUri,
                 ]);
-                
+
                 try {
                     $fileController = app(\App\Http\Controllers\Api\FileController::class);
+
                     return $fileController->serveFromRequest($request);
                 } catch (\Exception $ex) {
                     \Illuminate\Support\Facades\Log::error('404 Exception Handler: Error serving file', [
                         'error' => $ex->getMessage(),
-                        'trace' => $ex->getTraceAsString()
+                        'trace' => $ex->getTraceAsString(),
                     ]);
+
                     return null; // Let Laravel handle error
                 }
             }
+
             return null; // Let Laravel handle other 404s
         });
     })->create();

@@ -5,15 +5,15 @@
  * Jalankan dengan: php cek_transaksi_user.php
  */
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__.'/vendor/autoload.php';
 
-$app = require_once __DIR__ . '/bootstrap/app.php';
+$app = require_once __DIR__.'/bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
-use App\Models\User;
 use App\Models\Tenant;
 use App\Models\Transaction;
+use App\Models\User;
 use App\Models\UserWhatsAppNumber;
 
 $phoneNumber = '6285714725102';
@@ -26,22 +26,22 @@ echo "-------------------------------------------\n\n";
 
 // Cari user berdasarkan nomor telepon
 $user = User::where('whatsapp_number', $phoneNumber)
-    ->orWhere('whatsapp_number', 'like', '%' . substr($phoneNumber, -10) . '%')
+    ->orWhere('whatsapp_number', 'like', '%'.substr($phoneNumber, -10).'%')
     ->first();
 
-if (!$user) {
+if (! $user) {
     // Coba cari via UserWhatsAppNumber mapping
     $waNumber = UserWhatsAppNumber::where('whatsapp_number', $phoneNumber)
-        ->orWhere('whatsapp_number', 'like', '%' . substr($phoneNumber, -10) . '%')
+        ->orWhere('whatsapp_number', 'like', '%'.substr($phoneNumber, -10).'%')
         ->first();
-    
+
     if ($waNumber) {
         $user = User::where('id', $waNumber->user_id)->first();
         echo "User ditemukan via WhatsApp mapping\n";
     }
 }
 
-if (!$user) {
+if (! $user) {
     echo "❌ User dengan nomor {$phoneNumber} tidak ditemukan!\n";
     exit(1);
 }
@@ -54,7 +54,7 @@ echo "   Phone: {$user->phone}\n";
 
 // Cari tenant
 $tenant = $user->tenants()->first();
-if (!$tenant) {
+if (! $tenant) {
     echo "\n❌ Tenant tidak ditemukan untuk user ini!\n";
     exit(1);
 }
@@ -72,7 +72,7 @@ $lastTransaction = Transaction::where('tenant_id', $tenant->id)
     ->orderBy('created_at', 'desc')
     ->first();
 
-if (!$lastTransaction) {
+if (! $lastTransaction) {
     echo "❌ Tidak ada transaksi untuk user ini!\n";
     exit(0);
 }
@@ -81,7 +81,7 @@ echo "✅ Transaksi Terakhir:\n";
 echo "   ID: {$lastTransaction->id}\n";
 echo "   Tanggal: {$lastTransaction->transaction_date}\n";
 echo "   Tipe: {$lastTransaction->type}\n";
-echo "   Jumlah: Rp " . number_format($lastTransaction->amount, 0, ',', '.') . "\n";
+echo '   Jumlah: Rp '.number_format($lastTransaction->amount, 0, ',', '.')."\n";
 echo "   Kategori: {$lastTransaction->category_type}\n";
 echo "   Deskripsi: {$lastTransaction->description}\n";
 echo "   Dibuat: {$lastTransaction->created_at}\n";
@@ -104,5 +104,5 @@ foreach ($recentTransactions as $i => $trx) {
 }
 
 echo "\n===========================================\n";
-echo "Total transaksi user: " . Transaction::where('tenant_id', $tenant->id)->count() . "\n";
+echo 'Total transaksi user: '.Transaction::where('tenant_id', $tenant->id)->count()."\n";
 echo "===========================================\n";

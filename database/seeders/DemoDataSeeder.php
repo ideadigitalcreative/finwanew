@@ -2,16 +2,13 @@
 
 namespace Database\Seeders;
 
-use App\Models\Tenant;
-use App\Models\Category;
-use App\Models\Transaction;
 use App\Models\Balance;
-use App\Models\Cashflow;
-use App\Models\Message;
+use App\Models\Category;
 use App\Models\Channel;
-use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
+use App\Models\Tenant;
+use App\Models\Transaction;
 use Carbon\Carbon;
+use Illuminate\Database\Seeder;
 
 class DemoDataSeeder extends Seeder
 {
@@ -22,8 +19,9 @@ class DemoDataSeeder extends Seeder
     {
         $tenant = Tenant::where('slug', 'demo-company')->first();
 
-        if (!$tenant) {
+        if (! $tenant) {
             $this->command->error('Demo tenant not found. Please run DemoUserSeeder first.');
+
             return;
         }
 
@@ -113,7 +111,7 @@ class DemoDataSeeder extends Seeder
 
             // Income transactions (usually at start of month)
             foreach ($incomeCategories as $categoryType => $amounts) {
-                if (!isset($categories[$categoryType])) {
+                if (! isset($categories[$categoryType])) {
                     continue;
                 }
 
@@ -135,7 +133,7 @@ class DemoDataSeeder extends Seeder
 
             // Expense transactions (throughout the month)
             foreach ($expenseCategories as $categoryType => $amounts) {
-                if (!isset($categories[$categoryType])) {
+                if (! isset($categories[$categoryType])) {
                     continue;
                 }
 
@@ -174,9 +172,9 @@ class DemoDataSeeder extends Seeder
             ->get();
 
         $this->command->info('Demo data created:');
-        $this->command->info('- ' . count($transactions) . ' transactions');
-        $this->command->info('- ' . count($balances) . ' balances');
-        $this->command->info('- ' . $reviewTransactions->count() . ' transactions pending review');
+        $this->command->info('- '.count($transactions).' transactions');
+        $this->command->info('- '.count($balances).' balances');
+        $this->command->info('- '.$reviewTransactions->count().' transactions pending review');
     }
 
     protected function getIncomeDescription(string $categoryType): string
@@ -204,6 +202,7 @@ class DemoDataSeeder extends Seeder
         ];
 
         $options = $descriptions[$categoryType] ?? ['Pengeluaran'];
+
         return $options[array_rand($options)];
     }
 
@@ -221,6 +220,7 @@ class DemoDataSeeder extends Seeder
         ];
 
         $options = $sources[$categoryType] ?? ['Cash'];
+
         return $options[array_rand($options)];
     }
 }

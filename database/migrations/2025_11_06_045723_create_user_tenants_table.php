@@ -19,7 +19,7 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->timestamp('joined_at')->useCurrent();
             $table->timestamps();
-            
+
             // Unique constraint: user can only have one active membership per tenant
             $table->unique(['user_id', 'tenant_id']);
             $table->index(['tenant_id', 'is_active']);

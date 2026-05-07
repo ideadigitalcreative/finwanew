@@ -812,7 +812,7 @@ onUnmounted(() => {
             </div>
 
             <!-- User WhatsApp Numbers Section -->
-            <div class="rounded-2xl bg-white p-8 shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:bg-gray-800">
+            <div class="rounded-2xl bg-white p-8 border border-gray-200/50 dark:bg-gray-800 dark:border-gray-700/30">
                 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                     <div>
                         <h3 class="text-lg font-bold text-gray-900 dark:text-white">Nomor WhatsApp Saya</h3>
@@ -972,7 +972,7 @@ onUnmounted(() => {
             </div>
 
             <!-- Account Status Warning -->
-            <div v-if="!props.tenantIsActive" class="rounded-2xl border border-yellow-200 bg-yellow-50 p-6 shadow-sm dark:border-yellow-900/30 dark:bg-yellow-900/20">
+            <div v-if="!props.tenantIsActive" class="rounded-2xl border border-yellow-200 bg-yellow-50 p-6 dark:border-yellow-900/30 dark:bg-yellow-900/20">
                 <div class="flex items-start gap-4">
                     <div class="flex-shrink-0 mt-0.5">
                         <div class="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/50">
@@ -996,7 +996,7 @@ onUnmounted(() => {
                 <!-- Disabled Overlay if Account Not Active -->
                 <div
                     v-if="!props.tenantIsActive && props.channels.length > 0"
-                    class="rounded-2xl border border-yellow-200 bg-yellow-50 p-6 shadow-sm dark:border-yellow-900/30 dark:bg-yellow-900/20"
+                    class="rounded-2xl border border-yellow-200 bg-yellow-50 p-6 dark:border-yellow-900/30 dark:bg-yellow-900/20"
                 >
                     <div class="flex items-start gap-4">
                         <div class="flex-shrink-0 mt-0.5">
@@ -1018,7 +1018,7 @@ onUnmounted(() => {
                 <div
                     v-for="channel in props.channels"
                     :key="channel.id"
-                    class="rounded-2xl bg-white p-8 shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:bg-gray-800"
+                    class="rounded-2xl bg-white p-8 border border-gray-200/50 dark:bg-gray-800 dark:border-gray-700/30"
                     :class="{ 'opacity-50 pointer-events-none': !props.tenantIsActive }"
                 >
                     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">

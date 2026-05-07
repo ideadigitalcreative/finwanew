@@ -7,13 +7,13 @@ use App\Models\Subscription;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\WhatsAppNotificationService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
-use Carbon\Carbon;
 
 class SubscriptionManagementController extends Controller
 {
@@ -35,6 +35,9 @@ class SubscriptionManagementController extends Controller
         // Filter by status
         if ($request->has('status') && $request->status) {
             $baseQuery->where('status', $request->status);
+        } else {
+            // Default: Hide cancelled subscriptions to avoid clutter (e.g. old plans after upgrade)
+            $baseQuery->where('status', '!=', 'cancelled');
         }
 
         // Filter by tenant
@@ -77,7 +80,7 @@ class SubscriptionManagementController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(20)
             ->withQueryString();
-        
+
         $freeSubscriptions = [
             'data' => $freeSubscriptionsPaginated->map($transform)->values(),
             'links' => $freeSubscriptionsPaginated->linkCollection()->toArray(),
@@ -126,15 +129,28 @@ class SubscriptionManagementController extends Controller
             $tenant = $subscription->tenant;
             if ($tenant) {
                 if ($newStatus === 'active') {
-                    $tenant->update(['is_active' => true]);
+                    $tenant->update([
+                        'is_active' => true,
+                        // Clear trial_ends_at so old expired trial date
+                        // doesn't interfere with checkSubscriptionStatus()
+                        'trial_ends_at' => null,
+                    ]);
+
+                    // Prevent duplicate active subscriptions:
+                    // Cancel any OTHER active subscriptions for this tenant
+                    Subscription::where('tenant_id', $tenant->id)
+                        ->where('id', '!=', $subscription->id)
+                        ->where('status', 'active')
+                        ->update(['status' => 'cancelled']);
+
                 } elseif (in_array($newStatus, ['expired', 'cancelled'])) {
                     // Check if tenant has other active subscriptions
                     $hasActiveSubscription = Subscription::where('tenant_id', $tenant->id)
                         ->where('status', 'active')
                         ->where('id', '!=', $subscription->id)
                         ->exists();
-                    
-                    if (!$hasActiveSubscription) {
+
+                    if (! $hasActiveSubscription) {
                         $tenant->update(['is_active' => false]);
                     }
                 }
@@ -200,7 +216,7 @@ class SubscriptionManagementController extends Controller
             $metadata['upgraded_at'] = Carbon::now()->toIso8601String();
             $metadata['upgraded_from'] = $previousPlan;
 
-            if (!empty($validated['notes'])) {
+            if (! empty($validated['notes'])) {
                 $metadata['upgrade_notes'] = $validated['notes'];
             }
 
@@ -229,7 +245,34 @@ class SubscriptionManagementController extends Controller
             ]);
 
             if ($newStatus === 'active') {
-                $subscription->tenant?->update(['is_active' => true]);
+                $tenant = $subscription->tenant;
+                if ($tenant) {
+                    // Activate tenant
+                    $tenant->update([
+                        'is_active' => true,
+                        // Clear trial_ends_at so old expired trial date
+                        // doesn't interfere with checkSubscriptionStatus()
+                        'trial_ends_at' => null,
+                    ]);
+
+                    // Cancel any OTHER active subscriptions for this tenant
+                    // to prevent duplicate active subscriptions confusing the system
+                    Subscription::where('tenant_id', $tenant->id)
+                        ->where('id', '!=', $subscription->id)
+                        ->where('status', 'active')
+                        ->update(['status' => 'cancelled']);
+
+                    Log::info('Subscription upgraded successfully', [
+                        'subscription_id' => $subscription->id,
+                        'tenant_id' => $tenant->id,
+                        'from_plan' => $previousPlan,
+                        'to_plan' => $validated['plan'],
+                        'status' => $newStatus,
+                        'starts_at' => $startsAt->toIso8601String(),
+                        'ends_at' => $endsAt->toIso8601String(),
+                        'trial_ends_at_cleared' => true,
+                    ]);
+                }
             }
         });
 
@@ -249,17 +292,17 @@ class SubscriptionManagementController extends Controller
         try {
             DB::transaction(function () use ($subscription) {
                 $tenant = $subscription->tenant;
-                
+
                 // Delete the subscription
                 $subscription->delete();
-                
+
                 // If tenant exists, check if they have other active subscriptions
                 if ($tenant) {
                     $hasActiveSubscription = Subscription::where('tenant_id', $tenant->id)
                         ->where('status', 'active')
                         ->exists();
-                    
-                    if (!$hasActiveSubscription) {
+
+                    if (! $hasActiveSubscription) {
                         $tenant->update(['is_active' => false]);
                     }
                 }
@@ -272,15 +315,15 @@ class SubscriptionManagementController extends Controller
 
             return redirect()->route('superadmin.subscriptions.index')
                 ->with('success', 'Subscription berhasil dihapus');
-                
+
         } catch (\Exception $e) {
             Log::error('Failed to delete subscription', [
                 'subscription_id' => $subscription->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             return redirect()->route('superadmin.subscriptions.index')
-                ->with('error', 'Gagal menghapus subscription: ' . $e->getMessage());
+                ->with('error', 'Gagal menghapus subscription: '.$e->getMessage());
         }
     }
 
@@ -289,13 +332,13 @@ class SubscriptionManagementController extends Controller
      */
     protected function sendActivationNotification(?Subscription $subscription): void
     {
-        if (!$subscription) {
+        if (! $subscription) {
             return;
         }
 
         try {
             $tenant = $subscription->tenant;
-            if (!$tenant) {
+            if (! $tenant) {
                 return;
             }
 
@@ -305,11 +348,11 @@ class SubscriptionManagementController extends Controller
                 })
                 ->first();
 
-            if (!$user) {
+            if (! $user) {
                 $user = $tenant->users()->first();
             }
 
-            if (!$user || !$user->whatsapp_number) {
+            if (! $user || ! $user->whatsapp_number) {
                 return;
             }
 
@@ -321,14 +364,14 @@ class SubscriptionManagementController extends Controller
                     Log::error('Failed to send activation notification', [
                         'user_id' => $user->id,
                         'subscription_id' => $subscription->id,
-                        'error' => $e->getMessage()
+                        'error' => $e->getMessage(),
                     ]);
                 }
             });
         } catch (\Exception $e) {
             Log::error('Failed to send activation notification', [
                 'subscription_id' => $subscription->id ?? null,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
     }

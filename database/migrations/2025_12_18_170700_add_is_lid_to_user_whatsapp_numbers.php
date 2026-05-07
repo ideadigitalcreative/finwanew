@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('user_whatsapp_numbers', function (Blueprint $table) {
             $table->boolean('is_lid')->default(false)->after('is_primary');
         });
-        
+
         // Update existing LID entries
         // LID format: numbers that don't start with 628 (Indonesian phone format)
         DB::statement("

@@ -1,8 +1,6 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
@@ -16,15 +14,15 @@ return new class extends Migration
         $tenants = DB::table('tenants')
             ->whereNull('deleted_at')
             ->get();
-        
+
         foreach ($tenants as $tenant) {
             // Check if category already exists
             $exists = DB::table('categories')
                 ->where('tenant_id', $tenant->id)
                 ->where('type', 'pengeluaran_pulsa_token')
                 ->exists();
-            
-            if (!$exists) {
+
+            if (! $exists) {
                 DB::table('categories')->insert([
                     'tenant_id' => $tenant->id,
                     'type' => 'pengeluaran_pulsa_token',

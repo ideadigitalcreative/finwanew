@@ -21,4 +21,3 @@ return new class extends Migration
         DB::statement("ALTER TABLE `subscriptions` MODIFY `plan` ENUM('starter', 'growth', 'pro', 'enterprise') NOT NULL DEFAULT 'starter'");
     }
 };
-

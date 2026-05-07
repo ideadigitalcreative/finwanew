@@ -19,6 +19,6 @@ if ($wallets->isEmpty()) {
 } else {
     foreach ($wallets as $w) {
         $status = $w->is_active ? '✅ Active' : '❌ Inactive';
-        echo "ID: {$w->id} | Name: [{$w->name}] | Saldo: Rp " . number_format($w->balance, 0, ',', '.') . " | $status\n";
+        echo "ID: {$w->id} | Name: [{$w->name}] | Saldo: Rp ".number_format($w->balance, 0, ',', '.')." | $status\n";
     }
 }

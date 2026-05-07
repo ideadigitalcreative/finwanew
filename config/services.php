@@ -113,4 +113,33 @@ return [
         'api_key' => env('OPENAI_API_KEY'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Groq LLM Configuration - Backup AI (Llama via Groq)
+    |--------------------------------------------------------------------------
+    |
+    | Groq digunakan sebagai backup LLM untuk menangani kasus yang
+    | tidak bisa di-handle oleh FinWa-AI (rule-based), seperti:
+    | - Menjawab pertanyaan umum keuangan
+    | - Generate analisis/insight dari data keuangan user
+    | - Smart fallback classifier
+    |
+    | Mendukung multiple API key (comma-separated) dengan rotasi otomatis.
+    |
+    */
+    'groq_llm' => [
+        'api_keys' => env('GROQ_LLM_API_KEYS', env('GROQ_API_KEY', '')),
+        'base_url' => env('GROQ_LLM_BASE_URL', 'https://api.groq.com/openai/v1'),
+        'model' => env('GROQ_LLM_MODEL', 'llama-3.1-8b-instant'),
+        'timeout' => env('GROQ_LLM_TIMEOUT', 30),
+        'enabled' => env('GROQ_LLM_ENABLED', true),
+    ],
+
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        'timeout' => env('GEMINI_TIMEOUT', 60),
+        'base_url' => env('GEMINI_BASE_URL', ''),
+    ],
+
 ];

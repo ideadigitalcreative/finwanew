@@ -2,8 +2,8 @@
 
 namespace App\Services\Report;
 
-use App\Models\Message;
 use App\Models\Channel;
+use App\Models\Message;
 use App\Services\PdfReportService;
 use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\Log;
@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 class ReportCommandService
 {
     protected Message $message;
+
     protected $sendReplyCallback;
 
     public function __construct(Message $message, callable $sendReplyCallback)
@@ -34,13 +35,13 @@ class ReportCommandService
     {
         try {
             $this->sendReply("📊 Sedang membuat laporan PDF...\n\nMohon tunggu sebentar.");
-            
+
             // Parse month/year from message if specified
             $month = null;
             $year = null;
-            
+
             $textLower = strtolower($messageText);
-            
+
             // Check for month mentions
             $months = [
                 'januari' => 1, 'februari' => 2, 'maret' => 3, 'april' => 4,
@@ -50,64 +51,65 @@ class ReportCommandService
                 'jun' => 6, 'jul' => 7, 'agt' => 8, 'aug' => 8,
                 'sep' => 9, 'okt' => 10, 'oct' => 10, 'nov' => 11, 'des' => 12, 'dec' => 12,
             ];
-            
+
             foreach ($months as $monthName => $monthNum) {
                 if (str_contains($textLower, $monthName)) {
                     $month = $monthNum;
                     break;
                 }
             }
-            
+
             // Check for year
             if (preg_match('/20\d{2}/', $messageText, $yearMatch)) {
                 $year = (int) $yearMatch[0];
             }
-            
+
             // Default to current month if not specified
-            if (!$month) {
+            if (! $month) {
                 $month = now()->month;
             }
-            if (!$year) {
+            if (! $year) {
                 $year = now()->year;
             }
-            
+
             // Generate PDF
             $pdfService = new PdfReportService($this->message->tenant_id);
             $pdfPath = $pdfService->generateMonthlyReport($month, $year);
-            
-            if (!$pdfPath || !file_exists($pdfPath)) {
+
+            if (! $pdfPath || ! file_exists($pdfPath)) {
                 $this->sendReply(
-                    "⚠️ *Gagal membuat PDF*\n\n" .
-                    "Tidak dapat membuat laporan. Pastikan ada transaksi di bulan tersebut."
+                    "⚠️ *Gagal membuat PDF*\n\n".
+                    'Tidak dapat membuat laporan. Pastikan ada transaksi di bulan tersebut.'
                 );
+
                 return;
             }
-            
+
             // Send PDF via WhatsApp
-            $this->sendDocument($pdfPath, "Laporan Keuangan - " . now()->translatedFormat('F Y'));
-            
+            $this->sendDocument($pdfPath, 'Laporan Keuangan - '.now()->translatedFormat('F Y'));
+
             Log::info('PDF report sent', [
                 'message_id' => $this->message->id,
                 'tenant_id' => $this->message->tenant_id,
                 'month' => $month,
-                'year' => $year
+                'year' => $year,
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error exporting PDF', [
                 'message_id' => $this->message->id,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
-            
+
             $this->sendReply(
-                "⚠️ *Gagal membuat PDF*\n\n" .
-                "Terjadi kesalahan: " . $e->getMessage() . "\n\n" .
-                "Silakan coba lagi nanti atau hubungi support."
+                "⚠️ *Gagal membuat PDF*\n\n".
+                'Terjadi kesalahan: '.$e->getMessage()."\n\n".
+                'Silakan coba lagi nanti atau hubungi support.'
             );
         }
     }
-    
+
     /**
      * Send document via WhatsApp
      */
@@ -115,73 +117,74 @@ class ReportCommandService
     {
         try {
             $channel = Channel::find($this->message->channel_id);
-            
-            if (!$channel) {
+
+            if (! $channel) {
                 Log::error('Channel not found for document sending');
+
                 return;
             }
-            
+
             // Get session ID from channel config
             $config = $channel->config ?? [];
             $sessionId = $config['session_id'] ?? null;
-            
-            if (!$sessionId) {
+
+            if (! $sessionId) {
                 Log::error('Session ID not found in channel config');
                 throw new \Exception('Session ID not found');
             }
-            
+
             // Get phone number - try different fields
-            $toNumber = $this->message->phone_number 
-                ?? $this->message->from 
-                ?? $this->message->sender_id 
+            $toNumber = $this->message->phone_number
+                ?? $this->message->from
+                ?? $this->message->sender_id
                 ?? null;
-            
+
             // Check for LID address
             $originalLid = null;
             if ($toNumber && str_contains($toNumber, '@lid')) {
                 $originalLid = $toNumber;
                 $toNumber = str_replace('@lid', '', $toNumber);
             }
-            
-            if (!$toNumber) {
+
+            if (! $toNumber) {
                 Log::error('Phone number not found for document sending');
                 throw new \Exception('Phone number not found');
             }
-            
+
             Log::info('Sending PDF document', [
                 'session_id' => $sessionId,
                 'to' => $toNumber,
-                'file' => basename($filePath)
+                'file' => basename($filePath),
             ]);
-            
-            $whatsAppService = new WhatsAppService();
+
+            $whatsAppService = new WhatsAppService;
             $result = $whatsAppService->sendDocument(
                 $sessionId,
                 $toNumber,
                 $filePath,
                 $caption
             );
-            
-            if (!$result['success']) {
+
+            if (! $result['success']) {
                 throw new \Exception($result['error'] ?? 'Failed to send document');
             }
-            
+
         } catch (\Exception $e) {
             Log::error('Failed to send document', [
                 'error' => $e->getMessage(),
-                'file' => $filePath
+                'file' => $filePath,
             ]);
-            
+
             // Fallback: send link instead
             $filename = basename($filePath);
             $relativePath = str_replace(storage_path('app/public/'), '', $filePath);
-            $publicUrl = url('storage/' . $relativePath);
-            
+            $publicUrl = url('storage/'.$relativePath);
+
             $this->sendReply(
-                "📄 *Laporan PDF Siap*\n\n" .
-                "📎 {$filename}\n\n" .
-                "Download di sini:\n{$publicUrl}\n\n" .
-                "_Link berlaku 24 jam_"
+                "📄 *Laporan PDF Siap*\n\n".
+                "📎 {$filename}\n\n".
+                "Download di sini:\n{$publicUrl}\n\n".
+                '_Link berlaku 24 jam_'
             );
         }
     }

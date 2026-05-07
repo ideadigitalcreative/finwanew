@@ -21,7 +21,7 @@ $mapping = DB::table('user_whatsapp_numbers')
     ->where('id', $mappingId)
     ->first();
 
-if (!$mapping) {
+if (! $mapping) {
     echo "❌ Mapping not found\n";
     exit;
 }
@@ -39,9 +39,9 @@ if ($user) {
 }
 
 echo "⚠️  This will delete the LID mapping!\n";
-echo "Delete? (yes/no): ";
+echo 'Delete? (yes/no): ';
 
-$handle = fopen("php://stdin", "r");
+$handle = fopen('php://stdin', 'r');
 $line = trim(fgets($handle));
 fclose($handle);
 

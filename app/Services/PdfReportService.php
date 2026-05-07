@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\Transaction;
 use App\Models\Budget;
 use App\Models\Category;
+use App\Models\Transaction;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -27,22 +27,22 @@ class PdfReportService
         try {
             $month = $month ?? Carbon::now()->month;
             $year = $year ?? Carbon::now()->year;
-            
+
             $startDate = Carbon::create($year, $month, 1)->startOfDay();
             $endDate = $startDate->copy()->endOfMonth();
-            
+
             // Get transactions
             $transactions = Transaction::where('tenant_id', $this->tenantId)
                 ->whereBetween('transaction_date', [$startDate, $endDate])
                 ->with('category')
                 ->orderBy('transaction_date', 'desc')
                 ->get();
-            
+
             // Calculate totals
             $totalIncome = $transactions->where('type', 'income')->sum('amount');
             $totalExpense = $transactions->where('type', 'expense')->sum('amount');
             $netCashflow = $totalIncome - $totalExpense;
-            
+
             // Group expenses by category
             $expenseByCategory = $transactions->where('type', 'expense')
                 ->groupBy('category_id')
@@ -56,7 +56,7 @@ class PdfReportService
                 ->sortByDesc('total')
                 ->values()
                 ->toArray();
-            
+
             // Group income by category
             $incomeByCategory = $transactions->where('type', 'income')
                 ->groupBy('category_id')
@@ -70,13 +70,13 @@ class PdfReportService
                 ->sortByDesc('total')
                 ->values()
                 ->toArray();
-            
+
             // Daily spending for chart
             $dailySpending = $transactions->where('type', 'expense')
                 ->groupBy(fn ($tx) => $tx->transaction_date->format('d'))
                 ->map(fn ($items) => $items->sum('amount'))
                 ->toArray();
-            
+
             // Get budgets
             $budgets = Budget::where('tenant_id', $this->tenantId)
                 ->where('is_active', true)
@@ -88,7 +88,7 @@ class PdfReportService
                         ->where('type', 'expense')
                         ->whereBetween('transaction_date', [$startDate, $endDate])
                         ->sum('amount');
-                    
+
                     return [
                         'category' => $budget->category->name ?? 'Unknown',
                         'budget' => $budget->amount,
@@ -96,7 +96,7 @@ class PdfReportService
                         'percentage' => $budget->amount > 0 ? round(($spent / $budget->amount) * 100) : 0,
                     ];
                 });
-            
+
             // Previous month comparison
             $prevStart = $startDate->copy()->subMonth();
             $prevEnd = $prevStart->copy()->endOfMonth();
@@ -104,12 +104,12 @@ class PdfReportService
                 ->where('type', 'expense')
                 ->whereBetween('transaction_date', [$prevStart, $prevEnd])
                 ->sum('amount');
-            
+
             $expenseChange = 0;
             if ($prevExpense > 0) {
                 $expenseChange = round((($totalExpense - $prevExpense) / $prevExpense) * 100);
             }
-            
+
             // Prepare data for view
             $data = [
                 'month' => $startDate->translatedFormat('F Y'),
@@ -127,33 +127,33 @@ class PdfReportService
                 'recentTransactions' => $transactions->take(20),
                 'pieChartData' => $this->generatePieChartData($expenseByCategory, $totalExpense),
             ];
-            
+
             // Generate PDF
             $pdf = Pdf::loadView('reports.monthly', $data);
             $pdf->setPaper('a4', 'portrait');
-            
+
             // Save to storage
-            $filename = "laporan-keuangan-{$year}-{$month}-" . time() . ".pdf";
+            $filename = "laporan-keuangan-{$year}-{$month}-".time().'.pdf';
             $path = "reports/{$this->tenantId}/{$filename}";
-            
+
             Storage::disk('public')->put($path, $pdf->output());
-            
+
             Log::info('PDF report generated', [
                 'tenant_id' => $this->tenantId,
                 'month' => $month,
                 'year' => $year,
-                'path' => $path
+                'path' => $path,
             ]);
-            
+
             return Storage::disk('public')->path($path);
-            
+
         } catch (\Exception $e) {
             Log::error('Failed to generate PDF report', [
                 'tenant_id' => $this->tenantId,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
-            
+
             return null;
         }
     }
@@ -165,7 +165,7 @@ class PdfReportService
     {
         $startDate = Carbon::now()->subWeek()->startOfWeek();
         $endDate = Carbon::now()->subWeek()->endOfWeek();
-        
+
         // Similar logic as monthly but for week
         // For now, reuse monthly logic with week dates
         return $this->generateCustomReport($startDate, $endDate, 'Mingguan');
@@ -182,10 +182,10 @@ class PdfReportService
                 ->with('category')
                 ->orderBy('transaction_date', 'desc')
                 ->get();
-            
+
             $totalIncome = $transactions->where('type', 'income')->sum('amount');
             $totalExpense = $transactions->where('type', 'expense')->sum('amount');
-            
+
             $expenseByCategory = $transactions->where('type', 'expense')
                 ->groupBy('category_id')
                 ->map(fn ($items) => [
@@ -196,7 +196,7 @@ class PdfReportService
                 ->sortByDesc('total')
                 ->values()
                 ->toArray();
-            
+
             $data = [
                 'month' => "Laporan {$label}",
                 'generatedAt' => Carbon::now()->translatedFormat('d F Y H:i'),
@@ -212,23 +212,23 @@ class PdfReportService
                 'expenseChange' => 0,
                 'recentTransactions' => $transactions->take(20),
             ];
-            
+
             $pdf = Pdf::loadView('reports.monthly', $data);
             $pdf->setPaper('a4', 'portrait');
-            
-            $filename = "laporan-{$label}-" . time() . ".pdf";
+
+            $filename = "laporan-{$label}-".time().'.pdf';
             $path = "reports/{$this->tenantId}/{$filename}";
-            
+
             Storage::disk('public')->put($path, $pdf->output());
-            
+
             return Storage::disk('public')->path($path);
-            
+
         } catch (\Exception $e) {
             Log::error('Failed to generate custom PDF report', [
                 'tenant_id' => $this->tenantId,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
+
             return null;
         }
     }
@@ -252,11 +252,11 @@ class PdfReportService
 
         // Colors for pie segments
         $colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
-        
+
         // Take top 6 categories, group rest as "Lainnya"
         $topCategories = array_slice($expenseByCategory, 0, 6);
         $otherTotal = array_sum(array_column(array_slice($expenseByCategory, 6), 'total'));
-        
+
         if ($otherTotal > 0) {
             $topCategories[] = ['name' => 'Lainnya', 'total' => $otherTotal];
         }

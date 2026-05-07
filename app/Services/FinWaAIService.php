@@ -2,16 +2,17 @@
 
 namespace App\Services;
 
+use App\Services\DebtReceivable\FinWaDebtReceivableResponseNormalizer;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
  * FinWa-AI v2.1 Service
- * 
+ *
  * Lightweight, rule-based NLU engine for processing WhatsApp finance messages.
  * This service provides fast, deterministic intent classification and entity extraction
  * without requiring external LLM APIs.
- * 
+ *
  * Features:
  * - Intent Classification (catat_pengeluaran, catat_pemasukan, cek_cashflow, etc.)
  * - Named Entity Recognition (nominal, kategori, merchant, tanggal)
@@ -22,7 +23,9 @@ use Illuminate\Support\Facades\Log;
 class FinWaAIService
 {
     protected string $baseUrl;
+
     protected int $timeout;
+
     protected bool $enabled;
 
     public function __construct()
@@ -47,73 +50,95 @@ class FinWaAIService
     {
         try {
             $response = Http::timeout(5)->get("{$this->baseUrl}/health");
+
             return $response->successful() && ($response->json()['status'] ?? '') === 'healthy';
         } catch (\Exception $e) {
             Log::warning('FinWa-AI health check failed', ['error' => $e->getMessage()]);
+
             return false;
         }
     }
 
     /**
      * Process text message from WhatsApp
-     * 
-     * @param string $message The user's WhatsApp message
-     * @param string|null $userId Unique user identifier for context
+     *
+     * @param  string  $message  The user's WhatsApp message
+     * @param  string|null  $userId  Unique user identifier for context
      * @return array Structured result with intent and entities
      */
-    public function processText(string $message, ?string $userId = null): array
+    public function processText(string $message, ?string $userId = null, ?string $conversationContext = null): array
     {
         try {
             Log::info('FinWa-AI processing text', [
                 'message_preview' => mb_substr($message, 0, 100),
-                'user_id' => $userId
+                'user_id' => $userId,
+                'has_context' => ! empty($conversationContext),
             ]);
 
+            $payload = [
+                'message' => $message,
+                'user_id' => $userId,
+            ];
+
+            if (! empty($conversationContext)) {
+                $payload['context'] = $conversationContext;
+            }
+
+            if (config('finwa_ai_hutang_piutang.send_with_request', true)) {
+                $payload['core_api_contract'] = array_merge(
+                    config('finwa_ai_hutang_piutang.remote_contract', []),
+                    [
+                        'nlu_prompt_snippet' => config('finwa_ai_hutang_piutang.nlu_prompt_snippet'),
+                    ]
+                );
+            }
+
             $response = Http::timeout($this->timeout)
-                ->post("{$this->baseUrl}/process/text", [
-                    'message' => $message,
-                    'user_id' => $userId
-                ]);
+                ->post("{$this->baseUrl}/process/text", $payload);
 
             if ($response->successful()) {
                 $result = $response->json();
-                
+                if (is_array($result)) {
+                    $result = FinWaDebtReceivableResponseNormalizer::normalize($result);
+                }
+
                 Log::info('FinWa-AI text processing complete', [
                     'intent' => $result['intent'] ?? 'unknown',
                     'confidence' => $result['confidence'] ?? 0,
                     'nominal' => $result['entities']['nominal'] ?? null,
-                    'has_suggestion' => isset($result['suggestion'])
+                    'has_suggestion' => isset($result['suggestion']),
                 ]);
-                
+
                 return [
                     'success' => true,
-                    'data' => $result
+                    'data' => $result,
                 ];
             }
 
             Log::error('FinWa-AI API error', [
                 'status' => $response->status(),
-                'body' => $response->body()
+                'body' => $response->body(),
             ]);
 
-            return $this->errorResponse('FinWa-AI returned status ' . $response->status());
+            return $this->errorResponse('FinWa-AI returned status '.$response->status());
 
         } catch (\Exception $e) {
             Log::error('FinWa-AI connection error', ['error' => $e->getMessage()]);
+
             return $this->errorResponse($e->getMessage());
         }
     }
 
     /**
      * Process image for OCR and entity extraction
-     * 
-     * @param string $base64Image Base64 encoded image
+     *
+     * @param  string  $base64Image  Base64 encoded image
      * @return array Processing result
      */
     public function processImage(string $base64Image): array
     {
         try {
-            Log::info('FinWa-AI processing image (size: ' . strlen($base64Image) . ' bytes)...');
+            Log::info('FinWa-AI processing image (size: '.strlen($base64Image).' bytes)...');
 
             // Some APIs expect raw base64 without the data URI scheme header
             $rawBase64 = $base64Image;
@@ -121,75 +146,77 @@ class FinWaAIService
                 $rawBase64 = explode('base64,', $base64Image)[1];
             }
 
-            $response = Http::timeout($this->timeout * 2) 
+            $response = Http::timeout($this->timeout * 2)
                 ->post("{$this->baseUrl}/process/image", [
                     'image' => $base64Image,       // Format 1: Full Data URI
                     'image_base64' => $rawBase64,  // Format 2: Raw Base64
                     'file' => $rawBase64,          // Format 3: Common alias
-                    'ocr_engine' => 'paddle'       // Request PaddleOCR specifically
+                    'ocr_engine' => 'paddle',       // Request PaddleOCR specifically
                 ]);
 
             if ($response->successful()) {
                 $result = $response->json();
                 Log::info('FinWa-AI image processing successful', [
                     'items_count' => count($result['entities']['items'] ?? []),
-                    'total' => $result['entities']['nominal'] ?? null
+                    'total' => $result['entities']['nominal'] ?? null,
                 ]);
-                
+
                 return [
                     'success' => true,
-                    'data' => $result
+                    'data' => $result,
                 ];
             }
 
             Log::error('FinWa-AI image processing API error', [
                 'status' => $response->status(),
-                'body' => mb_substr($response->body(), 0, 200)
+                'body' => mb_substr($response->body(), 0, 200),
             ]);
 
-            return $this->errorResponse('FinWa-AI returned status ' . $response->status());
+            return $this->errorResponse('FinWa-AI returned status '.$response->status());
 
         } catch (\Throwable $e) {
             // Catch both Exception and Error (e.g. fatal PHP errors)
             Log::error('FinWa-AI image processing error', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
+
             return $this->errorResponse($e->getMessage());
         }
     }
 
     /**
      * Process raw OCR text
-     * 
-     * @param string $text OCR text
+     *
+     * @param  string  $text  OCR text
      * @return array Processing result
      */
     public function processOCR(string $text): array
     {
         try {
             Log::info('FinWa-AI processing OCR text...');
-            
+
             $response = Http::timeout($this->timeout)
                 ->post("{$this->baseUrl}/process/ocr", [
-                    'text' => $text
+                    'text' => $text,
                 ]);
 
             if ($response->successful()) {
                 return [
                     'success' => true,
-                    'data' => $response->json()
+                    'data' => $response->json(),
                 ];
             }
-            
+
             Log::error('FinWa-AI OCR processing API error', [
                 'status' => $response->status(),
             ]);
 
-            return $this->errorResponse('Status ' . $response->status());
+            return $this->errorResponse('Status '.$response->status());
 
         } catch (\Exception $e) {
             Log::error('FinWa-AI OCR processing error', ['error' => $e->getMessage()]);
+
             return $this->errorResponse($e->getMessage());
         }
     }
@@ -197,23 +224,23 @@ class FinWaAIService
     /**
      * Classify intent from message text
      * Maps FinWa-AI intents to the existing application's intent types
-     * 
-     * @param string $messageText The user's message
-     * @param string|null $userId Unique user identifier for context
+     *
+     * @param  string  $messageText  The user's message
+     * @param  string|null  $userId  Unique user identifier for context
      * @return array Intent classification result
      */
-    public function classifyIntent(string $messageText, ?string $userId = null): array
+    public function classifyIntent(string $messageText, ?string $userId = null, ?string $conversationContext = null): array
     {
-        $result = $this->processText($messageText, $userId);
-        
-        if (!$result['success']) {
+        $result = $this->processText($messageText, $userId, $conversationContext);
+
+        if (! $result['success']) {
             // Fallback to unknown
             return [
                 'success' => true,
                 'data' => [
                     'intent' => 'transaction', // Default fallback
-                    'confidence' => 0.5
-                ]
+                    'confidence' => 0.5,
+                ],
             ];
         }
 
@@ -231,25 +258,25 @@ class FinWaAIService
                 'confidence' => $confidence,
                 'entities' => $result['data']['entities'] ?? [],
                 'sentiment' => $result['data']['sentiment'] ?? ($result['sentiment'] ?? null),
-                'suggestion' => $result['data']['suggestion'] ?? ($result['suggestion'] ?? null)
-            ]
+                'suggestion' => $result['data']['suggestion'] ?? ($result['suggestion'] ?? null),
+            ],
         ];
     }
 
     /**
      * Extract transaction data from message
      * Compatible with existing AIProcessorService format
-     * 
-     * @param int $tenantId The tenant ID
-     * @param int $messageId The message ID
-     * @param string $messageText The message text
+     *
+     * @param  int  $tenantId  The tenant ID
+     * @param  int  $messageId  The message ID
+     * @param  string  $messageText  The message text
      * @return array Extracted transaction data
      */
     public function extractTransaction(int $tenantId, int $messageId, string $messageText): array
     {
         $result = $this->processText($messageText);
 
-        if (!$result['success']) {
+        if (! $result['success']) {
             return $result;
         }
 
@@ -263,12 +290,21 @@ class FinWaAIService
             $type = 'income';
         }
 
+        // Refine category based on specific keywords (Fix for AI misclassification)
+        $description = $entities['catatan'] ?? $messageText;
+        $category = $entities['kategori'] ?? null;
+
+        // Fix: "Jonson" (local boat transport) is often misclassified as "Hunian" due to "Sewa" keyword
+        if ($category && (stripos($description, 'jonson') !== false || stripos($description, 'johnson') !== false || stripos($description, 'perahu') !== false || stripos($description, 'speed boat') !== false)) {
+            $category = 'transportasi';
+        }
+
         // Build transaction data in existing format
         $transaction = [
             'type' => $type,
             'amount' => $entities['nominal'] ?? null,
-            'category' => $entities['kategori'] ?? null,
-            'description' => $entities['catatan'] ?? $messageText,
+            'category' => $category,
+            'description' => $description,
             'merchant' => $entities['merchant'] ?? null,
             'account_name' => null, // Will be filled by ProcessIncomingMessage
             'date' => $entities['tanggal'] ?? now()->toDateString(),
@@ -276,15 +312,15 @@ class FinWaAIService
         ];
 
         // Only return transaction if it's a transaction intent
-        if (!in_array($intent, ['catat_pengeluaran', 'catat_pemasukan'])) {
+        if (! in_array($intent, ['catat_pengeluaran', 'catat_pemasukan'])) {
             return [
                 'success' => true,
                 'data' => [
                     'extracted_transactions' => [],
                     'needs_review' => false,
                     'intent' => $intent,
-                    'message' => $this->getIntentMessage($intent)
-                ]
+                    'message' => $this->getIntentMessage($intent),
+                ],
             ];
         }
 
@@ -294,24 +330,24 @@ class FinWaAIService
                 'extracted_transactions' => [$transaction],
                 'needs_review' => $entities['nominal'] === null,
                 'confidence' => $data['confidence'] ?? 0.8,
-                'finwa_intent' => $intent
-            ]
+                'finwa_intent' => $intent,
+            ],
         ];
     }
 
     /**
      * Extract transaction from OCR text
-     * 
-     * @param int $tenantId The tenant ID
-     * @param int $messageId The message ID  
-     * @param string $ocrText The OCR text
+     *
+     * @param  int  $tenantId  The tenant ID
+     * @param  int  $messageId  The message ID
+     * @param  string  $ocrText  The OCR text
      * @return array Extracted transaction data
      */
     public function extractTransactionFromOCR(int $tenantId, int $messageId, string $ocrText): array
     {
         $result = $this->processOCR($ocrText);
 
-        if (!$result['success']) {
+        if (! $result['success']) {
             return $result;
         }
 
@@ -336,8 +372,8 @@ class FinWaAIService
                 'extracted_transactions' => [$transaction],
                 'needs_review' => $entities['nominal'] === null,
                 'confidence' => $data['confidence'] ?? 0.8,
-                'source' => 'ocr'
-            ]
+                'source' => 'ocr',
+            ],
         ];
     }
 
@@ -350,31 +386,31 @@ class FinWaAIService
             // Core transactions
             'catat_pengeluaran' => 'transaction',
             'catat_pemasukan' => 'transaction',
-            
+
             // Debt & Receivables (NEW) - treated as special transactions
             'catat_hutang' => 'debt',
             'catat_piutang' => 'receivable',
             'bayar_hutang' => 'pay_debt',
             'terima_piutang' => 'receive_payment',
-            
+
             // View & Analysis (NEW)
             'cek_cashflow' => 'query',
-            'cek_saldo' => 'query_balance',
+            'cek_saldo' => 'query',
             'cek_budget' => 'query_budget',
             'cek_statistik' => 'query_stats',
             'cek_target' => 'query_target',
-            
+
             // Management
             'lihat_transaksi' => 'query',
             'hapus_transaksi' => 'delete',
             'edit_transaksi' => 'edit',
-            
+
             // Settings (NEW)
             'set_budget' => 'set_budget',
             'set_target' => 'set_target',
             'set_reminder' => 'set_reminder',
             'export_laporan' => 'export',
-            
+
             // Utilities
             'sapa' => 'greeting',
             'help' => 'help',
@@ -392,17 +428,17 @@ class FinWaAIService
     {
         $messages = [
             'sapa' => 'Halo! 👋 Saya adalah asisten keuangan Anda. Kirimkan pesan seperti "catat makan 25rb di KFC" untuk mencatat transaksi.',
-            'help' => "📱 *Cara Penggunaan FinWa:*\n\n" .
-                     "✅ *Catat Pengeluaran:*\n" .
-                     "   → catat makan 25rb di KFC\n" .
-                     "   → beli bensin 50rb\n\n" .
-                     "✅ *Catat Pemasukan:*\n" .
-                     "   → terima gaji 5jt\n" .
-                     "   → dapat bonus 500rb\n\n" .
-                     "✅ *Lihat Ringkasan:*\n" .
-                     "   → cek cashflow\n" .
-                     "   → ringkasan bulan ini\n\n" .
-                     "📸 Anda juga bisa kirim foto struk!",
+            'help' => "📱 *Cara Penggunaan FinWa:*\n\n".
+                     "✅ *Catat Pengeluaran:*\n".
+                     "   → catat makan 25rb di KFC\n".
+                     "   → beli bensin 50rb\n\n".
+                     "✅ *Catat Pemasukan:*\n".
+                     "   → terima gaji 5jt\n".
+                     "   → dapat bonus 500rb\n\n".
+                     "✅ *Lihat Ringkasan:*\n".
+                     "   → cek cashflow\n".
+                     "   → ringkasan bulan ini\n\n".
+                     '📸 Anda juga bisa kirim foto struk!',
             'cek_cashflow' => 'Menampilkan ringkasan cashflow...',
             'lihat_transaksi' => 'Menampilkan daftar transaksi...',
             'unknown' => 'Maaf, saya tidak mengerti. Ketik "help" untuk panduan penggunaan.',
@@ -413,32 +449,34 @@ class FinWaAIService
 
     /**
      * Generate narrative report from financial data
-     * 
-     * @param array $data Financial data for comparison
+     *
+     * @param  array  $data  Financial data for comparison
      * @return string Narrative insight
      */
     public function generateReport(array $data): string
     {
         try {
             Log::info('FinWa-AI generating report...');
-            
+
             $response = Http::timeout($this->timeout)
                 ->post("{$this->baseUrl}/generate/report", $data);
 
             if ($response->successful()) {
                 $result = $response->json();
+
                 return $result['insight'] ?? '';
             }
 
             Log::error('FinWa-AI report API error', [
                 'status' => $response->status(),
-                'body' => $response->body()
+                'body' => $response->body(),
             ]);
-            
+
             return '';
 
         } catch (\Exception $e) {
             Log::error('FinWa-AI report generation error', ['error' => $e->getMessage()]);
+
             return '';
         }
     }
@@ -459,10 +497,10 @@ class FinWaAIService
                     'merchant' => null,
                     'tanggal' => null,
                     'catatan' => null,
-                    'items' => []
+                    'items' => [],
                 ],
-                'confidence' => 0.0
-            ]
+                'confidence' => 0.0,
+            ],
         ];
     }
 }

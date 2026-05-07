@@ -12,15 +12,15 @@ $tenantId = 10013;
 
 $existing = \App\Models\UserWhatsAppNumber::where('whatsapp_number', $lid)->first();
 
-if (!$existing) {
+if (! $existing) {
     \App\Models\UserWhatsAppNumber::create([
         'user_id' => $userId,
         'tenant_id' => $tenantId,
         'whatsapp_number' => $lid,
-        'name' => 'LID - ' . substr($lid, 0, 8),
+        'name' => 'LID - '.substr($lid, 0, 8),
         'is_primary' => false,
         'is_active' => true,
-        'is_lid' => true
+        'is_lid' => true,
     ]);
     echo "✅ Created LID: $lid\n";
     echo "   User: Febriansyah Nur Alvino (ID: $userId)\n";

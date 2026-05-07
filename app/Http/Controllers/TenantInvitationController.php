@@ -2,17 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\TenantInvitation;
-use App\Models\Role;
 use App\Models\User;
 use App\Models\UserTenant;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 use Inertia\Response;
-use Carbon\Carbon;
 
 class TenantInvitationController extends Controller
 {
@@ -25,7 +25,7 @@ class TenantInvitationController extends Controller
         $tenant = Tenant::findOrFail($request->tenant_id);
 
         // Only admin/owner can see invitations
-        if (!$user->isAdmin()) {
+        if (! $user->isAdmin()) {
             abort(403);
         }
 
@@ -49,7 +49,7 @@ class TenantInvitationController extends Controller
         $tenant = Tenant::findOrFail($request->tenant_id);
 
         // Only admin/owner can invite
-        if (!$user->isAdmin()) {
+        if (! $user->isAdmin()) {
             abort(403);
         }
 
@@ -127,11 +127,11 @@ class TenantInvitationController extends Controller
 
         // Mark invitation as accepted
         $invitation->update([
-            'accepted_at' => now()
+            'accepted_at' => now(),
         ]);
 
         // Update user default tenant if needed
-        if (!$user->tenant_id) {
+        if (! $user->tenant_id) {
             $user->update([
                 'tenant_id' => $invitation->tenant_id,
                 'role_id' => $invitation->role_id,
@@ -152,7 +152,7 @@ class TenantInvitationController extends Controller
         $user = $request->user();
 
         // Only admin/owner can delete
-        if (!$user->isAdmin()) {
+        if (! $user->isAdmin()) {
             abort(403);
         }
 

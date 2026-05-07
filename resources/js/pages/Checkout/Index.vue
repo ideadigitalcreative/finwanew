@@ -36,6 +36,7 @@ interface Props {
     durations: Duration[];
     banks: Bank[];
     isFreePlan?: boolean;
+    planSlug: string;
 }
 
 const props = defineProps<Props>();
@@ -84,7 +85,7 @@ const registerForm = useForm({
     whatsapp_number: '',
     password: '',
     password_confirmation: '',
-    plan: props.isFreePlan ? 'free' : 'growth',
+    plan: props.planSlug,
     duration_months: selectedDuration.value.months,
     price: total.value,
 });
@@ -100,7 +101,7 @@ const handleRegister = () => {
     // Update price and plan before submit
     registerForm.price = total.value;
     registerForm.duration_months = selectedDuration.value.months;
-    registerForm.plan = props.isFreePlan ? 'free' : 'growth';
+    registerForm.plan = props.planSlug;
     
     // Submit registration form to Fortify
     registerForm.post('/register', {
@@ -117,7 +118,7 @@ const handleRegister = () => {
                     currency: 'IDR',
                     value: 0,
                 });
-                showSuccess('Berhasil', 'Pendaftaran berhasil! Ujicoba gratis Anda telah dimulai.');
+                                showSuccess('Berhasil', 'Pendaftaran berhasil! Paket gratis Anda telah aktif.<br><br>Gabung Grup WhatsApp: <a href="https://chat.whatsapp.com/DAjG9zU2e9vAi8jiDp5jar" target="_blank" class="text-emerald-600 font-bold underline">Klik di Sini</a>');
             } else {
                 // Track as CompleteRegistration for paid plan
                 trackCompleteRegistration({
@@ -126,7 +127,7 @@ const handleRegister = () => {
                     value: total.value,
                     status: true,
                 });
-                showSuccess('Berhasil', 'Pendaftaran berhasil! Silakan lanjutkan pembayaran.');
+                showSuccess('Berhasil', 'Pendaftaran berhasil! Silakan lanjutkan pembayaran.<br><br>Gabung Grup WhatsApp: <a href="https://chat.whatsapp.com/DAjG9zU2e9vAi8jiDp5jar" target="_blank" class="text-emerald-600 font-bold underline">Klik di Sini</a>');
             }
             // After registration, user will be redirected to dashboard
         },
@@ -344,10 +345,15 @@ watch(() => registerForm.whatsapp_number, (newValue) => {
                         
                         <!-- Duration Info for Free Plan -->
                         <div v-else class="rounded-2xl border border-neutral-200 bg-white/50 backdrop-blur-sm p-6 shadow-sm hover:shadow-md transition-shadow duration-300">
-                            <h2 class="text-lg font-semibold text-neutral-900 mb-4">Durasi Ujicoba</h2>
+                            <h2 class="text-lg font-semibold text-neutral-900 mb-4">Paket Gratis</h2>
                             <div class="p-4 rounded-xl bg-cyan-50 ring-1 ring-cyan-200/60">
                                 <p class="text-sm font-medium text-neutral-900">{{ selectedDuration.label }}</p>
-                                <p class="text-xs text-cyan-600 mt-1">Ujicoba gratis penuh dengan semua fitur</p>
+                                <p class="text-xs text-cyan-600 mt-1">Bisa digunakan terus tanpa batas waktu</p>
+                            </div>
+                            <div class="mt-4 space-y-2 text-sm text-neutral-600">
+                                <p class="flex items-center gap-2"><span class="text-cyan-500">✓</span> 50 transaksi per bulan</p>
+                                <p class="flex items-center gap-2"><span class="text-cyan-500">✓</span> Catat via teks WhatsApp</p>
+                                <p class="flex items-center gap-2"><span class="text-neutral-400">✗</span> <span class="text-neutral-400">Scan struk otomatis</span></p>
                             </div>
                         </div>
 
@@ -616,7 +622,7 @@ watch(() => registerForm.whatsapp_number, (newValue) => {
                                 {{ registerForm.processing 
                                     ? 'Memproses...' 
                                     : isFreePlan 
-                                        ? 'Mulai Ujicoba Gratis' 
+                                        ? 'Mulai Gratis Sekarang' 
                                         : 'Daftar dan Bayar Sekarang' }}
                             </Button>
 

@@ -33,7 +33,7 @@ return new class extends Migration
                 'pengeluaran_asuransi',
                 'pengeluaran_pajak',
                 'pengeluaran_donasi',
-                'pengeluaran_lainnya'
+                'pengeluaran_lainnya',
             ]);
             $table->string('name');
             $table->string('slug');
@@ -42,7 +42,7 @@ return new class extends Migration
             $table->string('color')->nullable();
             $table->boolean('is_system')->default(false);
             $table->timestamps();
-            
+
             $table->unique(['tenant_id', 'type', 'slug']);
             $table->index(['tenant_id', 'type']);
         });

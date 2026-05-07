@@ -20,7 +20,7 @@ return new class extends Migration
             $table->boolean('is_primary')->default(false); // Nomor utama
             $table->boolean('is_active')->default(true);
             $table->timestamps();
-            
+
             $table->index(['user_id', 'tenant_id']);
             $table->index('whatsapp_number');
             // Ensure unique whatsapp_number per user per tenant

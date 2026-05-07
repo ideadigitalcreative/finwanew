@@ -6,52 +6,76 @@
         </div>
 
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
-            <div class="grid grid-cols-1 lg:grid-cols-12 lg:gap-16 pt-16 pb-20 gap-x-10 gap-y-12 items-center">
-                <div class="flex flex-col justify-center lg:col-span-7">
-                    <div class="w-max animate-fade-in-up">
-                        <div class="bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 p-[1px] rounded-full">
-                            <div class="inline-flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50/80 backdrop-blur-sm ring-1 ring-emerald-600/20 px-3 py-1.5 rounded-full">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"></path><path d="M7 11h10"></path><path d="M7 15h6"></path><path d="M7 7h8"></path></svg>
+            <div
+                class="grid grid-cols-1 items-center gap-x-10 gap-y-8 pt-8 pb-16 sm:pt-12 sm:pb-16 md:gap-y-10 md:pt-14 md:pb-20 lg:grid-cols-12 lg:items-start lg:gap-16 lg:gap-y-10 lg:pt-6 lg:pb-20"
+            >
+                <div class="flex flex-col justify-center lg:col-span-7 lg:justify-start lg:pt-1">
+                    <div class="mb-1.5 w-max animate-fade-in-up">
+                        <div class="rounded-full bg-gradient-to-r from-[#ffe4cc] to-[#ffd4a8] p-[1px]">
+                            <div class="inline-flex items-center gap-2 rounded-full border border-[#f5d4b8] bg-[#fff3e6]/95 px-3 py-1.5 text-xs font-medium text-[#8a4608] backdrop-blur-sm">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-3.5 w-3.5 shrink-0 text-[#fa8605]"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"></path><path d="M7 11h10"></path><path d="M7 15h6"></path><path d="M7 7h8"></path></svg>
                                 Catat Keuangan via WhatsApp
                             </div>
                         </div>
                     </div>
                     
                     <!-- Users Badge -->
-                    <div class="mt-3 w-fit flex flex-row items-center gap-1 md:gap-2 p-0.5 pr-3 md:p-1 md:pr-4 rounded-full bg-gray-100 border border-gray-200">
-                        <div class="w-[50px] md:w-[70px] h-[24px] md:h-[32px] flex items-center justify-center shrink-0">
-                            <div class="flex -space-x-1.5">
-                                <div class="w-6 h-6 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-emerald-400 to-cyan-400 ring-2 ring-white flex items-center justify-center text-sm md:text-base">👨</div>
-                                <div class="w-6 h-6 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-400 ring-2 ring-white flex items-center justify-center text-sm md:text-base">👩</div>
-                                <div class="w-6 h-6 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-400 ring-2 ring-white flex items-center justify-center text-sm md:text-base">🧑</div>
+                    <div class="mt-2 md:mt-3 w-fit flex flex-row items-center gap-1.5 md:gap-2.5 p-1 pr-3.5 md:p-1.5 md:pr-5 rounded-full bg-gray-100 border border-gray-200">
+                        <div class="w-[58px] md:w-[78px] h-[28px] md:h-[36px] flex items-center justify-center shrink-0">
+                            <div class="flex -space-x-1.5 md:-space-x-2">
+                                <img
+                                    src="/2.jpg"
+                                    alt=""
+                                    width="36"
+                                    height="36"
+                                    class="relative z-[1] h-7 w-7 shrink-0 rounded-full object-cover ring-2 ring-white md:h-9 md:w-9"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                                <img
+                                    src="/1.jpg"
+                                    alt=""
+                                    width="36"
+                                    height="36"
+                                    class="relative z-[2] h-7 w-7 shrink-0 rounded-full object-cover ring-2 ring-white md:h-9 md:w-9"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
+                                <img
+                                    src="/3.jpg"
+                                    alt=""
+                                    width="36"
+                                    height="36"
+                                    class="relative z-[3] h-7 w-7 shrink-0 rounded-full object-cover ring-2 ring-white md:h-9 md:w-9"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
                             </div>
                         </div>
-                        <p class="font-semibold text-[11px] md:text-xs text-gray-700 self-center my-auto" style="line-height: 1;">+600 pengguna</p>
+                        <p class="my-auto self-center text-xs font-semibold text-[#355d2a] md:text-sm" style="line-height: 1;">+600 pengguna</p>
                     </div>
                     
-                    <h1 class="mt-6 text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.15]">
-                        <span class="bg-gradient-to-br from-emerald-600 via-emerald-500 to-cyan-600 bg-clip-text text-transparent">Catat Keuangan via WhatsApp dengan Mudah & Otomatis</span>
+                    <h1 class="mt-4 md:mt-6 text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.15]">
+                        <span class="bg-gradient-to-br from-[#59c323] via-[#4da818] to-[#3d9014] bg-clip-text text-transparent">Catat Keuangan via WhatsApp dengan Mudah & Otomatis</span>
                     </h1>
-                    <p class="text-lg sm:text-xl text-gray-700 mt-4 font-medium">Cara baru catat keuangan dari WA. Tinggal chat, langsung tercatat!</p>
-                    <p class="sm:text-lg text-base text-gray-600 mt-6 leading-relaxed max-w-lg">
+                    <p class="mt-3 text-lg font-medium text-[#355d2a] sm:text-xl md:mt-4">Cara baru catat keuangan dari WA. Tinggal chat, langsung tercatat!</p>
+                    <p class="mt-4 max-w-lg text-base leading-relaxed text-[#4a6240] sm:mt-6 sm:text-lg md:mt-6">
                         Aplikasi pencatatan keuangan lewat WhatsApp paling praktis.<br>
                         Kirim pesan pengeluaran & pemasukan, FinWa otomatis mencatat ke dashboard pintar.
                     </p>
-                    <div class="mt-8 flex flex-row gap-2 md:gap-3">
-                        <a href="https://wa.me/6285762000079?text=Halo%20kak%2C%20saya%20mau%20daftar%20FinWa.%20Ketik%20*Daftar*%20untuk%20mulai%20ya!" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-1.5 md:gap-2 rounded-xl px-3 py-2 md:px-5 md:py-2.5 text-xs md:text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 hover:-translate-y-0.5 transition-all duration-200" style="background-color: oklch(0.65 0.19 137.46);">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 md:w-4 md:h-4"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path></svg>
-                            Coba Gratis Sekarang
+                    <div class="mt-5 md:mt-8 flex flex-row flex-wrap items-center gap-2 md:gap-2.5">
+                        <a href="https://play.google.com/store/apps/details?id=com.idea.finwa" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4da818] focus-visible:ring-offset-2" aria-label="Download di Google Play">
+                            <img src="/Google_Play.webp" alt="Download di Google Play" class="h-10 md:h-12 w-auto" width="155" height="48" loading="eager" decoding="async" />
                         </a>
-                        <a href="#fitur" class="inline-flex items-center justify-center gap-1.5 md:gap-2 rounded-xl px-3 py-2 md:px-5 md:py-2.5 text-xs md:text-sm font-semibold text-gray-700 bg-white ring-1 ring-gray-200 hover:bg-gray-50 hover:ring-gray-300 transition-all duration-200 shadow-sm hover:shadow">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 md:w-4 md:h-4"><path d="M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z"></path><circle cx="12" cy="12" r="10"></circle></svg>
-                            Pelajari
+                        <a href="/finwa/launch" class="inline-flex items-center rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4da818] focus-visible:ring-offset-2" aria-label="Instal FinWa sebagai aplikasi (PWA)">
+                            <img src="/app-store.png" alt="Instal FinWa sebagai aplikasi (PWA)" class="h-10 md:h-12 w-auto" width="120" height="40" loading="eager" decoding="async" />
                         </a>
                     </div>
                 </div>
 
                 <!-- Hero Visual -->
-                <div class="relative lg:col-span-5 flex items-center justify-center lg:justify-end px-4 md:px-0">
-                    <div class="absolute -inset-10 -z-10 opacity-40 blur-3xl" style="background: radial-gradient(circle at center, rgba(16,185,129,0.15), transparent 70%);"></div>
+                <div class="relative flex items-center justify-center px-4 md:px-0 lg:col-span-5 lg:items-start lg:justify-end lg:pt-1">
+                    <div class="absolute -inset-10 -z-10 opacity-40 blur-3xl" style="background: radial-gradient(circle at center, rgb(77 168 24 / 0.2), transparent 70%);"></div>
                     <!-- WhatsApp Chat Mockup -->
                     <div class="relative transform transition-transform hover:scale-[1.02] duration-500">
                         <WhatsAppChatMockup />

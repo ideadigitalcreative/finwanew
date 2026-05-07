@@ -21,7 +21,7 @@ return new class extends Migration
             $table->timestamp('expires_at');
             $table->timestamp('accepted_at')->nullable();
             $table->timestamps();
-            
+
             $table->index(['tenant_id', 'email']);
             $table->index('token');
             $table->index('expires_at');

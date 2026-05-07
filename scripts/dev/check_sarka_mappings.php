@@ -17,7 +17,7 @@ $user = DB::table('users')
     ->where('email', 'sarka3622@gmail.com')
     ->first();
 
-if (!$user) {
+if (! $user) {
     echo "User not found\n";
     exit;
 }
@@ -42,11 +42,11 @@ if ($mappings->count() === 0) {
     foreach ($mappings as $mapping) {
         echo "\n  Mapping ID: {$mapping->id}\n";
         echo "    WhatsApp Number: {$mapping->whatsapp_number}\n";
-        echo "    Is Primary: " . ($mapping->is_primary ? 'Yes' : 'No') . "\n";
-        echo "    Is Active: " . ($mapping->is_active ? 'Yes' : 'No') . "\n";
-        echo "    Is LID: " . ($mapping->is_lid ? 'Yes' : 'No') . "\n";
+        echo '    Is Primary: '.($mapping->is_primary ? 'Yes' : 'No')."\n";
+        echo '    Is Active: '.($mapping->is_active ? 'Yes' : 'No')."\n";
+        echo '    Is LID: '.($mapping->is_lid ? 'Yes' : 'No')."\n";
         echo "    Created: {$mapping->created_at}\n";
-        
+
         // Check if this is the problematic LID
         if ($mapping->whatsapp_number === '218442590343379') {
             echo "    ⚠️  THIS IS YOUR LID! (Should not be here)\n";
@@ -61,9 +61,9 @@ echo "2. The LID was incorrectly linked during registration\n";
 echo "3. This happened because of auto-linking logic\n";
 
 echo "\n=== DELETE WRONG LID MAPPING ===\n";
-echo "Delete LID 218442590343379 from user sarka? (yes/no): ";
+echo 'Delete LID 218442590343379 from user sarka? (yes/no): ';
 
-$handle = fopen("php://stdin", "r");
+$handle = fopen('php://stdin', 'r');
 $line = trim(fgets($handle));
 fclose($handle);
 
@@ -72,7 +72,7 @@ if (strtolower($line) === 'yes') {
         ->where('user_id', $user->id)
         ->where('whatsapp_number', '218442590343379')
         ->delete();
-    
+
     if ($deleted > 0) {
         echo "\n✅ Deleted LID mapping from user sarka\n";
         echo "Your LID will no longer send messages to sarka's account\n";

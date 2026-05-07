@@ -19,7 +19,7 @@ class Subscription extends Model
         'payment_provider',
         'payment_reference',
         'payment_proof',
-        'metadata'
+        'metadata',
     ];
 
     protected $casts = [
@@ -28,7 +28,7 @@ class Subscription extends Model
         'starts_at' => 'datetime',
         'ends_at' => 'datetime',
         'cancelled_at' => 'datetime',
-        'metadata' => 'array'
+        'metadata' => 'array',
     ];
 
     public function tenant(): BelongsTo

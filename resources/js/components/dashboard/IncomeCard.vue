@@ -44,7 +44,7 @@ const formatFull = (amount: number) => {
 </script>
 
 <template>
-    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 shadow-xl shadow-primary/5 transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10 animate-fade-in-up" style="animation-delay: 0.2s">
+    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 transition-all duration-500 animate-fade-in-up" style="animation-delay: 0.2s">
         <div class="flex items-center justify-between mb-3 md:mb-4">
             <h3 class="text-sm md:text-base font-medium text-muted-foreground">Pemasukan Saya</h3>
             <span class="text-xs text-muted-foreground bg-muted/30 backdrop-blur-sm px-2 py-1 rounded-full">{{ period }}</span>
@@ -53,14 +53,6 @@ const formatFull = (amount: number) => {
         <div class="flex items-end justify-between mb-4 md:mb-5">
             <div>
                 <span class="amount-primary text-3xl md:text-4xl">{{ formatFull(income) }}</span>
-            </div>
-            
-            <!-- Mini bar chart -->
-            <div class="flex items-end gap-0.5 md:gap-1 h-8 md:h-10 p-1.5 bg-primary/5 backdrop-blur-sm rounded-xl">
-                <div v-for="height in [40, 55, 35, 70, 45, 60, 50]" :key="height" 
-                    class="w-1.5 md:w-2 rounded-full bg-primary/60 transition-all duration-300 hover:bg-primary group-hover:bg-primary/80" 
-                    :style="{ height: `${height}%` }"
-                />
             </div>
         </div>
         

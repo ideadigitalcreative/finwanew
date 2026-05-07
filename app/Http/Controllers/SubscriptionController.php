@@ -5,12 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Bank;
 use App\Models\Subscription;
 use App\Models\Tenant;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Carbon\Carbon;
 
 class SubscriptionController extends Controller
 {
@@ -23,7 +23,7 @@ class SubscriptionController extends Controller
         $tenant = Tenant::findOrFail($request->tenant_id);
 
         // Only admin/owner can see subscription
-        if (!$user->isAdmin()) {
+        if (! $user->isAdmin()) {
             abort(403);
         }
 
@@ -45,19 +45,19 @@ class SubscriptionController extends Controller
 
         // Display pending subscription if exists, otherwise active
         $subscription = $pendingSubscription ?? $activeSubscription;
-        
+
         // Check if user has any subscription history
         $hasAnySubscription = Subscription::where('tenant_id', $tenant->id)->exists();
-        
+
         // If no subscription history and no active/pending, show wizard
-        if (!$hasAnySubscription) {
+        if (! $hasAnySubscription) {
             $planDetails = [
                 'name' => 'Paket Lengkap',
                 'monthly_price' => 20000,
             ];
-            
+
             $durationOptions = $this->getDurationOptions();
-            
+
             $banks = Bank::where('is_active', true)
                 ->orderBy('name')
                 ->get()
@@ -69,7 +69,7 @@ class SubscriptionController extends Controller
                         'account_name' => $bank->account_name,
                     ];
                 });
-            
+
             return Inertia::render('Subscriptions/Wizard', [
                 'planDetails' => $planDetails,
                 'durationOptions' => $durationOptions,
@@ -80,6 +80,7 @@ class SubscriptionController extends Controller
         // Get pending request (user-requested subscription)
         $pendingRequest = $currentSubscriptions->first(function ($sub) {
             $metadata = $sub->metadata ?? [];
+
             return $sub->status === 'pending'
                 && ($metadata['requested_by_user'] ?? false);
         });
@@ -88,7 +89,7 @@ class SubscriptionController extends Controller
             'name' => 'Paket Lengkap',
             'monthly_price' => 20000,
         ];
-        
+
         $durationOptions = $this->getDurationOptions();
 
         $subscriptions = Subscription::where('tenant_id', $tenant->id)
@@ -157,7 +158,7 @@ class SubscriptionController extends Controller
                 'is_active' => $tenant->is_active,
                 'trial_ends_at' => $tenant->trial_ends_at?->toISOString(),
             ],
-            'planDetails' => $planDetails,
+            'plans' => $this->getPlanDefinitions(),
             'durationOptions' => $durationOptions,
             'banks' => $banks,
             'pendingRequest' => $pendingRequest ? [
@@ -181,17 +182,13 @@ class SubscriptionController extends Controller
         $user = $request->user();
         $tenant = Tenant::findOrFail($request->tenant_id);
 
-        if (!$user->isAdmin()) {
+        if (! $user->isAdmin()) {
             abort(403);
         }
 
-        $planDetails = [
-            'name' => 'Paket Lengkap',
-            'monthly_price' => 20000,
-        ];
-        
+        $plans = $this->getPlanDefinitions();
         $durationOptions = $this->getDurationOptions();
-        
+
         $banks = Bank::where('is_active', true)
             ->orderBy('name')
             ->get()
@@ -203,9 +200,9 @@ class SubscriptionController extends Controller
                     'account_name' => $bank->account_name,
                 ];
             });
-        
+
         return Inertia::render('Subscriptions/Wizard', [
-            'planDetails' => $planDetails,
+            'plans' => $plans,
             'durationOptions' => $durationOptions,
             'banks' => $banks,
         ]);
@@ -220,7 +217,7 @@ class SubscriptionController extends Controller
         $tenant = Tenant::findOrFail($request->tenant_id);
 
         // Only admin/owner can upload payment proof
-        if (!$user->isAdmin()) {
+        if (! $user->isAdmin()) {
             abort(403);
         }
 
@@ -251,7 +248,7 @@ class SubscriptionController extends Controller
                 $parsedUrl = parse_url($oldPath);
                 $oldPath = ltrim($parsedUrl['path'] ?? '', '/storage/');
             }
-            
+
             if (Storage::disk('public')->exists($oldPath)) {
                 Storage::disk('public')->delete($oldPath);
             }
@@ -278,7 +275,7 @@ class SubscriptionController extends Controller
         $user = $request->user();
 
         // Only admin/owner can update
-        if (!$user->isAdmin()) {
+        if (! $user->isAdmin()) {
             abort(403);
         }
 
@@ -305,7 +302,7 @@ class SubscriptionController extends Controller
         $user = $request->user();
         $tenant = Tenant::findOrFail($request->tenant_id);
 
-        if (!$user->isAdmin()) {
+        if (! $user->isAdmin()) {
             abort(403);
         }
 
@@ -315,10 +312,11 @@ class SubscriptionController extends Controller
             ->first();
 
         $durationOptions = collect($this->getDurationOptions())->pluck('value')->toArray();
+        $planDefinitions = $this->getPlanDefinitions();
 
         $validated = $request->validate([
             'request_type' => ['nullable', Rule::in(['upgrade', 'extend'])],
-            'plan' => ['required', Rule::in(['growth'])], // Only growth plan (Paket Lengkap)
+            'plan' => ['required', Rule::in(['growth', 'pro'])], // growth (Lite) or pro
             'duration_months' => ['required', 'integer', Rule::in($durationOptions)],
             'payment_method' => ['required', Rule::in(['qris', 'bank'])],
             'payment_proof' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,webp', 'max:5120'],
@@ -335,9 +333,14 @@ class SubscriptionController extends Controller
             return redirect()->back()->with('error', 'Masih ada pengajuan subscription yang sedang diproses. Harap tunggu konfirmasi admin.');
         }
 
-        $plan = $validated['plan'];
+        $planSlug = $validated['plan'];
+
+        // Find plan definition (map growth to lite if needed)
+        $planKey = $planSlug === 'growth' ? 'lite' : $planSlug;
+        $planDef = $planDefinitions[$planKey] ?? $planDefinitions['lite'];
+
         $duration = (int) $validated['duration_months'];
-        $monthlyPrice = 20000; // Fixed price like checkout
+        $monthlyPrice = $planDef['monthly_price'];
         $price = $this->calculatePrice($monthlyPrice, $duration);
 
         $startsAt = Carbon::now();
@@ -349,7 +352,7 @@ class SubscriptionController extends Controller
         }
 
         $endsAt = (clone $startsAt)->addMonths($duration);
-        
+
         // Handle payment proof upload
         $paymentProofPath = null;
         if ($request->hasFile('payment_proof')) {
@@ -361,7 +364,7 @@ class SubscriptionController extends Controller
 
         Subscription::create([
             'tenant_id' => $tenant->id,
-            'plan' => $plan,
+            'plan' => $planSlug,
             'duration_months' => $duration,
             'price' => $price,
             'status' => 'pending',
@@ -385,21 +388,34 @@ class SubscriptionController extends Controller
     }
 
     /**
-     * Plan definitions - Same as checkout page (single plan with 20rb/month)
+     * Plan definitions - Same as checkout page
      */
     protected function getPlanDefinitions(): array
     {
         return [
-            'growth' => [
-                'slug' => 'growth',
-                'name' => 'Paket Lengkap',
+            'lite' => [
+                'slug' => 'growth', // growth is mapped to lite
+                'name' => 'Paket Lite',
                 'monthly_price' => 20000,
-                'max_whatsapp_accounts' => 5,
-                'description' => 'Paket lengkap dengan semua fitur yang tersedia.',
+                'max_whatsapp_accounts' => 2,
+                'description' => 'Terbaik untuk individu',
                 'features' => [
-                    '5 WhatsApp Numbers',
-                    'All Basic Features',
-                    'Priority Support',
+                    'Unlimited Transactions',
+                    '100 Scan Struk/bulan',
+                    '2 Nomor WhatsApp',
+                ],
+            ],
+            'pro' => [
+                'slug' => 'pro',
+                'name' => 'Paket PRO',
+                'monthly_price' => 45000,
+                'max_whatsapp_accounts' => 5,
+                'description' => 'Untuk keluarga & UMKM',
+                'features' => [
+                    'Unlimited Transactions',
+                    '300 Scan Struk/bulan',
+                    '5 Nomor WhatsApp',
+                    'Dukungan Prioritas',
                 ],
             ],
         ];
@@ -424,20 +440,17 @@ class SubscriptionController extends Controller
     protected function calculatePrice(int $monthlyPrice, int $durationMonths): float
     {
         $subtotal = $monthlyPrice * $durationMonths;
-        
-        // Apply discount based on duration (same as checkout)
-        $discountPercent = 0;
-        if ($durationMonths === 3) {
-            $discountPercent = 5; // 5% discount
-        } elseif ($durationMonths === 6) {
-            $discountPercent = 10; // 10% discount
-        } elseif ($durationMonths === 12) {
-            $discountPercent = 15; // 15% discount
-        }
-        
+
+        // Apply discount based on duration
+        $discountPercent = match ($durationMonths) {
+            3 => 5,
+            6 => 10,
+            12 => 15,
+            default => 0,
+        };
+
         $discount = ($subtotal * $discountPercent) / 100;
-        $total = $subtotal - $discount;
-        
-        return round($total, 2);
+
+        return round($subtotal - $discount, 2);
     }
 }

@@ -2,16 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Transaction;
-use App\Models\Cashflow;
 use App\Models\Balance;
+use App\Models\Budget;
+use App\Models\Cashflow;
 use App\Models\Tenant;
+use App\Models\Transaction;
+use App\Services\SpendingInsightService;
 use Carbon\Carbon;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
-
-use Illuminate\Http\RedirectResponse;
 
 class DashboardController extends Controller
 {
@@ -31,14 +33,14 @@ class DashboardController extends Controller
 
         // Always recalculate cashflow from transactions (don't use cache)
         // This ensures data is always up-to-date
-            $transactions = Transaction::where('tenant_id', $tenant->id)
-                ->where('status', 'confirmed')
-                ->whereBetween('transaction_date', [$startDate, $endDate])
-                ->get();
+        $transactions = Transaction::where('tenant_id', $tenant->id)
+            ->where('status', 'confirmed')
+            ->whereBetween('transaction_date', [$startDate, $endDate])
+            ->get();
 
-            $totalIncome = $transactions->where('type', 'income')->sum('amount');
-            $totalExpense = $transactions->where('type', 'expense')->sum('amount');
-            $netCashflow = $totalIncome - $totalExpense;
+        $totalIncome = $transactions->where('type', 'income')->sum('amount');
+        $totalExpense = $transactions->where('type', 'expense')->sum('amount');
+        $netCashflow = $totalIncome - $totalExpense;
 
         // Update or create cashflow record
         $cashflow = Cashflow::updateOrCreate(
@@ -51,23 +53,23 @@ class DashboardController extends Controller
                 'total_income' => $totalIncome,
                 'total_expense' => $totalExpense,
                 'net_cashflow' => $netCashflow,
-                'breakdown' => []
+                'breakdown' => [],
             ]
         );
 
         // Calculate previous period for comparison
         $prevStartDate = $now->copy()->subMonth()->startOfMonth();
         $prevEndDate = $now->copy()->subMonth()->endOfMonth();
-        
+
         $prevTransactions = Transaction::where('tenant_id', $tenant->id)
             ->where('status', 'confirmed')
             ->whereBetween('transaction_date', [$prevStartDate, $prevEndDate])
             ->get();
-        
+
         $prevTotalIncome = $prevTransactions->where('type', 'income')->sum('amount');
         $prevTotalExpense = $prevTransactions->where('type', 'expense')->sum('amount');
         $prevNetCashflow = $prevTotalIncome - $prevTotalExpense;
-        
+
         // Calculate percentage changes with caps for better UX
         if ($prevTotalIncome > 0) {
             $incomeChange = (($totalIncome - $prevTotalIncome) / $prevTotalIncome) * 100;
@@ -75,14 +77,14 @@ class DashboardController extends Controller
         } else {
             $incomeChange = $totalIncome > 0 ? 999 : 0;
         }
-            
+
         if ($prevTotalExpense > 0) {
             $expenseChange = (($totalExpense - $prevTotalExpense) / $prevTotalExpense) * 100;
             $expenseChange = max(-999, min(999, $expenseChange)); // Cap at ±999%
         } else {
             $expenseChange = $totalExpense > 0 ? 999 : 0;
         }
-            
+
         // For net cashflow, handle negative values carefully
         if ($prevNetCashflow == 0) {
             $netChange = $netCashflow != 0 ? ($netCashflow > 0 ? 999 : -999) : 0;
@@ -90,7 +92,7 @@ class DashboardController extends Controller
             $netChange = (($netCashflow - $prevNetCashflow) / abs($prevNetCashflow)) * 100;
             $netChange = max(-999, min(999, $netChange)); // Cap at ±999%
         }
-        
+
         // Determine financial health status
         $healthStatus = 'stable';
         if ($netCashflow > $prevNetCashflow * 1.1) {
@@ -98,7 +100,6 @@ class DashboardController extends Controller
         } elseif ($netCashflow < $prevNetCashflow * 0.9) {
             $healthStatus = 'declining';
         }
-
 
         // Get recent transactions (last 5) for transaction list
         $recentTransactions = Transaction::where('tenant_id', $tenant->id)
@@ -134,15 +135,16 @@ class DashboardController extends Controller
             ->groupBy('category_id')
             ->map(function ($group) {
                 $category = $group->first()->category;
-                if (!$category) {
+                if (! $category) {
                     return null;
                 }
+
                 return [
                     'category_id' => $category->id,
                     'category_name' => $category->name,
                     'total_income' => $group->where('type', 'income')->sum('amount'),
                     'total_expense' => $group->where('type', 'expense')->sum('amount'),
-                    'count' => $group->count()
+                    'count' => $group->count(),
                 ];
             })
             ->filter() // Remove null entries
@@ -174,7 +176,7 @@ class DashboardController extends Controller
         $trialEndsAt = null;
         $trialDaysRemaining = null;
 
-        if (!$activeSubscription && $tenant->trial_ends_at) {
+        if (! $activeSubscription && $tenant->trial_ends_at) {
             $isOnTrial = $tenant->trial_ends_at->isFuture();
             $trialEndsAt = $tenant->trial_ends_at->toISOString();
             $trialDaysRemaining = $isOnTrial ? (int) now()->diffInDays($tenant->trial_ends_at, false) : 0;
@@ -196,16 +198,19 @@ class DashboardController extends Controller
             ->where('is_active', true)
             ->where('period', 'monthly')
             ->get();
-        
+
         $totalBudget = $budgets->sum('amount');
         $totalSpending = 0;
-        
+
         foreach ($budgets as $budget) {
             $totalSpending += $budget->getCurrentSpending();
         }
-        
+
         $remaining = $totalBudget - $totalSpending;
         $usagePercentage = $totalBudget > 0 ? ($totalSpending / $totalBudget) * 100 : 0;
+
+        $insightService = new SpendingInsightService($tenant->id);
+        $insights = $insightService->generateDashboardInsights();
 
         return Inertia::render('Dashboard', [
             'cashflow' => [
@@ -241,6 +246,8 @@ class DashboardController extends Controller
             'monthlyTransactions' => $monthlyTransactions->map(function ($transaction) {
                 return [
                     'transaction_date' => $transaction->transaction_date->format('Y-m-d'),
+                    'type' => $transaction->type,
+                    'amount' => (float) $transaction->amount,
                 ];
             }),
             'balances' => $balances->map(function ($balance) {
@@ -263,7 +270,7 @@ class DashboardController extends Controller
             'period' => [
                 'start' => $startDate->format('Y-m-d'),
                 'end' => $endDate->format('Y-m-d'),
-                'label' => $startDate->format('F Y')
+                'label' => $startDate->format('F Y'),
             ],
             'hasWhatsAppNumber' => \App\Models\UserWhatsAppNumber::where('user_id', $request->user()->id)->exists(),
             // Subscription/Trial data
@@ -282,29 +289,48 @@ class DashboardController extends Controller
                 'remaining' => (float) $remaining,
                 'usagePercentage' => round($usagePercentage, 1),
             ],
+            'insights' => $insights,
         ]);
     }
 
     protected function getChartData(Tenant $tenant, int $months = 6): array
     {
-        $data = [];
         $now = Carbon::now();
+        $startDate = $now->copy()->subMonths($months - 1)->startOfMonth();
 
+        $rows = Transaction::where('tenant_id', $tenant->id)
+            ->where('status', 'confirmed')
+            ->where('transaction_date', '>=', $startDate)
+            ->select(
+                DB::raw('YEAR(transaction_date) as year'),
+                DB::raw('MONTH(transaction_date) as month'),
+                'type',
+                DB::raw('SUM(amount) as total')
+            )
+            ->groupBy(DB::raw('YEAR(transaction_date)'), DB::raw('MONTH(transaction_date)'), 'type')
+            ->get();
+
+        $grouped = [];
+        foreach ($rows as $row) {
+            $key = $row->year.'-'.str_pad($row->month, 2, '0', STR_PAD_LEFT);
+            if (! isset($grouped[$key])) {
+                $grouped[$key] = ['income' => 0, 'expense' => 0];
+            }
+            $grouped[$key][$row->type] = (float) $row->total;
+        }
+
+        $data = [];
         for ($i = $months - 1; $i >= 0; $i--) {
             $date = $now->copy()->subMonths($i);
-            $start = $date->copy()->startOfMonth();
-            $end = $date->copy()->endOfMonth();
-
-            $transactions = Transaction::where('tenant_id', $tenant->id)
-                ->where('status', 'confirmed')
-                ->whereBetween('transaction_date', [$start, $end])
-                ->get();
+            $key = $date->format('Y-m');
+            $income = $grouped[$key]['income'] ?? 0;
+            $expense = $grouped[$key]['expense'] ?? 0;
 
             $data[] = [
                 'month' => $date->format('M Y'),
-                'income' => $transactions->where('type', 'income')->sum('amount'),
-                'expense' => $transactions->where('type', 'expense')->sum('amount'),
-                'net' => $transactions->where('type', 'income')->sum('amount') - $transactions->where('type', 'expense')->sum('amount')
+                'income' => $income,
+                'expense' => $expense,
+                'net' => $income - $expense,
             ];
         }
 

@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Carbon\Carbon;
 
 class SavingsGoal extends Model
 {
@@ -42,7 +42,7 @@ class SavingsGoal extends Model
         if ($this->target_amount <= 0) {
             return 0;
         }
-        
+
         return min(100, ($this->current_amount / $this->target_amount) * 100);
     }
 
@@ -59,10 +59,10 @@ class SavingsGoal extends Model
      */
     public function getDaysRemaining(): ?int
     {
-        if (!$this->deadline) {
+        if (! $this->deadline) {
             return null;
         }
-        
+
         return max(0, Carbon::now()->diffInDays($this->deadline, false));
     }
 
@@ -72,17 +72,17 @@ class SavingsGoal extends Model
     public function getSuggestedMonthlySavings(): ?float
     {
         $daysRemaining = $this->getDaysRemaining();
-        
-        if (!$daysRemaining || $daysRemaining <= 0) {
+
+        if (! $daysRemaining || $daysRemaining <= 0) {
             return null;
         }
-        
+
         $monthsRemaining = ceil($daysRemaining / 30);
-        
+
         if ($monthsRemaining <= 0) {
             return null;
         }
-        
+
         return $this->getRemainingAmount() / $monthsRemaining;
     }
 
@@ -100,11 +100,11 @@ class SavingsGoal extends Model
     public function addSavings(float $amount): void
     {
         $this->current_amount += $amount;
-        
+
         if ($this->isCompleted() && $this->status === 'active') {
             $this->status = 'completed';
         }
-        
+
         $this->save();
     }
 
@@ -116,8 +116,8 @@ class SavingsGoal extends Model
         $percentage = $this->getProgressPercentage();
         $filled = (int) round(($percentage / 100) * $length);
         $empty = $length - $filled;
-        
-        return '[' . str_repeat('█', $filled) . str_repeat('░', $empty) . '] ' . round($percentage) . '%';
+
+        return '['.str_repeat('█', $filled).str_repeat('░', $empty).'] '.round($percentage).'%';
     }
 
     /**

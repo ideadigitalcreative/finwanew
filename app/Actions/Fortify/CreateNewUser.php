@@ -2,20 +2,21 @@
 
 namespace App\Actions\Fortify;
 
-use App\Models\Tenant;
+use App\Models\Category;
 use App\Models\Role;
+use App\Models\Subscription;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Models\UserTenant;
-use App\Models\Subscription;
-use App\Models\Category;
+use App\Services\TenantProvisioningService;
 use App\Services\WhatsAppNotificationService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
 
 class CreateNewUser implements CreatesNewUsers
 {
@@ -60,39 +61,42 @@ class CreateNewUser implements CreatesNewUsers
         return DB::transaction(function () use ($input, $isCheckout, $isFreePlan) {
             // Create new tenant for user (multi-tenant support)
             // Set is_active to false if registration includes subscription (pending payment)
-            $isActive = !($isCheckout && !$isFreePlan);
-            
+            $isActive = ! ($isCheckout && ! $isFreePlan);
+
             // Generate unique slug
-            $baseSlug = Str::slug($input['tenant_name'] ?? $input['name'] . "-org");
+            $baseSlug = Str::slug($input['tenant_name'] ?? $input['name'].'-org');
             $slug = $baseSlug;
             $counter = 1;
-            
+
             // Ensure slug is unique
             while (Tenant::where('slug', $slug)->exists()) {
-                $slug = $baseSlug . '-' . $counter;
+                $slug = $baseSlug.'-'.$counter;
                 $counter++;
             }
-            
+
             $tenant = Tenant::create([
-                'name' => $input['tenant_name'] ?? $input['name'] . "'s Organization",
+                'name' => $input['tenant_name'] ?? $input['name']."'s Organization",
                 'slug' => $slug,
                 'is_active' => $isActive,
+                'trial_ends_at' => Carbon::now()->addDays(3),
             ]);
 
             // Create default categories for this tenant
             $this->createCategoriesForTenant($tenant->id);
 
+            app(TenantProvisioningService::class)->ensureDefaultWallet($tenant->id, 'fortify_registration');
+
             // Get or create Owner role for this tenant
             $ownerRole = Role::firstOrCreate(
                 [
                     'tenant_id' => $tenant->id,
-                    'slug' => 'owner'
+                    'slug' => 'owner',
                 ],
                 [
                     'name' => 'Owner',
                     'permissions' => ['*'], // Full access
                     'description' => 'Tenant owner with full access',
-                    'is_system' => true
+                    'is_system' => true,
                 ]
             );
 
@@ -118,22 +122,23 @@ class CreateNewUser implements CreatesNewUsers
             $subscription = null;
             if ($isCheckout && isset($input['duration_months'])) {
                 $startsAt = Carbon::now();
-                $endsAt = Carbon::now()->addMonths($input['duration_months']);
+                // Free plan: permanent (ends_at = null), paid plans: based on duration
+                $endsAt = $isFreePlan ? null : Carbon::now()->addMonths($input['duration_months']);
 
                 $subscription = Subscription::create([
                     'tenant_id' => $tenant->id,
-                    'plan' => $input['plan'] ?? 'growth', // Default to growth if not specified
-                    'duration_months' => $input['duration_months'],
+                    'plan' => $input['plan'] ?? 'growth',
+                    'duration_months' => $isFreePlan ? 0 : $input['duration_months'],
                     'price' => $input['price'],
                     'status' => $isFreePlan ? 'active' : 'pending',
                     'starts_at' => $startsAt,
                     'ends_at' => $endsAt,
                     'payment_provider' => $isFreePlan ? 'internal' : 'manual',
-                    'payment_reference' => null, // Will be set when admin confirms payment
+                    'payment_reference' => null,
                     'metadata' => array_filter([
                         'registered_from' => 'checkout',
                         'registered_at' => Carbon::now()->toIso8601String(),
-                        'is_trial' => $isFreePlan ? true : null,
+                        'is_free_plan' => $isFreePlan ? true : null,
                     ]),
                 ]);
             }
@@ -152,7 +157,7 @@ class CreateNewUser implements CreatesNewUsers
                         // Log error but don't fail registration
                         Log::error('Failed to send registration notification', [
                             'user_id' => $user->id,
-                            'error' => $e->getMessage()
+                            'error' => $e->getMessage(),
                         ]);
                     }
                 });
@@ -172,8 +177,9 @@ class CreateNewUser implements CreatesNewUsers
             ['type' => 'pendapatan_gaji', 'name' => 'Gaji', 'slug' => 'gaji', 'icon' => '💰', 'color' => '#10b981'],
             ['type' => 'pendapatan_bonus', 'name' => 'Bonus', 'slug' => 'bonus', 'icon' => '🎁', 'color' => '#10b981'],
             ['type' => 'pendapatan_investasi', 'name' => 'Investasi', 'slug' => 'investasi', 'icon' => '📈', 'color' => '#10b981'],
+            ['type' => 'pendapatan_transfer', 'name' => 'Transfer Masuk', 'slug' => 'transfer-masuk', 'icon' => '📥', 'color' => '#10b981'],
             ['type' => 'pendapatan_lainnya', 'name' => 'Pendapatan Lainnya', 'slug' => 'pendapatan-lainnya', 'icon' => '💵', 'color' => '#10b981'],
-            
+
             // Pengeluaran
             ['type' => 'pengeluaran_makanan', 'name' => 'Makanan & Minuman', 'slug' => 'makanan-minuman', 'icon' => '🍽️', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_transport', 'name' => 'Transport', 'slug' => 'transport', 'icon' => '🚗', 'color' => '#ef4444'],
@@ -187,10 +193,15 @@ class CreateNewUser implements CreatesNewUsers
             ['type' => 'pengeluaran_tagihan', 'name' => 'Tagihan', 'slug' => 'tagihan', 'icon' => '📄', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_investasi', 'name' => 'Investasi', 'slug' => 'investasi-pengeluaran', 'icon' => '💼', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_pinjaman', 'name' => 'Pinjaman', 'slug' => 'pinjaman', 'icon' => '💳', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_cicilan', 'name' => 'Cicilan', 'slug' => 'cicilan', 'icon' => '🏦', 'color' => '#dc2626'],
             ['type' => 'pengeluaran_asuransi', 'name' => 'Asuransi', 'slug' => 'asuransi', 'icon' => '🛡️', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_pajak', 'name' => 'Pajak', 'slug' => 'pajak', 'icon' => '📊', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_operasional', 'name' => 'Operasional', 'slug' => 'operasional', 'icon' => '⚙️', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_transfer', 'name' => 'Transfer Keluar', 'slug' => 'transfer-keluar', 'icon' => '📤', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_donasi', 'name' => 'Donasi', 'slug' => 'donasi', 'icon' => '❤️', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_lainnya', 'name' => 'Pengeluaran Lainnya', 'slug' => 'pengeluaran-lainnya', 'icon' => '📝', 'color' => '#ef4444'],
+            // Special category for Gaji Karyawan (often used in business)
+            ['type' => 'pengeluaran_gaji', 'name' => 'Gaji Karyawan', 'slug' => 'gaji-karyawan', 'icon' => '👷', 'color' => '#ef4444'],
         ];
 
         $descriptions = [
@@ -210,6 +221,7 @@ class CreateNewUser implements CreatesNewUsers
             'pengeluaran_tagihan' => 'Pengeluaran untuk tagihan rutin',
             'pengeluaran_investasi' => 'Pengeluaran untuk investasi',
             'pengeluaran_pinjaman' => 'Pengeluaran untuk pembayaran pinjaman',
+            'pengeluaran_cicilan' => 'Pengeluaran untuk cicilan dan angsuran (motor, mobil, rumah, KPR, dll)',
             'pengeluaran_asuransi' => 'Pengeluaran untuk asuransi',
             'pengeluaran_pajak' => 'Pengeluaran untuk pajak',
             'pengeluaran_donasi' => 'Pengeluaran untuk donasi dan sumbangan',

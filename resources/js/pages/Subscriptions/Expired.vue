@@ -121,17 +121,17 @@ const getPlanName = (plan: string) => {
                         </p>
                         
                         <Link
-                            href="/subscriptions"
+                            href="/subscriptions/new"
                             class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-3 text-base font-semibold text-white shadow-lg hover:from-orange-600 hover:to-amber-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-all"
                         >
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
-                            Perpanjang Langganan
+                            Perpanjang Sekarang
                         </Link>
 
                         <Link
-                            href="/checkout"
+                            href="/subscriptions/new"
                             class="w-full inline-flex items-center justify-center gap-2 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-6 py-3 text-base font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all"
                         >
                             Lihat Paket Harga

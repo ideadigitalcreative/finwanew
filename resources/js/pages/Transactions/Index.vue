@@ -40,6 +40,14 @@ interface Props {
         end_date?: string;
         search?: string;
     };
+    transactionLimit?: {
+        can_create: boolean;
+        current: number;
+        limit: number;
+        remaining: number;
+        plan: string;
+        is_unlimited: boolean;
+    };
 }
 
 const props = defineProps<Props>();
@@ -55,7 +63,17 @@ const formatCurrency = (amount: number) => {
 };
 
 const formatDate = (date: string) => {
-    return format(new Date(date), 'dd MMM yyyy', { locale: id });
+    if (!date) return '-';
+    // Use string parsing to avoid timezone shifts (e.g., from YYYY-MM-DD)
+    const d = new Date(date);
+    // If browser interpreted '2026-04-10' as UTC, and we are in GMT-7, it becomes 9th.
+    // Instead, if the date string is just YYYY-MM-DD, it's safer to use format(parseISO(date)...)
+    // but the simplest way is to ensure we format the date correctly.
+    try {
+        return format(d, 'dd MMM yyyy', { locale: id });
+    } catch (e) {
+        return date;
+    }
 };
 
 const form = useForm({
@@ -226,21 +244,33 @@ const openEditModal = (transaction: any) => {
         editForm.type = transaction.type || 'expense';
         editForm.amount = transaction.amount || 0;
         
-        // Handle date format - could be ISO string or formatted date
+        // Handle date format - ensure consistency with the display list
+        // We use the Local Date parts (Year, Month, Day) from the browser to match what's shown in the table
         let dateValue = transaction.transaction_date;
         if (dateValue) {
-            // If it's a date string with time, extract date only
-            if (dateValue.includes(' ')) {
-                dateValue = dateValue.split(' ')[0];
+            const d = new Date(dateValue);
+            if (!isNaN(d.getTime())) {
+                // Extract local date parts to avoid UTC shift (the "10th vs 9th" issue)
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                editForm.transaction_date = `${y}-${m}-${day}`;
+            } else {
+                // Last resort fallback: raw string extraction
+                const match = dateValue.match(/^(\d{4}-\d{2}-\d{2})/);
+                if (match) {
+                    editForm.transaction_date = match[1];
+                } else {
+                    editForm.transaction_date = dateValue;
+                }
             }
-            // If it's ISO format, convert to YYYY-MM-DD
-            if (dateValue.includes('T')) {
-                dateValue = dateValue.split('T')[0];
-            }
-            editForm.transaction_date = dateValue;
         } else {
-            // Use current date if no date provided
-            editForm.transaction_date = new Date().toISOString().split('T')[0];
+            // Use local today's date
+            const today = new Date();
+            const y = today.getFullYear();
+            const m = String(today.getMonth() + 1).padStart(2, '0');
+            const d = String(today.getDate()).padStart(2, '0');
+            editForm.transaction_date = `${y}-${m}-${d}`;
         }
         
         editForm.description = transaction.description || '';
@@ -325,6 +355,30 @@ onBeforeUnmount(() => {
 
     <AppLayout>
         <div class="bg-background flex h-full flex-1 flex-col gap-4 md:gap-6 overflow-hidden p-4 md:p-6">
+            <!-- Free Plan Transaction Limit Banner -->
+            <div v-if="transactionLimit && !transactionLimit.is_unlimited" class="rounded-xl border p-4" :class="transactionLimit.can_create ? 'bg-cyan-50 border-cyan-200 dark:bg-cyan-950/30 dark:border-cyan-800' : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800'">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div class="flex items-center gap-3">
+                        <div class="text-2xl">{{ transactionLimit.can_create ? '📊' : '⚠️' }}</div>
+                        <div>
+                            <p class="text-sm font-semibold" :class="transactionLimit.can_create ? 'text-cyan-800 dark:text-cyan-200' : 'text-red-800 dark:text-red-200'">
+                                {{ transactionLimit.can_create ? 'Paket Gratis' : 'Batas Transaksi Tercapai' }}
+                            </p>
+                            <p class="text-xs" :class="transactionLimit.can_create ? 'text-cyan-600 dark:text-cyan-400' : 'text-red-600 dark:text-red-400'">
+                                {{ transactionLimit.current }}/{{ transactionLimit.limit }} transaksi bulan ini
+                                <span v-if="transactionLimit.can_create"> &mdash; sisa {{ transactionLimit.remaining }} transaksi</span>
+                            </p>
+                        </div>
+                    </div>
+                    <Link href="/subscriptions" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors shadow-sm">
+                        Upgrade Paket
+                    </Link>
+                </div>
+                <div class="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div class="h-1.5 rounded-full transition-all duration-500" :class="transactionLimit.can_create ? 'bg-cyan-500' : 'bg-red-500'" :style="{ width: Math.min((transactionLimit.current / transactionLimit.limit) * 100, 100) + '%' }"></div>
+                </div>
+            </div>
+
             <!-- Header -->
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div class="flex-1">
@@ -353,7 +407,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- Filters -->
-            <div class="bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-6 border border-gray-200/50 dark:border-gray-700/30 shadow-xl shadow-primary/5">
+            <div class="bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-6 border border-gray-200/50 dark:border-gray-700/30">
                 <div class="grid gap-3 grid-cols-2 md:grid-cols-6">
                     <div>
                         <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Tipe</label>
@@ -364,6 +418,8 @@ onBeforeUnmount(() => {
                             <option value="">Semua</option>
                             <option value="income">Pendapatan</option>
                             <option value="expense">Pengeluaran</option>
+                            <option value="debit_internal">Debit Antar Dompet</option>
+                            <option value="kredit_internal">Kredit Antar Dompet</option>
                         </select>
                     </div>
                     <div>
@@ -434,7 +490,7 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- Table -->
-            <div class="bg-card/60 backdrop-blur-2xl rounded-[13px] border border-gray-200/50 dark:border-gray-700/30 shadow-xl shadow-primary/5 overflow-hidden">
+            <div class="bg-card/60 backdrop-blur-2xl rounded-[13px] border border-gray-200/50 dark:border-gray-700/30 overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full">
                         <thead class="bg-gray-50 dark:bg-gray-900/50">
@@ -467,9 +523,9 @@ onBeforeUnmount(() => {
                                 <td class="hidden md:table-cell px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{{ transaction.source || '-' }}</td>
                                 <td
                                     class="px-6 py-4 text-right text-sm font-bold"
-                                    :class="transaction.type === 'income' ? 'text-green-600' : 'text-red-600'"
+                                    :class="transaction.type === 'income' || transaction.type === 'kredit_internal' ? 'text-green-600' : 'text-red-600'"
                                 >
-                                    {{ transaction.type === 'income' ? '+' : '-' }}{{ formatCurrency(transaction.amount) }}
+                                    {{ transaction.type === 'income' || transaction.type === 'kredit_internal' ? '+' : '-' }}{{ formatCurrency(transaction.amount) }}
                                 </td>
                                 <td class="hidden md:table-cell px-6 py-4 text-center">
                                     <span
@@ -740,6 +796,8 @@ onBeforeUnmount(() => {
                             >
                                 <option value="income">💰 Pendapatan</option>
                                 <option value="expense">💸 Pengeluaran</option>
+                                <option value="debit_internal">🔄 Debit Antar Dompet</option>
+                                <option value="kredit_internal">🔄 Kredit Antar Dompet</option>
                             </select>
                         </div>
                         <div>

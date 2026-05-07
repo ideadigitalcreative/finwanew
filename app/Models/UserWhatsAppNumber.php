@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class UserWhatsAppNumber extends Model
 {
     protected $table = 'user_whatsapp_numbers';
-    
+
     protected $fillable = [
         'user_id',
         'tenant_id',

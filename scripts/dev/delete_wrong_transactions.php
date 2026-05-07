@@ -28,7 +28,7 @@ echo "Found {$transactions->count()} transaction(s) to delete:\n\n";
 
 $byTenant = [];
 foreach ($transactions as $txn) {
-    if (!isset($byTenant[$txn->tenant_id])) {
+    if (! isset($byTenant[$txn->tenant_id])) {
         $byTenant[$txn->tenant_id] = [];
     }
     $byTenant[$txn->tenant_id][] = $txn;
@@ -36,15 +36,15 @@ foreach ($transactions as $txn) {
 
 foreach ($byTenant as $tenantId => $txns) {
     $tenantName = $tenantId == 10023 ? 'Sarka' : 'Nayshila';
-    echo "TENANT $tenantId ($tenantName): " . count($txns) . " transaction(s)\n";
-    
+    echo "TENANT $tenantId ($tenantName): ".count($txns)." transaction(s)\n";
+
     foreach ($txns as $txn) {
-        echo "  - ID $txn->id: Rp " . number_format($txn->amount, 0, ',', '.') . " - $txn->description\n";
+        echo "  - ID $txn->id: Rp ".number_format($txn->amount, 0, ',', '.')." - $txn->description\n";
     }
     echo "\n";
 }
 
-echo "Delete all transactions above? (yes/no): ";
+echo 'Delete all transactions above? (yes/no): ';
 $handle = fopen('php://stdin', 'r');
 $line = trim(fgets($handle));
 fclose($handle);

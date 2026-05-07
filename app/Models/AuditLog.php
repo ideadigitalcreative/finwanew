@@ -16,12 +16,12 @@ class AuditLog extends Model
         'changes',
         'ip_address',
         'user_agent',
-        'metadata'
+        'metadata',
     ];
 
     protected $casts = [
         'changes' => 'array',
-        'metadata' => 'array'
+        'metadata' => 'array',
     ];
 
     public function tenant(): BelongsTo

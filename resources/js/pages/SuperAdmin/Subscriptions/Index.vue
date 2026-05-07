@@ -169,6 +169,25 @@ const getPlanColor = (plan: string) => {
     return colors[plan] || colors.starter;
 };
 
+/** Harga standar per plan (per bulan); growth = 20rb */
+const planMonthlyPrice: Record<string, number> = {
+    starter: 20000,
+    growth: 20000,
+    pro: 50000,
+    enterprise: 100000,
+};
+
+const getSuggestedPrice = (plan: string, months: number): number => {
+    const monthly = planMonthlyPrice[plan] ?? 20000;
+    const subtotal = monthly * months;
+    const discount = months >= 12 ? 15 : months >= 6 ? 10 : months >= 3 ? 5 : 0;
+    return Math.round(subtotal - (subtotal * discount) / 100);
+};
+
+const suggestedPrice = computed(() =>
+    getSuggestedPrice(upgradeForm.plan, Number(upgradeForm.duration_months) || 1)
+);
+
 const upgradePreviewEndsAt = computed(() => {
     if (!upgradeForm.starts_at || !upgradeForm.duration_months) {
         return '';
@@ -222,9 +241,11 @@ const openExtendDialog = (subscription: Subscription) => {
 const openUpgradeDialog = (subscription: Subscription) => {
     selectedSubscription.value = subscription;
     upgradeForm.reset();
-    upgradeForm.plan = subscription.plan === 'free' ? 'starter' : subscription.plan;
-    upgradeForm.duration_months = 1;
-    upgradeForm.price = subscription.plan === 'free' ? 0 : Number(subscription.price || 0);
+    const newPlan = subscription.plan === 'free' ? 'growth' : subscription.plan;
+    const newMonths = subscription.plan === 'free' ? 6 : (subscription.duration_months || 1);
+    upgradeForm.plan = ['starter', 'growth', 'pro', 'enterprise'].includes(newPlan) ? newPlan : 'growth';
+    upgradeForm.duration_months = newMonths;
+    upgradeForm.price = subscription.plan === 'free' ? getSuggestedPrice(upgradeForm.plan, upgradeForm.duration_months) : Number(subscription.price || 0);
     upgradeForm.status = subscription.status === 'active' ? 'active' : 'pending';
     upgradeForm.starts_at = subscription.ends_at
         ? subscription.ends_at.split(' ')[0]
@@ -232,6 +253,10 @@ const openUpgradeDialog = (subscription: Subscription) => {
     upgradeForm.notes = '';
     upgradeForm.clearErrors();
     showUpgradeDialog.value = true;
+};
+
+const applySuggestedPrice = () => {
+    upgradeForm.price = getSuggestedPrice(upgradeForm.plan, Number(upgradeForm.duration_months) || 1);
 };
 
 const handleUpdate = () => {
@@ -441,9 +466,11 @@ const handleDelete = async (subscription: Subscription) => {
                                             variant="outline"
                                             size="sm"
                                             @click="openUpgradeDialog(subscription)"
-                                            title="Upgrade Paket"
+                                            title="Ubah Plan"
+                                            class="text-emerald-600 hover:text-emerald-700 hover:border-emerald-300"
                                         >
-                                            <CreditCard class="h-4 w-4" />
+                                            <CreditCard class="h-4 w-4 mr-1" />
+                                            Ubah Plan
                                         </Button>
                                         <Button 
                                             v-if="subscription.payment_proof" 
@@ -516,10 +543,11 @@ const handleDelete = async (subscription: Subscription) => {
                                             variant="outline"
                                             size="sm"
                                             @click="openUpgradeDialog(subscription)"
-                                            title="Upgrade ke Premium"
+                                            title="Ubah Plan / Upgrade ke Premium"
                                             class="text-emerald-600 hover:text-emerald-700 hover:border-emerald-300"
                                         >
-                                            <CreditCard class="h-4 w-4" />
+                                            <CreditCard class="h-4 w-4 mr-1" />
+                                            Ubah Plan
                                         </Button>
                                         <Button variant="outline" size="sm" @click="openEditDialog(subscription)">
                                             <Edit class="h-4 w-4" />
@@ -576,12 +604,14 @@ const handleDelete = async (subscription: Subscription) => {
 
             </div>
 
-            <!-- Upgrade Dialog -->
+            <!-- Ubah Plan / Upgrade Dialog -->
             <Dialog v-model:open="showUpgradeDialog">
                 <DialogContent class="sm:max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>Upgrade Subscription</DialogTitle>
-                        <DialogDescription>Ubah paket trial ke paket berbayar dan tentukan periode langganan</DialogDescription>
+                        <DialogTitle>Ubah Plan</DialogTitle>
+                        <DialogDescription>
+                            {{ selectedSubscription?.plan === 'free' ? 'Ubah dari trial ke paket berbayar dan tentukan periode langganan.' : 'Ganti paket langganan, durasi, dan status. Harga bisa disesuaikan.' }}
+                        </DialogDescription>
                     </DialogHeader>
                     <form @submit.prevent="handleUpgrade" class="space-y-4">
                         <div class="rounded-lg border border-sidebar-border/70 bg-muted/40 p-4 text-sm dark:border-sidebar-border">
@@ -651,7 +681,11 @@ const handleDelete = async (subscription: Subscription) => {
                                 />
                                 <InputError :message="upgradeForm.errors.price" />
                                 <p class="text-xs text-muted-foreground mt-1">
-                                    Preview: {{ formatCurrency(Number(upgradeForm.price) || 0) }}
+                                    Tampilan: {{ formatCurrency(Number(upgradeForm.price) || 0) }}
+                                    · Standar: {{ formatCurrency(suggestedPrice) }}
+                                    <Button type="button" variant="link" class="h-auto p-0 text-xs ml-1" @click="applySuggestedPrice">
+                                        Pakai standar
+                                    </Button>
                                 </p>
                             </div>
                             <div>
@@ -686,7 +720,7 @@ const handleDelete = async (subscription: Subscription) => {
                                 Batal
                             </Button>
                             <Button type="submit" :disabled="upgradeForm.processing" class="text-white hover:opacity-90 transition-opacity disabled:opacity-50" style="background-color: oklch(0.65 0.19 137.46);">
-                                {{ upgradeForm.processing ? 'Memproses...' : 'Upgrade Sekarang' }}
+                                {{ upgradeForm.processing ? 'Memproses...' : 'Simpan Ubah Plan' }}
                             </Button>
                         </div>
                     </form>

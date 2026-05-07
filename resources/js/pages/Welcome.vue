@@ -12,6 +12,7 @@ const FeaturesSection = defineAsyncComponent(() => import('@/components/Landing/
 const HowToUseSection = defineAsyncComponent(() => import('@/components/Landing/HowToUseSection.vue'));
 const CTASection = defineAsyncComponent(() => import('@/components/Landing/CTASection.vue'));
 const PricingSection = defineAsyncComponent(() => import('@/components/Landing/PricingSection.vue'));
+const AppDownloadSection = defineAsyncComponent(() => import('@/components/Landing/AppDownloadSection.vue'));
 const FAQSection = defineAsyncComponent(() => import('@/components/Landing/FAQSection.vue'));
 const FooterSection = defineAsyncComponent(() => import('@/components/Landing/FooterSection.vue'));
 const FloatingWhatsApp = defineAsyncComponent(() => import('@/components/Landing/FloatingWhatsApp.vue'));
@@ -27,8 +28,8 @@ withDefaults(
 
 const schema = {
   "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "FinWa - Catat Keuangan via WhatsApp",
+  "@type": ["SoftwareApplication", "FinancialProduct"],
+  "name": "FinWa - Aplikasi Keuangan WhatsApp Indonesia",
   "applicationCategory": "FinanceApplication",
   "operatingSystem": "Web, WhatsApp",
   "offers": {
@@ -36,7 +37,8 @@ const schema = {
     "price": "0",
     "priceCurrency": "IDR"
   },
-  "description": "Catat keuangan via WhatsApp dengan mudah! Aplikasi pencatatan keuangan otomatis dari WA. Cukup chat pengeluaran & pemasukan, langsung tercatat otomatis.",
+  "areaServed": "ID",
+  "description": "FinWa adalah aplikasi keuangan WhatsApp Indonesia untuk UMKM dan freelancer. Catat pengeluaran dan pemasukan otomatis hanya dengan chat WA. Coba Gratis!",
   "aggregateRating": {
     "@type": "AggregateRating",
     "ratingValue": "4.8",
@@ -50,7 +52,7 @@ const organizationSchema = {
   "name": "FinWa",
   "url": "https://finwa.web.id",
   "logo": "https://finwa.web.id/finwalogo.png",
-  "description": "FinWa adalah aplikasi untuk catat keuangan via WhatsApp. Pencatatan keuangan dari WA menjadi mudah dan otomatis.",
+  "description": "FinWa adalah aplikasi keuangan WhatsApp Indonesia. Pencatatan keuangan dari WA menjadi mudah dan otomatis untuk UMKM dan freelancer.",
   "sameAs": [
     "https://wa.me/6285762000079"
   ]
@@ -82,27 +84,27 @@ const faqSchema = {
 
 <template>
     <Head>
-        <title>Catat Keuangan via WhatsApp - FinWa | Pencatatan Otomatis dari WA</title>
-        <meta name="description" content="Catat keuangan via WhatsApp dengan mudah! FinWa adalah aplikasi pencatatan keuangan otomatis dari WA. Cukup chat pengeluaran & pemasukan, langsung tercatat. Coba Gratis!" />
-        <meta name="keywords" content="catat keuangan via whatsapp, catat keuangan dari wa, aplikasi catat keuangan whatsapp, pencatatan keuangan lewat wa, bot keuangan whatsapp, catat pengeluaran via wa, aplikasi keuangan di whatsapp, finwa, catatan keuangan otomatis whatsapp, buku kas whatsapp" />
+        <title>FinWa: Aplikasi Keuangan WhatsApp Indonesia</title>
+        <meta name="description" content="Catat keuangan via WhatsApp dengan mudah. FinWa adalah aplikasi keuangan WhatsApp Indonesia. Cukup chat pengeluaran, otomatis tercatat. Coba Gratis!" />
+        <meta name="keywords" content="aplikasi keuangan whatsapp indonesia, catat keuangan via whatsapp, aplikasi catat keuangan umkm, finwa, bot keuangan whatsapp, pencatatan otomatis dari wa" />
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
         <link rel="canonical" href="https://finwa.web.id" />
 
         <!-- Open Graph / Facebook -->
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://finwa.web.id/" />
-        <meta property="og:title" content="Catat Keuangan via WhatsApp - FinWa | Pencatatan Otomatis dari WA" />
-        <meta property="og:description" content="Catat keuangan via WhatsApp dengan mudah! Cukup chat pengeluaran & pemasukan di WA, FinWa otomatis mencatat. Aplikasi pencatatan keuangan terbaik dari WhatsApp." />
+        <meta property="og:title" content="FinWa: Aplikasi Keuangan WhatsApp Indonesia" />
+        <meta property="og:description" content="Catat keuangan via WhatsApp dengan mudah. FinWa adalah aplikasi keuangan WhatsApp Indonesia. Cukup chat pengeluaran, otomatis tercatat. Coba Gratis!" />
         <meta property="og:image" content="https://finwa.web.id/finwalogo.png" />
-        <meta property="og:image:alt" content="FinWa - Aplikasi Catat Keuangan via WhatsApp" />
+        <meta property="og:image:alt" content="FinWa - Aplikasi Keuangan WhatsApp Indonesia" />
 
         <!-- Twitter -->
         <meta property="twitter:card" content="summary_large_image" />
         <meta property="twitter:url" content="https://finwa.web.id/" />
-        <meta property="twitter:title" content="Catat Keuangan via WhatsApp - FinWa | Pencatatan Otomatis dari WA" />
-        <meta property="twitter:description" content="Catat keuangan via WhatsApp dengan mudah! Cukup chat pengeluaran & pemasukan di WA, FinWa otomatis mencatat. Aplikasi pencatatan keuangan terbaik dari WhatsApp." />
+        <meta property="twitter:title" content="FinWa: Aplikasi Keuangan WhatsApp Indonesia" />
+        <meta property="twitter:description" content="Catat keuangan via WhatsApp dengan mudah. FinWa adalah aplikasi keuangan WhatsApp Indonesia. Cukup chat pengeluaran, otomatis tercatat. Coba Gratis!" />
         <meta property="twitter:image" content="https://finwa.web.id/finwalogo.png" />
-        <meta property="twitter:image:alt" content="FinWa - Aplikasi Catat Keuangan via WhatsApp" />
+        <meta property="twitter:image:alt" content="FinWa - Aplikasi Keuangan WhatsApp Indonesia" />
         
         <!-- Structured Data -->
         <component is="script" type="application/ld+json">{{ JSON.stringify(schema) }}</component>
@@ -110,7 +112,7 @@ const faqSchema = {
         <component is="script" type="application/ld+json">{{ JSON.stringify(faqSchema) }}</component>
     </Head>
 
-    <div class="antialiased bg-white text-neutral-900 selection:bg-emerald-500/30 selection:text-emerald-900 font-sans">
+    <div class="landing-brand antialiased bg-white text-neutral-900 selection:bg-[var(--fw-a20)] selection:text-[var(--fw-900)] font-sans">
         <BackgroundAccents />
         <Navbar />
         <HeroSection />
@@ -138,6 +140,11 @@ const faqSchema = {
         </div>
         <div data-lazy-section>
             <Suspense>
+                <AppDownloadSection />
+            </Suspense>
+        </div>
+        <div data-lazy-section>
+            <Suspense>
                 <FAQSection />
             </Suspense>
         </div>
@@ -151,6 +158,42 @@ const faqSchema = {
         <Suspense>
             <FloatingWhatsApp phone-number="6285762000079" message="Halo kak, saya mau daftar FinWa. Ketik *Daftar* untuk mulai ya!" />
         </Suspense>
+
     </div>
 </template>
+
+<style>
+/* Palet hijau landing: aksen = oklch(0.65 0.19 137.46). Di :root agar ikut Teleport (menu mobile). */
+:root:has(.landing-brand) {
+    --fw-h: 137.46;
+    --fw-50: oklch(0.98 0.015 var(--fw-h));
+    --fw-100: oklch(0.95 0.035 var(--fw-h));
+    --fw-200: oklch(0.9 0.06 var(--fw-h));
+    --fw-300: oklch(0.82 0.1 var(--fw-h));
+    --fw-400: oklch(0.76 0.14 var(--fw-h));
+    --fw-500: oklch(0.71 0.17 var(--fw-h));
+    --fw-550: oklch(0.68 0.18 var(--fw-h));
+    --fw-600: oklch(0.6 0.17 var(--fw-h));
+    --fw-650: oklch(0.65 0.19 var(--fw-h));
+    --fw-700: oklch(0.5 0.14 var(--fw-h));
+    --fw-800: oklch(0.4 0.11 var(--fw-h));
+    --fw-900: oklch(0.3 0.08 var(--fw-h));
+    --fw-a10: oklch(0.65 0.19 var(--fw-h) / 0.1);
+    --fw-a15: oklch(0.65 0.19 var(--fw-h) / 0.15);
+    --fw-a20: oklch(0.65 0.19 var(--fw-h) / 0.2);
+    --fw-a30: oklch(0.65 0.19 var(--fw-h) / 0.3);
+    --fw-ring-35: oklch(0.65 0.19 var(--fw-h) / 0.35);
+    --fw-mulai-tint: oklch(0.97 0.02 var(--fw-h) / 0.5);
+    --fw-cardwash-from: oklch(0.88 0.06 var(--fw-h) / 0.12);
+    --fw-cardwash-mid: oklch(0.97 0.02 var(--fw-h) / 0.2);
+    --fw-icon-faint: oklch(0.6 0.17 var(--fw-h) / 0.09);
+    --fw-icon-faint-hover: oklch(0.6 0.17 var(--fw-h) / 0.12);
+    --fw-glow: oklch(0.65 0.19 var(--fw-h) / 0.15);
+    --fw-ring-soft: oklch(0.95 0.035 var(--fw-h) / 0.8);
+    --fw-ring-badge: oklch(0.9 0.06 var(--fw-h) / 0.6);
+    --fw-dark-surface: oklch(0.3 0.08 var(--fw-h) / 0.22);
+    --fw-shadow-drop: 0 10px 25px -5px oklch(0.65 0.19 var(--fw-h) / 0.28);
+    --fw-shadow-drop-hover: 0 12px 28px -5px oklch(0.65 0.19 var(--fw-h) / 0.36);
+}
+</style>
 

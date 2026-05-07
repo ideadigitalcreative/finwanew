@@ -15,7 +15,7 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { LayoutGrid, Receipt, CreditCard, MessageSquare, Wallet, Shield, Users, Building2, HelpCircle, PiggyBank } from 'lucide-vue-next';
+import { LayoutGrid, Receipt, CreditCard, MessageSquare, Wallet, Shield, Users, Building2, HelpCircle, PiggyBank, Scale, Sparkles, Search } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -77,6 +77,11 @@ const regularNavItems: NavItem[] = [
         icon: PiggyBank,
     },
     {
+        title: 'Hutang & Piutang',
+        href: '/hutang-piutang',
+        icon: Scale,
+    },
+    {
         title: 'Subscription',
         href: '/subscriptions',
         icon: CreditCard,
@@ -133,6 +138,16 @@ const superAdminNavItems = computed<NavItem[]>(() => [
         title: 'Bank Management',
         href: superadmin.banks.index(),
         icon: Building2,
+    },
+    {
+        title: 'Gemini AI',
+        href: '/superadmin/gemini-settings',
+        icon: Sparkles,
+    },
+    {
+        title: 'Risen AI (SEO)',
+        href: '/admin/risen-ai',
+        icon: Search,
     },
     {
         title: 'Support',

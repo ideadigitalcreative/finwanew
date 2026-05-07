@@ -20,17 +20,17 @@ class EnsureSuperAdmin
             'method' => $request->method(),
             'user_id' => $request->user()?->id,
         ]);
-        
+
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             \Illuminate\Support\Facades\Log::warning('EnsureSuperAdmin: User not authenticated', [
                 'path' => $request->path(),
             ]);
             abort(403, 'User must be authenticated');
         }
 
-        if (!$user->isSuperAdmin()) {
+        if (! $user->isSuperAdmin()) {
             \Illuminate\Support\Facades\Log::warning('EnsureSuperAdmin: User is not super admin', [
                 'user_id' => $user->id,
                 'is_super_admin' => $user->is_super_admin,

@@ -4,8 +4,8 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response;
 
 class LogAllRequests
 {
@@ -32,8 +32,7 @@ class LogAllRequests
                 'has_csrf_token' => $request->has('_token') || $request->header('X-CSRF-TOKEN'),
             ]);
         }
-        
+
         return $next($request);
     }
 }
-

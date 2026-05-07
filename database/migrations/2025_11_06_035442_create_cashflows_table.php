@@ -22,7 +22,7 @@ return new class extends Migration
             $table->json('summary')->nullable(); // Markdown + JSON summary
             $table->json('breakdown')->nullable(); // Breakdown by category
             $table->timestamps();
-            
+
             $table->unique(['tenant_id', 'period_start', 'period_end']);
             $table->index(['tenant_id', 'period_start']);
         });

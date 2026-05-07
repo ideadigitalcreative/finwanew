@@ -7,11 +7,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, TwoFactorAuthenticatable;
+    use HasApiTokens, HasFactory, Notifiable, TwoFactorAuthenticatable;
 
     /**
      * The attributes that are mass assignable.
@@ -79,11 +80,12 @@ class User extends Authenticatable
      */
     public function hasPermission(string $permission): bool
     {
-        if (!$this->role) {
+        if (! $this->role) {
             return false;
         }
 
         $permissions = $this->role->permissions ?? [];
+
         return in_array($permission, $permissions) || in_array('*', $permissions);
     }
 
@@ -92,7 +94,7 @@ class User extends Authenticatable
      */
     public function isAdmin(): bool
     {
-        if (!$this->role) {
+        if (! $this->role) {
             return false;
         }
 
@@ -124,8 +126,8 @@ class User extends Authenticatable
     {
         // Try to get from session first
         $tenantId = session('current_tenant_id', $this->tenant_id);
-        
-        return $this->activeTenants()->where('tenants.id', $tenantId)->first() 
+
+        return $this->activeTenants()->where('tenants.id', $tenantId)->first()
             ?? $this->activeTenants()->first()
             ?? $this->tenant;
     }

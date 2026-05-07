@@ -8,10 +8,10 @@
         aria-label="Chat via WhatsApp"
     >
         <!-- Pulse Animation Ring -->
-        <span class="absolute inset-0 rounded-full bg-green-500/30 animate-ping"></span>
+        <span class="absolute inset-0 rounded-full bg-[var(--fw-a30)] animate-ping"></span>
         
         <!-- Main Button -->
-        <div class="relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-green-500 to-green-600 shadow-lg shadow-green-500/30 hover:shadow-green-500/50 hover:scale-110 transition-all duration-300 cursor-pointer">
+        <div class="relative flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-[var(--fw-500)] to-[var(--fw-600)] shadow-[var(--fw-shadow-drop)] hover:shadow-[var(--fw-shadow-drop-hover)] hover:scale-110 transition-all duration-300 cursor-pointer">
             <!-- WhatsApp Icon -->
             <svg 
                 xmlns="http://www.w3.org/2000/svg" 

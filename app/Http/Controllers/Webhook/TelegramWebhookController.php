@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Webhook;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessIncomingMessage;
 use App\Models\Channel;
 use App\Models\Message;
-use App\Jobs\ProcessIncomingMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -27,30 +27,30 @@ class TelegramWebhookController extends Controller
             'type' => 'required|in:text,image,audio,doc,csv',
             'content' => 'nullable|string',
             'timestamp' => 'required|integer',
-            'raw_data' => 'nullable|array'
+            'raw_data' => 'nullable|array',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'error' => 'Invalid payload',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 400);
         }
 
         try {
             $data = $validator->validated();
-            
+
             // Find or create channel
             $channel = Channel::firstOrCreate(
                 [
                     'tenant_id' => $data['tenant_id'],
                     'type' => 'telegram',
-                    'channel_account' => $data['channel_account']
+                    'channel_account' => $data['channel_account'],
                 ],
                 [
-                    'name' => 'Telegram: ' . $data['channel_account'],
-                    'is_active' => true
+                    'name' => 'Telegram: '.$data['channel_account'],
+                    'is_active' => true,
                 ]
             );
 
@@ -65,7 +65,7 @@ class TelegramWebhookController extends Controller
                 'type' => $data['type'],
                 'content' => $data['content'],
                 'timestamp' => $data['timestamp'],
-                'raw_data' => $data['raw_data'] ?? null
+                'raw_data' => $data['raw_data'] ?? null,
             ]);
 
             // Update channel last activity
@@ -79,20 +79,20 @@ class TelegramWebhookController extends Controller
                 'message' => 'Message received and queued for processing',
                 'data' => [
                     'message_id' => $message->id,
-                    'channel_id' => $channel->id
-                ]
+                    'channel_id' => $channel->id,
+                ],
             ], 201);
 
         } catch (\Exception $e) {
             Log::error('Error handling Telegram message', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'payload' => $request->all()
+                'payload' => $request->all(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to process message: ' . $e->getMessage()
+                'error' => 'Failed to process message: '.$e->getMessage(),
             ], 500);
         }
     }

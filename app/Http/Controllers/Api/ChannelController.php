@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Channel;
-use App\Models\Tenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -20,10 +19,10 @@ class ChannelController extends Controller
                 ->where('channel_account', $chatId)
                 ->first();
 
-            if (!$channel) {
+            if (! $channel) {
                 return response()->json([
                     'success' => false,
-                    'error' => 'Channel not found'
+                    'error' => 'Channel not found',
                 ], 404);
             }
 
@@ -34,14 +33,14 @@ class ChannelController extends Controller
                     'channel_id' => $channel->id,
                     'type' => $channel->type,
                     'channel_account' => $channel->channel_account,
-                    'is_active' => $channel->is_active
-                ]
+                    'is_active' => $channel->is_active,
+                ],
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -56,10 +55,10 @@ class ChannelController extends Controller
                 ->where('channel_account', $teamId)
                 ->first();
 
-            if (!$channel) {
+            if (! $channel) {
                 return response()->json([
                     'success' => false,
-                    'error' => 'Channel not found'
+                    'error' => 'Channel not found',
                 ], 404);
             }
 
@@ -70,14 +69,14 @@ class ChannelController extends Controller
                     'channel_id' => $channel->id,
                     'type' => $channel->type,
                     'channel_account' => $channel->channel_account,
-                    'is_active' => $channel->is_active
-                ]
+                    'is_active' => $channel->is_active,
+                ],
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -92,14 +91,14 @@ class ChannelController extends Controller
             'type' => 'required|in:whatsapp,telegram,slack',
             'channel_account' => 'required|string',
             'name' => 'nullable|string',
-            'is_active' => 'boolean'
+            'is_active' => 'boolean',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'error' => 'Invalid payload',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 400);
         }
 
@@ -108,23 +107,23 @@ class ChannelController extends Controller
                 [
                     'tenant_id' => $request->input('tenant_id'),
                     'type' => $request->input('type'),
-                    'channel_account' => $request->input('channel_account')
+                    'channel_account' => $request->input('channel_account'),
                 ],
                 [
-                    'name' => $request->input('name') ?? ucfirst($request->input('type')) . ': ' . $request->input('channel_account'),
-                    'is_active' => $request->input('is_active', true)
+                    'name' => $request->input('name') ?? ucfirst($request->input('type')).': '.$request->input('channel_account'),
+                    'is_active' => $request->input('is_active', true),
                 ]
             );
 
             return response()->json([
                 'success' => true,
-                'data' => $channel
+                'data' => $channel,
             ], 201);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

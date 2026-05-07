@@ -47,23 +47,23 @@ class BroadcastController extends Controller
         $allChannels = Channel::where('type', 'whatsapp')
             ->where('is_active', true)
             ->get();
-        
+
         Log::info('Broadcast: Looking for active WhatsApp channels', [
             'total_found' => $allChannels->count(),
-            'channels' => $allChannels->map(fn($c) => [
+            'channels' => $allChannels->map(fn ($c) => [
                 'id' => $c->id,
                 'account' => $c->channel_account,
                 'config' => $c->config,
-            ])->toArray()
+            ])->toArray(),
         ]);
-        
+
         // Find channel with session_id - prioritize ones with 'connected' status in config
         $superAdminChannel = null;
         $fallbackChannel = null;
-        
+
         foreach ($allChannels as $channel) {
             $config = $channel->config;
-            if (is_array($config) && !empty($config['session_id'])) {
+            if (is_array($config) && ! empty($config['session_id'])) {
                 // Check if this channel has connected status in config
                 $statusInConfig = strtolower($config['session_status'] ?? $config['last_status'] ?? '');
                 if (in_array($statusInConfig, ['connected', 'authenticated'])) {
@@ -72,14 +72,14 @@ class BroadcastController extends Controller
                     break;
                 }
                 // Keep as fallback if no connected channel found
-                if (!$fallbackChannel) {
+                if (! $fallbackChannel) {
                     $fallbackChannel = $channel;
                 }
             }
         }
-        
+
         // If no connected channel found, use fallback
-        if (!$superAdminChannel && $fallbackChannel) {
+        if (! $superAdminChannel && $fallbackChannel) {
             $superAdminChannel = $fallbackChannel;
         }
 
@@ -90,7 +90,7 @@ class BroadcastController extends Controller
                 'channel_id' => $superAdminChannel->id,
                 'session_id' => $sessionId,
             ]);
-            
+
             // Try to get status from API, but assume connected if channel is active
             try {
                 $statusResult = $this->whatsAppService->getSessionStatus($sessionId);
@@ -103,7 +103,7 @@ class BroadcastController extends Controller
             } catch (\Exception $e) {
                 Log::warning('Broadcast: Could not get WhatsApp status from API', [
                     'session_id' => $sessionId,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
                 ]);
                 // Assume connected if channel is active and has session
                 $sessionStatus = [
@@ -144,30 +144,30 @@ class BroadcastController extends Controller
         $allChannels = Channel::where('type', 'whatsapp')
             ->where('is_active', true)
             ->get();
-        
+
         // Find channel with session_id - prioritize ones with 'connected' status
         $channel = null;
         $fallbackChannel = null;
-        
+
         foreach ($allChannels as $ch) {
             $config = $ch->config;
-            if (is_array($config) && !empty($config['session_id'])) {
+            if (is_array($config) && ! empty($config['session_id'])) {
                 $statusInConfig = strtolower($config['session_status'] ?? $config['last_status'] ?? '');
                 if (in_array($statusInConfig, ['connected', 'authenticated'])) {
                     $channel = $ch;
                     break;
                 }
-                if (!$fallbackChannel) {
+                if (! $fallbackChannel) {
                     $fallbackChannel = $ch;
                 }
             }
         }
-        
-        if (!$channel && $fallbackChannel) {
+
+        if (! $channel && $fallbackChannel) {
             $channel = $fallbackChannel;
         }
 
-        if (!$channel) {
+        if (! $channel) {
             return response()->json([
                 'success' => false,
                 'error' => 'Tidak ada session WhatsApp yang aktif. Silakan setup WhatsApp terlebih dahulu.',
@@ -175,13 +175,13 @@ class BroadcastController extends Controller
         }
 
         $sessionId = $channel->config['session_id'] ?? null;
-        if (!$sessionId) {
+        if (! $sessionId) {
             return response()->json([
                 'success' => false,
                 'error' => 'Session ID tidak ditemukan.',
             ], 400);
         }
-        
+
         Log::info('Broadcast: Using session for sending', [
             'channel_id' => $channel->id,
             'session_id' => $sessionId,
@@ -208,7 +208,7 @@ class BroadcastController extends Controller
                         'phone_number' => $phoneNumber,
                         'session_id' => $sessionId,
                     ]);
-                    
+
                     // Extract LID from messageId if available
                     // Format: "true_{LID}@lid_{uniqueId}" or "true_{LID}_..."
                     // Response structure: $result['data']['data']['messageId']
@@ -216,34 +216,34 @@ class BroadcastController extends Controller
                     $messageId = $responseData['messageId'] ?? null;
                     if ($messageId && preg_match('/true_(\d+)@lid/', $messageId, $matches)) {
                         $discoveredLid = $matches[1];
-                        
+
                         // Find user by phone number and create LID mapping
                         $existingNumber = UserWhatsAppNumber::where('whatsapp_number', $phoneNumber)
                             ->where('is_active', true)
                             ->first();
-                        
+
                         if ($existingNumber) {
                             // Check if LID already registered
                             $lidExists = UserWhatsAppNumber::where('whatsapp_number', $discoveredLid)
                                 ->where('user_id', $existingNumber->user_id)
                                 ->where('tenant_id', $existingNumber->tenant_id)
                                 ->exists();
-                            
-                            if (!$lidExists) {
+
+                            if (! $lidExists) {
                                 UserWhatsAppNumber::create([
                                     'user_id' => $existingNumber->user_id,
                                     'tenant_id' => $existingNumber->tenant_id,
                                     'whatsapp_number' => $discoveredLid,
-                                    'name' => 'LID - ' . $phoneNumber,
+                                    'name' => 'LID - '.$phoneNumber,
                                     'is_primary' => false,
                                     'is_active' => true,
-                                    'is_lid' => true
+                                    'is_lid' => true,
                                 ]);
-                                
+
                                 Log::info('LID mapping created from broadcast', [
                                     'lid' => $discoveredLid,
                                     'phone_number' => $phoneNumber,
-                                    'tenant_id' => $existingNumber->tenant_id
+                                    'tenant_id' => $existingNumber->tenant_id,
                                 ]);
                             }
                         }
@@ -298,29 +298,29 @@ class BroadcastController extends Controller
         $allChannels = Channel::where('type', 'whatsapp')
             ->where('is_active', true)
             ->get();
-        
+
         $channel = null;
         $fallbackChannel = null;
-        
+
         foreach ($allChannels as $ch) {
             $config = $ch->config;
-            if (is_array($config) && !empty($config['session_id'])) {
+            if (is_array($config) && ! empty($config['session_id'])) {
                 $statusInConfig = strtolower($config['session_status'] ?? $config['last_status'] ?? '');
                 if (in_array($statusInConfig, ['connected', 'authenticated'])) {
                     $channel = $ch;
                     break;
                 }
-                if (!$fallbackChannel) {
+                if (! $fallbackChannel) {
                     $fallbackChannel = $ch;
                 }
             }
         }
-        
-        if (!$channel && $fallbackChannel) {
+
+        if (! $channel && $fallbackChannel) {
             $channel = $fallbackChannel;
         }
 
-        if (!$channel) {
+        if (! $channel) {
             return response()->json([
                 'success' => false,
                 'error' => 'Tidak ada session WhatsApp yang aktif.',
@@ -328,7 +328,7 @@ class BroadcastController extends Controller
         }
 
         $sessionId = $channel->config['session_id'] ?? null;
-        if (!$sessionId) {
+        if (! $sessionId) {
             return response()->json([
                 'success' => false,
                 'error' => 'Session ID tidak ditemukan.',
@@ -346,7 +346,7 @@ class BroadcastController extends Controller
 
                 return response()->json([
                     'success' => true,
-                    'message' => 'Pesan berhasil dikirim ke ' . $phoneNumber,
+                    'message' => 'Pesan berhasil dikirim ke '.$phoneNumber,
                 ]);
             }
 
@@ -376,57 +376,57 @@ class BroadcastController extends Controller
             [
                 'id' => 'update_fitur',
                 'name' => '🚀 Update Fitur Baru',
-                'message' => "🚀 *Update Fitur Baru FinWa!*\n\n" .
-                    "Halo! Ada fitur baru yang siap Anda coba:\n\n" .
-                    "✨ [Nama Fitur]\n" .
-                    "[Deskripsi singkat fitur]\n\n" .
-                    "Cara menggunakan:\n" .
-                    "• [Langkah 1]\n" .
-                    "• [Langkah 2]\n\n" .
-                    "Ketik *help* untuk panduan lengkap.\n\n" .
-                    "Terima kasih telah menggunakan FinWa! 💙",
+                'message' => "🚀 *Update Fitur Baru FinWa!*\n\n".
+                    "Halo! Ada fitur baru yang siap Anda coba:\n\n".
+                    "✨ [Nama Fitur]\n".
+                    "[Deskripsi singkat fitur]\n\n".
+                    "Cara menggunakan:\n".
+                    "• [Langkah 1]\n".
+                    "• [Langkah 2]\n\n".
+                    "Ketik *help* untuk panduan lengkap.\n\n".
+                    'Terima kasih telah menggunakan FinWa! 💙',
             ],
             [
                 'id' => 'maintenance',
                 'name' => '🔧 Pemberitahuan Maintenance',
-                'message' => "🔧 *Pemberitahuan Maintenance*\n\n" .
-                    "Halo! Kami akan melakukan maintenance sistem pada:\n\n" .
-                    "📅 Tanggal: [Tanggal]\n" .
-                    "⏰ Waktu: [Waktu] WIB\n" .
-                    "⏱️ Durasi: ± [X] jam\n\n" .
-                    "Selama maintenance, layanan mungkin tidak tersedia.\n\n" .
-                    "Mohon maaf atas ketidaknyamanannya.\n" .
-                    "Terima kasih atas pengertiannya! 🙏",
+                'message' => "🔧 *Pemberitahuan Maintenance*\n\n".
+                    "Halo! Kami akan melakukan maintenance sistem pada:\n\n".
+                    "📅 Tanggal: [Tanggal]\n".
+                    "⏰ Waktu: [Waktu] WIB\n".
+                    "⏱️ Durasi: ± [X] jam\n\n".
+                    "Selama maintenance, layanan mungkin tidak tersedia.\n\n".
+                    "Mohon maaf atas ketidaknyamanannya.\n".
+                    'Terima kasih atas pengertiannya! 🙏',
             ],
             [
                 'id' => 'promo',
                 'name' => '🎉 Promo Spesial',
-                'message' => "🎉 *Promo Spesial FinWa!*\n\n" .
-                    "Halo! Spesial untuk Anda:\n\n" .
-                    "🎁 *[Nama Promo]*\n" .
-                    "[Deskripsi promo]\n\n" .
-                    "🗓️ Berlaku: [Tanggal mulai] - [Tanggal akhir]\n" .
-                    "🔗 Info: https://finwa.web.id/promo\n\n" .
-                    "Jangan sampai terlewat! 🚀",
+                'message' => "🎉 *Promo Spesial FinWa!*\n\n".
+                    "Halo! Spesial untuk Anda:\n\n".
+                    "🎁 *[Nama Promo]*\n".
+                    "[Deskripsi promo]\n\n".
+                    "🗓️ Berlaku: [Tanggal mulai] - [Tanggal akhir]\n".
+                    "🔗 Info: https://finwa.web.id/promo\n\n".
+                    'Jangan sampai terlewat! 🚀',
             ],
             [
                 'id' => 'tips',
                 'name' => '💡 Tips Keuangan',
-                'message' => "💡 *Tips Keuangan FinWa*\n\n" .
-                    "Halo! Ini tips keuangan mingguan:\n\n" .
-                    "*[Judul Tips]*\n\n" .
-                    "[Isi tips]\n\n" .
-                    "💰 Sudah catat pengeluaran hari ini?\n" .
-                    "Ketik langsung: _makan siang 25rb_\n\n" .
-                    "Semangat mengatur keuangan! 🚀",
+                'message' => "💡 *Tips Keuangan FinWa*\n\n".
+                    "Halo! Ini tips keuangan mingguan:\n\n".
+                    "*[Judul Tips]*\n\n".
+                    "[Isi tips]\n\n".
+                    "💰 Sudah catat pengeluaran hari ini?\n".
+                    "Ketik langsung: _makan siang 25rb_\n\n".
+                    'Semangat mengatur keuangan! 🚀',
             ],
             [
                 'id' => 'reminder',
                 'name' => '⏰ Pengingat',
-                'message' => "⏰ *Pengingat dari FinWa*\n\n" .
-                    "Halo! Jangan lupa:\n\n" .
-                    "📝 [Isi pengingat]\n\n" .
-                    "Semoga membantu! 😊",
+                'message' => "⏰ *Pengingat dari FinWa*\n\n".
+                    "Halo! Jangan lupa:\n\n".
+                    "📝 [Isi pengingat]\n\n".
+                    'Semoga membantu! 😊',
             ],
         ];
 

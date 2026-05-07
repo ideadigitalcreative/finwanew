@@ -7,14 +7,15 @@ use App\Models\Channel;
 use App\Models\Tenant;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Support\Facades\Log;
 
 class WhatsAppController extends Controller
 {
     protected $whatsappService;
+
     protected $systemTenantId = 1; // Tenant sistem untuk super admin
 
     public function __construct(WhatsAppService $whatsappService)
@@ -29,7 +30,7 @@ class WhatsAppController extends Controller
     {
         // Get newChannelId from session flash data (set by store method) or query parameter
         $newChannelId = session('newChannelId') ?? $request->query('newChannelId');
-        
+
         // Clear session flash data after reading
         if (session('newChannelId')) {
             session()->forget('newChannelId');
@@ -37,28 +38,28 @@ class WhatsAppController extends Controller
 
         // Filter by tenant if provided
         $tenantFilter = $request->query('tenant_id');
-        
+
         // Daftar nomor admin yang tidak boleh ditampilkan di halaman SuperAdmin
         $adminNumbers = [
             '6285242766676', // Super admin number
         ];
-        
+
         $query = Channel::where('type', 'whatsapp')
             ->whereNotIn('channel_account', $adminNumbers) // Jangan tampilkan nomor admin
             ->with(['tenant', 'messages' => function ($query) {
                 $query->orderBy('created_at', 'desc')->limit(20);
             }]);
-        
+
         if ($tenantFilter) {
             $query->where('tenant_id', $tenantFilter);
         }
-        
+
         $channels = $query->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($channel) {
                 $config = $channel->config ?? [];
                 $sessionId = $config['session_id'] ?? null;
-                
+
                 // Get session status from gateway
                 $sessionStatus = $config['session_status'] ?? null;
                 if ($sessionId) {
@@ -68,13 +69,13 @@ class WhatsAppController extends Controller
                             // Handle different response formats
                             $responseData = $statusResult['data'] ?? [];
                             $sessionStatus = $responseData['status'] ?? $responseData['data']['status'] ?? $statusResult['status'] ?? 'unknown';
-                            
+
                             // Normalize status (handle case variations)
                             $sessionStatus = strtolower($sessionStatus);
                             if ($sessionStatus === 'connected' || $sessionStatus === 'authenticated') {
                                 $sessionStatus = 'connected';
                             }
-                            
+
                             // Update config with latest status
                             $config['session_status'] = $sessionStatus;
                             $channel->update(['config' => $config]);
@@ -85,7 +86,7 @@ class WhatsAppController extends Controller
                     } catch (\Exception $e) {
                         Log::error('Failed to get session status', [
                             'channel_id' => $channel->id,
-                            'error' => $e->getMessage()
+                            'error' => $e->getMessage(),
                         ]);
                         // Keep existing status if available, otherwise set to error
                         $sessionStatus = $sessionStatus ?? 'error';
@@ -97,6 +98,7 @@ class WhatsAppController extends Controller
                 // Get recent messages with transaction status
                 $recentMessages = $channel->messages->map(function ($message) {
                     $hasTransaction = \App\Models\Transaction::where('message_id', $message->id)->exists();
+
                     return [
                         'id' => $message->id,
                         'content' => $message->content,
@@ -127,7 +129,7 @@ class WhatsAppController extends Controller
                     ] : null,
                 ];
             });
-        
+
         // Check engine status
         $engineStatus = $this->whatsappService->getEngineStatus();
 
@@ -159,7 +161,7 @@ class WhatsAppController extends Controller
             'is_super_admin' => $request->user()?->is_super_admin ?? false,
             'input_data' => $request->all(),
         ]);
-        
+
         try {
             $request->validate([
                 'channel_account' => 'required|string|regex:/^[0-9]+$/',
@@ -178,15 +180,15 @@ class WhatsAppController extends Controller
         // Use system tenant (tenant_id = 1) for super admin channels, or specified tenant_id
         // Handle null or empty tenant_id - use system tenant as default
         $tenantIdInput = $request->input('tenant_id');
-        $tenantId = ($tenantIdInput !== null && $tenantIdInput !== '' && $tenantIdInput !== '0') 
-            ? (int) $tenantIdInput 
+        $tenantId = ($tenantIdInput !== null && $tenantIdInput !== '' && $tenantIdInput !== '0')
+            ? (int) $tenantIdInput
             : $this->systemTenantId;
         Log::info('Getting tenant', [
             'tenant_id_input' => $tenantIdInput,
             'tenant_id_used' => $tenantId,
             'system_tenant_id' => $this->systemTenantId,
         ]);
-        
+
         try {
             $tenant = Tenant::findOrFail($tenantId);
             Log::info('Tenant found', ['tenant_id' => $tenant->id, 'tenant_name' => $tenant->name]);
@@ -200,7 +202,7 @@ class WhatsAppController extends Controller
 
         // Clean phone number (remove +, spaces, etc)
         $phoneNumber = preg_replace('/[^0-9]/', '', $request->channel_account);
-        
+
         // Check if channel already exists
         // $existingChannel = Channel::where('tenant_id', $tenantId)
         //     ->where('type', 'whatsapp')
@@ -220,35 +222,35 @@ class WhatsAppController extends Controller
             // Create session in WhatsApp Gateway
             Log::info('Creating WhatsApp session (Super Admin)', [
                 'tenant_id' => $tenantId,
-                'phone_number' => $phoneNumber
+                'phone_number' => $phoneNumber,
             ]);
-            
+
             $sessionResult = $this->whatsappService->createSession($tenantId, $phoneNumber, $phoneNumber);
 
-            if (!$sessionResult['success']) {
+            if (! $sessionResult['success']) {
                 $errorMessage = $sessionResult['error'] ?? 'Unknown error';
                 $statusCode = $sessionResult['status_code'] ?? null;
-                
+
                 Log::error('Failed to create WhatsApp session (Super Admin)', [
                     'tenant_id' => $tenantId,
                     'phone_number' => $phoneNumber,
                     'error' => $errorMessage,
                     'status_code' => $statusCode,
                 ]);
-                
+
                 if ($request->header('X-Inertia')) {
                     return back()->withErrors([
                         'session' => $errorMessage,
-                        'channel_account' => $errorMessage
+                        'channel_account' => $errorMessage,
                     ])->with('error', $errorMessage);
                 }
-                
-                return redirect()->back()->with('error', 'Gagal membuat session: ' . $errorMessage);
+
+                return redirect()->back()->with('error', 'Gagal membuat session: '.$errorMessage);
             }
 
             // Generate session ID manually (format: wa_{tenantId}_{channelAccount})
             $sessionId = $sessionResult['sessionId'] ?? "wa_{$tenantId}_{$phoneNumber}";
-            
+
             Log::info('WhatsApp session created successfully (Super Admin)', [
                 'tenant_id' => $tenantId,
                 'phone_number' => $phoneNumber,
@@ -268,14 +270,14 @@ class WhatsAppController extends Controller
                 $config['engine_url'] = config('services.whatsapp.engine_url');
                 $updateData = [
                     'is_active' => true,
-                    'config' => $config
+                    'config' => $config,
                 ];
-                
+
                 // Update is_shared_channel if provided
                 if ($request->has('is_shared_channel')) {
                     $updateData['is_shared_channel'] = $request->boolean('is_shared_channel');
                 }
-                
+
                 $channel->update($updateData);
                 Log::info('Channel updated (Super Admin)', ['channel_id' => $channel->id]);
             } else {
@@ -283,7 +285,7 @@ class WhatsAppController extends Controller
                 $channel = Channel::create([
                     'tenant_id' => $tenantId,
                     'type' => 'whatsapp',
-                    'name' => $request->name ?? 'WhatsApp: ' . $phoneNumber,
+                    'name' => $request->name ?? 'WhatsApp: '.$phoneNumber,
                     'channel_account' => $phoneNumber,
                     'is_active' => true,
                     'is_shared_channel' => $request->boolean('is_shared_channel', false),
@@ -300,18 +302,18 @@ class WhatsAppController extends Controller
                     'channel_id' => $channel->id,
                     'route_name' => 'superadmin.whatsapp.index',
                 ]);
-                
+
                 // Store newChannelId in session flash data
                 session()->flash('newChannelId', $channel->id);
-                
+
                 // Redirect to index - index method will read from session and pass to Inertia
                 $redirectUrl = route('superadmin.whatsapp.index');
                 Log::info('Redirecting to', ['url' => $redirectUrl]);
-                
+
                 return redirect()->route('superadmin.whatsapp.index')
                     ->with('success', 'Channel WhatsApp berhasil dibuat. QR code akan muncul otomatis.');
             }
-            
+
             // For AJAX/JSON requests, return channel data
             if ($request->wantsJson()) {
                 return response()->json([
@@ -320,7 +322,7 @@ class WhatsAppController extends Controller
                     'channel' => [
                         'id' => $channel->id,
                         'session_id' => $sessionId,
-                    ]
+                    ],
                 ]);
             }
 
@@ -329,10 +331,10 @@ class WhatsAppController extends Controller
             Log::error('Failed to create WhatsApp channel (Super Admin)', [
                 'tenant_id' => $tenantId,
                 'phone' => $phoneNumber,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
-            return redirect()->back()->with('error', 'Gagal membuat channel: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Gagal membuat channel: '.$e->getMessage());
         }
     }
 
@@ -344,17 +346,17 @@ class WhatsAppController extends Controller
         $config = $channel->config ?? [];
         $sessionId = $config['session_id'] ?? null;
 
-        if (!$sessionId) {
+        if (! $sessionId) {
             return response()->json([
                 'success' => false,
-                'error' => 'Session ID not found. Please reconnect the channel.'
+                'error' => 'Session ID not found. Please reconnect the channel.',
             ], 404);
         }
 
         try {
             Log::info('Getting QR code for channel (Super Admin)', [
                 'channel_id' => $channel->id,
-                'session_id' => $sessionId
+                'session_id' => $sessionId,
             ]);
 
             // Check session status first - if connected, don't return QR
@@ -363,58 +365,58 @@ class WhatsAppController extends Controller
                 $status = $statusResult['status'] ?? $statusResult['data']['status'] ?? 'unknown';
                 Log::info('Session status check (Super Admin)', [
                     'session_id' => $sessionId,
-                    'status' => $status
+                    'status' => $status,
                 ]);
                 if ($status === 'connected' || $status === 'CONNECTED' || $status === 'authenticated') {
                     return response()->json([
                         'success' => false,
                         'error' => 'WhatsApp sudah terhubung. QR code tidak diperlukan.',
-                        'status' => $status
+                        'status' => $status,
                     ], 400);
                 }
             }
 
             $qrResult = $this->whatsappService->getQrCode($sessionId);
-            
+
             Log::info('QR code result (Super Admin)', [
                 'success' => $qrResult['success'] ?? false,
                 'has_data' => isset($qrResult['data']),
-                'error' => $qrResult['error'] ?? null
+                'error' => $qrResult['error'] ?? null,
             ]);
-            
+
             // If QR not ready yet, return helpful message
-            if (!$qrResult['success']) {
+            if (! $qrResult['success']) {
                 $statusCode = $qrResult['status_code'] ?? 404;
                 $status = $qrResult['status'] ?? 'unknown';
-                
+
                 Log::warning('QR code not available (Super Admin)', [
                     'session_id' => $sessionId,
                     'error' => $qrResult['error'] ?? 'Unknown error',
                     'status_code' => $statusCode,
-                    'status' => $status
+                    'status' => $status,
                 ]);
-                
+
                 // Return 202 if QR is being prepared
                 if ($statusCode === 202 || $status === 'initializing' || $status === 'connecting') {
                     return response()->json([
                         'success' => false,
                         'error' => 'QR code sedang dipersiapkan. Silakan tunggu beberapa detik dan coba lagi.',
                         'status' => $status,
-                        'retry_in' => 3
+                        'retry_in' => 3,
                     ], 202); // 202 Accepted - not ready yet
                 }
-                
+
                 return response()->json([
                     'success' => false,
-                    'error' => $qrResult['error'] ?? 'QR code belum tersedia. Status: ' . $status,
+                    'error' => $qrResult['error'] ?? 'QR code belum tersedia. Status: '.$status,
                     'status' => $status,
                 ], 404);
             }
-            
+
             // Parse QR code data - handle different response formats
             $qrData = $qrResult['data'] ?? [];
             $qrCode = null;
-            
+
             // Try different possible keys
             if (isset($qrData['data']['qrCode'])) {
                 $qrCode = $qrData['data']['qrCode'];
@@ -429,12 +431,12 @@ class WhatsAppController extends Controller
             } elseif (is_string($qrData)) {
                 $qrCode = $qrData;
             }
-            
+
             Log::info('QR code parsed (Super Admin)', [
-                'has_qrCode' => !empty($qrCode),
+                'has_qrCode' => ! empty($qrCode),
                 'qrCode_length' => $qrCode ? strlen($qrCode) : 0,
             ]);
-            
+
             if (empty($qrCode)) {
                 // Check if QR is not ready yet
                 $status = $qrData['data']['status'] ?? $qrData['status'] ?? 'unknown';
@@ -443,51 +445,51 @@ class WhatsAppController extends Controller
                         'success' => false,
                         'error' => 'QR code sedang dipersiapkan. Silakan tunggu beberapa detik dan coba lagi.',
                         'status' => $status,
-                        'retry_in' => 3
+                        'retry_in' => 3,
                     ], 202); // 202 Accepted - not ready yet
                 }
-                
+
                 return response()->json([
                     'success' => false,
-                    'error' => 'QR code belum tersedia. Status: ' . $status,
-                    'status' => $status
+                    'error' => 'QR code belum tersedia. Status: '.$status,
+                    'status' => $status,
                 ], 404);
             }
-            
+
             // QR code from wa-blast is already a data URL (from qrcode.toDataURL())
-            if (!str_starts_with($qrCode, 'data:image') && !str_starts_with($qrCode, '<svg') && !str_starts_with($qrCode, 'http')) {
+            if (! str_starts_with($qrCode, 'data:image') && ! str_starts_with($qrCode, '<svg') && ! str_starts_with($qrCode, 'http')) {
                 // If it's base64 without prefix, add it
-                $qrCode = 'data:image/png;base64,' . $qrCode;
+                $qrCode = 'data:image/png;base64,'.$qrCode;
             }
-            
+
             $status = $qrData['data']['status'] ?? $qrData['status'] ?? 'ready';
-            
+
             Log::info('QR code ready to return (Super Admin)', [
                 'session_id' => $sessionId,
                 'status' => $status,
-                'qrCode_length' => strlen($qrCode)
+                'qrCode_length' => strlen($qrCode),
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'data' => [
                     'qr' => $qrCode,
                     'qrCode' => $qrCode,
                     'session_id' => $sessionId,
-                    'status' => $status
-                ]
+                    'status' => $status,
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('Error getting QR code (Super Admin)', [
                 'channel_id' => $channel->id,
                 'session_id' => $sessionId,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
-            
+
             return response()->json([
                 'success' => false,
-                'error' => 'Error: ' . $e->getMessage()
+                'error' => 'Error: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -500,20 +502,21 @@ class WhatsAppController extends Controller
         $config = $channel->config ?? [];
         $sessionId = $config['session_id'] ?? null;
 
-        if (!$sessionId) {
+        if (! $sessionId) {
             return response()->json([
                 'success' => false,
-                'error' => 'Session ID not found'
+                'error' => 'Session ID not found',
             ], 404);
         }
 
         try {
             $statusResult = $this->whatsappService->getSessionStatus($sessionId);
+
             return response()->json($statusResult);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -526,36 +529,36 @@ class WhatsAppController extends Controller
         $config = $channel->config ?? [];
         $sessionId = $config['session_id'] ?? null;
 
-        if (!$sessionId) {
+        if (! $sessionId) {
             return redirect()->back()->with('error', 'Session ID not found');
         }
 
         try {
             $result = $this->whatsappService->reconnectSession($sessionId);
-            
+
             if ($result['success']) {
                 // Update channel config with latest status
                 $status = $result['status'] ?? $result['data']['status'] ?? 'reconnecting';
                 $config['session_status'] = $status;
                 $channel->update(['config' => $config]);
-                
+
                 Log::info('Session reconnected (Super Admin)', [
                     'channel_id' => $channel->id,
                     'session_id' => $sessionId,
-                    'status' => $status
+                    'status' => $status,
                 ]);
-                
+
                 return redirect()->back()->with('success', 'Session berhasil di-reconnect');
             }
 
-            return redirect()->back()->with('error', 'Gagal reconnect: ' . ($result['error'] ?? 'Unknown error'));
+            return redirect()->back()->with('error', 'Gagal reconnect: '.($result['error'] ?? 'Unknown error'));
         } catch (\Exception $e) {
             Log::error('Error reconnecting session (Super Admin)', [
                 'channel_id' => $channel->id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
-            return redirect()->back()->with('error', 'Error: ' . $e->getMessage());
+
+            return redirect()->back()->with('error', 'Error: '.$e->getMessage());
         }
     }
 
@@ -566,22 +569,22 @@ class WhatsAppController extends Controller
     {
         try {
             $result = $this->whatsappService->deleteAllSessions();
-            
+
             if ($result['success']) {
                 Log::info('All WhatsApp sessions deleted (Super Admin)', [
-                    'result' => $result
+                    'result' => $result,
                 ]);
-                
+
                 return redirect()->back()->with('success', $result['message'] ?? 'Semua session WhatsApp berhasil dihapus.');
             }
-            
-            return redirect()->back()->with('error', 'Gagal menghapus semua session: ' . ($result['error'] ?? 'Unknown error'));
+
+            return redirect()->back()->with('error', 'Gagal menghapus semua session: '.($result['error'] ?? 'Unknown error'));
         } catch (\Exception $e) {
             Log::error('Failed to delete all WhatsApp sessions (Super Admin)', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
-            
-            return redirect()->back()->with('error', 'Error: ' . $e->getMessage());
+
+            return redirect()->back()->with('error', 'Error: '.$e->getMessage());
         }
     }
 
@@ -598,32 +601,32 @@ class WhatsAppController extends Controller
             if ($sessionId) {
                 Log::info('Deleting WhatsApp session (Super Admin)', [
                     'channel_id' => $channel->id,
-                    'session_id' => $sessionId
+                    'session_id' => $sessionId,
                 ]);
-                
+
                 $deleteResult = $this->whatsappService->deleteSession($sessionId);
-                
-                if (!$deleteResult['success']) {
+
+                if (! $deleteResult['success']) {
                     Log::warning('Failed to delete session from gateway, continuing with channel deletion (Super Admin)', [
                         'channel_id' => $channel->id,
                         'session_id' => $sessionId,
-                        'error' => $deleteResult['error'] ?? 'Unknown error'
+                        'error' => $deleteResult['error'] ?? 'Unknown error',
                     ]);
                     // Continue with channel deletion even if session deletion fails
                 } else {
                     Log::info('Session deleted successfully (Super Admin)', [
                         'channel_id' => $channel->id,
-                        'session_id' => $sessionId
+                        'session_id' => $sessionId,
                     ]);
                 }
             }
 
             // Delete channel from database
             $channel->delete();
-            
+
             Log::info('Channel deleted successfully (Super Admin)', [
                 'channel_id' => $channel->id,
-                'session_id' => $sessionId
+                'session_id' => $sessionId,
             ]);
 
             // For Inertia requests
@@ -639,17 +642,16 @@ class WhatsAppController extends Controller
                 'channel_id' => $channel->id,
                 'session_id' => $sessionId,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
 
             if ($request->header('X-Inertia')) {
                 return back()->withErrors([
-                    'delete' => 'Gagal menghapus channel: ' . $e->getMessage()
-                ])->with('error', 'Gagal menghapus channel: ' . $e->getMessage());
+                    'delete' => 'Gagal menghapus channel: '.$e->getMessage(),
+                ])->with('error', 'Gagal menghapus channel: '.$e->getMessage());
             }
 
-            return redirect()->back()->with('error', 'Gagal menghapus channel: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Gagal menghapus channel: '.$e->getMessage());
         }
     }
-
 }

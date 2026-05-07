@@ -4,10 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Balance;
 use App\Models\Tenant;
+use App\Services\TenantProvisioningService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Support\Facades\Validator;
 
 class BalanceController extends Controller
 {
@@ -40,7 +41,7 @@ class BalanceController extends Controller
                     'is_active' => $balance->is_active,
                     'is_default' => $balance->is_default ?? false,
                 ];
-            })
+            }),
         ]);
     }
 
@@ -123,7 +124,7 @@ class BalanceController extends Controller
             'balance',
             'balance_date',
             'is_active',
-            'is_default'
+            'is_default',
         ]));
 
         return redirect()->back()->with('success', 'Saldo akun berhasil diperbarui');
@@ -161,10 +162,8 @@ class BalanceController extends Controller
             ->where('id', $id)
             ->firstOrFail();
 
-        // Soft delete: set is_active to false
-        $balance->update(['is_active' => false]);
+        app(TenantProvisioningService::class)->permanentlyDeleteBalance($balance);
 
-        return redirect()->back()->with('success', 'Saldo akun berhasil dihapus');
+        return redirect()->back()->with('success', 'Dompet dihapus permanen beserta transaksi yang terhubung ke dompet ini.');
     }
 }
-

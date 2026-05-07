@@ -2,7 +2,7 @@
 
 /**
  * Script untuk cleanup session WhatsApp yang tidak ada di database
- * 
+ *
  * Usage: php cleanup-whatsapp-sessions.php
  */
 
@@ -14,7 +14,6 @@ $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 use App\Models\Channel;
 use App\Services\WhatsAppService;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 
 echo "\n";
 echo "╔══════════════════════════════════════════════════════════════╗\n";
@@ -22,7 +21,7 @@ echo "║   CLEANUP: Session WhatsApp yang Tidak Ada di Database      ║\n";
 echo "╚══════════════════════════════════════════════════════════════╝\n";
 echo "\n";
 
-$whatsappService = new WhatsAppService();
+$whatsappService = new WhatsAppService;
 $engineUrl = config('services.whatsapp.engine_url', 'http://localhost:8001');
 $apiKey = config('services.whatsapp.api_key', 'whatsapp_gateway_api_key_123');
 
@@ -45,7 +44,7 @@ foreach ($channels as $channel) {
 }
 
 echo "\n";
-echo "   Total channels dengan session: " . count($validSessionIds) . "\n";
+echo '   Total channels dengan session: '.count($validSessionIds)."\n";
 echo "\n";
 
 // Get all sessions from WhatsApp Gateway
@@ -55,34 +54,34 @@ echo "   ───────────────────────�
 try {
     // Check health endpoint to get session count
     $healthResponse = Http::timeout(5)->get("{$engineUrl}/health");
-    
-    if (!$healthResponse->successful()) {
+
+    if (! $healthResponse->successful()) {
         echo "   ❌ Tidak dapat mengakses WhatsApp Gateway!\n";
-        echo "   Error: " . $healthResponse->body() . "\n";
+        echo '   Error: '.$healthResponse->body()."\n";
         exit(1);
     }
-    
+
     $healthData = $healthResponse->json();
     $sessionCount = $healthData['sessions'] ?? 0;
     echo "   Sessions aktif di Gateway: {$sessionCount}\n";
     echo "\n";
-    
+
     // List sessions from disk (scan session directories)
-    $sessionsDir = __DIR__ . '/services/whatsapp-gateway/sessions';
+    $sessionsDir = __DIR__.'/services/whatsapp-gateway/sessions';
     $orphanedSessions = [];
-    
+
     if (is_dir($sessionsDir)) {
         $dirs = scandir($sessionsDir);
-        $sessionDirs = array_filter($dirs, function($dir) use ($sessionsDir) {
-            return $dir !== '.' && $dir !== '..' && is_dir($sessionsDir . '/' . $dir);
+        $sessionDirs = array_filter($dirs, function ($dir) use ($sessionsDir) {
+            return $dir !== '.' && $dir !== '..' && is_dir($sessionsDir.'/'.$dir);
         });
-        
+
         echo "   Session directories ditemukan:\n";
         foreach ($sessionDirs as $sessionDir) {
             // Extract sessionId from directory name (session-wa_1_6285242766676 -> wa_1_6285242766676)
             $sessionId = str_replace('session-', '', $sessionDir);
-            
-            if (!in_array($sessionId, $validSessionIds)) {
+
+            if (! in_array($sessionId, $validSessionIds)) {
                 $orphanedSessions[] = $sessionId;
                 echo "   ⚠️  ORPHANED: {$sessionId} (tidak ada di database)\n";
             } else {
@@ -92,11 +91,11 @@ try {
     } else {
         echo "   ⚠️  Directory sessions tidak ditemukan: {$sessionsDir}\n";
     }
-    
+
     echo "\n";
-    
+
 } catch (\Exception $e) {
-    echo "   ❌ Error: " . $e->getMessage() . "\n";
+    echo '   ❌ Error: '.$e->getMessage()."\n";
     exit(1);
 }
 
@@ -113,7 +112,7 @@ if (empty($orphanedSessions)) {
     exit(0);
 }
 
-echo "⚠️  Ditemukan " . count($orphanedSessions) . " session yang tidak ada di database:\n";
+echo '⚠️  Ditemukan '.count($orphanedSessions)." session yang tidak ada di database:\n";
 foreach ($orphanedSessions as $sessionId) {
     echo "   - {$sessionId}\n";
 }
@@ -137,24 +136,24 @@ $failedCount = 0;
 foreach ($orphanedSessions as $sessionId) {
     try {
         echo "   Menghapus session: {$sessionId}...\n";
-        
+
         // Delete from WhatsApp Gateway
         $response = Http::timeout(10)
             ->withHeaders([
-                'X-API-Key' => $apiKey
+                'X-API-Key' => $apiKey,
             ])
             ->delete("{$engineUrl}/sessions/{$sessionId}");
-        
+
         if ($response->successful()) {
             echo "   ✅ Session {$sessionId} berhasil dihapus dari Gateway\n";
             $deletedCount++;
         } else {
-            echo "   ⚠️  Session {$sessionId} gagal dihapus dari Gateway: " . $response->body() . "\n";
+            echo "   ⚠️  Session {$sessionId} gagal dihapus dari Gateway: ".$response->body()."\n";
             $failedCount++;
         }
-        
+
         // Also delete from disk
-        $sessionDir = $sessionsDir . '/session-' . $sessionId;
+        $sessionDir = $sessionsDir.'/session-'.$sessionId;
         if (is_dir($sessionDir)) {
             try {
                 // Use recursive delete
@@ -162,7 +161,7 @@ foreach ($orphanedSessions as $sessionId) {
                     new RecursiveDirectoryIterator($sessionDir, RecursiveDirectoryIterator::SKIP_DOTS),
                     RecursiveIteratorIterator::CHILD_FIRST
                 );
-                
+
                 foreach ($files as $file) {
                     if ($file->isDir()) {
                         rmdir($file->getPathname());
@@ -173,16 +172,16 @@ foreach ($orphanedSessions as $sessionId) {
                 rmdir($sessionDir);
                 echo "   ✅ Directory session {$sessionId} berhasil dihapus dari disk\n";
             } catch (\Exception $e) {
-                echo "   ⚠️  Gagal menghapus directory: " . $e->getMessage() . "\n";
+                echo '   ⚠️  Gagal menghapus directory: '.$e->getMessage()."\n";
                 echo "   💡 Anda bisa menghapus manual: {$sessionDir}\n";
             }
         }
-        
+
     } catch (\Exception $e) {
-        echo "   ❌ Error menghapus session {$sessionId}: " . $e->getMessage() . "\n";
+        echo "   ❌ Error menghapus session {$sessionId}: ".$e->getMessage()."\n";
         $failedCount++;
     }
-    
+
     echo "\n";
 }
 
@@ -211,4 +210,3 @@ if ($deletedCount > 0) {
 }
 
 echo "\n";
-

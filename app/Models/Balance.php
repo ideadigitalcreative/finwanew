@@ -17,7 +17,7 @@ class Balance extends Model
         'balance_date',
         'is_active',
         'is_default',
-        'metadata'
+        'metadata',
     ];
 
     protected $casts = [
@@ -25,7 +25,7 @@ class Balance extends Model
         'balance_date' => 'date',
         'is_active' => 'boolean',
         'is_default' => 'boolean',
-        'metadata' => 'array'
+        'metadata' => 'array',
     ];
 
     public function tenant(): BelongsTo

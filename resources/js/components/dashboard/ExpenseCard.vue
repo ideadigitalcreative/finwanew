@@ -21,7 +21,7 @@ const formatCurrency = (amount: number) => {
 </script>
 
 <template>
-    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 shadow-xl shadow-primary/5 transition-all duration-500 hover:shadow-2xl hover:shadow-primary/10 animate-fade-in-up" style="animation-delay: 0.3s">
+    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 transition-all duration-500 animate-fade-in-up" style="animation-delay: 0.3s">
         <div class="flex items-center justify-between mb-2 md:mb-2.5">
             <span class="text-xs text-muted-foreground bg-muted/30 backdrop-blur-sm px-2 py-0.5 rounded-full">{{ period }}</span>
         </div>

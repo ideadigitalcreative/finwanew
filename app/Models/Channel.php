@@ -18,14 +18,14 @@ class Channel extends Model
         'config',
         'is_active',
         'is_shared_channel',
-        'last_activity_at'
+        'last_activity_at',
     ];
 
     protected $casts = [
         'config' => 'array',
         'is_active' => 'boolean',
         'is_shared_channel' => 'boolean',
-        'last_activity_at' => 'datetime'
+        'last_activity_at' => 'datetime',
     ];
 
     public function tenant(): BelongsTo

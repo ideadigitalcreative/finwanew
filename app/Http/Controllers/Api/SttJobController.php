@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\SttJob;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 
 class SttJobController extends Controller
 {
@@ -21,14 +21,14 @@ class SttJobController extends Controller
             'processing_time_ms' => 'nullable|integer',
             'duration_seconds' => 'nullable|numeric',
             'status' => 'required|in:pending,processing,completed,failed',
-            'error_message' => 'nullable|string'
+            'error_message' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'error' => 'Invalid payload',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 400);
         }
 
@@ -41,11 +41,11 @@ class SttJobController extends Controller
                     'confidence_score' => $request->input('confidence_score', 0),
                     'processing_time_ms' => $request->input('processing_time_ms', 0),
                     'duration_seconds' => $request->input('duration_seconds'),
-                    'updated_at' => now()->toIso8601String()
+                    'updated_at' => now()->toIso8601String(),
                 ]),
                 'status' => $request->input('status'),
                 'error_message' => $request->input('error_message'),
-                'completed_at' => $request->input('status') === 'completed' ? now() : null
+                'completed_at' => $request->input('status') === 'completed' ? now() : null,
             ]);
 
             // If STT completed, process transcribed text with AI
@@ -54,7 +54,7 @@ class SttJobController extends Controller
                 $message = $sttJob->message;
                 $message->update([
                     'content' => $request->input('transcribed_text'),
-                    'type' => 'text' // Change type to text after transcription
+                    'type' => 'text', // Change type to text after transcription
                 ]);
 
                 // Dispatch job to process transcribed text
@@ -63,18 +63,18 @@ class SttJobController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'STT job updated'
+                'message' => 'STT job updated',
             ]);
 
         } catch (\Exception $e) {
             Log::error('Error updating STT job', [
                 'id' => $id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

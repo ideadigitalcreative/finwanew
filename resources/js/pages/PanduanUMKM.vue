@@ -37,8 +37,8 @@ const menuItems = [
     { id: 'struk', label: 'Foto Struk', icon: '📸' },
     { id: 'voice', label: 'Voice Note', icon: '🎤' },
     { id: 'edit', label: 'Edit & Hapus', icon: '✏️' },
-
     { id: 'budget', label: 'Budget & Target', icon: '🎯' },
+    { id: 'keyword-umkm', label: 'Keyword Bisnis', icon: '🏪' },
     { id: 'tips', label: 'Tips UMKM', icon: '💡' },
     { id: 'faq', label: 'FAQ', icon: '❓' },
 ];
@@ -180,20 +180,28 @@ const menuItems = [
                                 <p class="text-neutral-700 mb-4">Cukup ketik pesan seperti ngobrol biasa:</p>
                                 <div class="grid sm:grid-cols-2 gap-3">
                                     <div class="bg-white rounded-xl p-4 border border-emerald-200">
-                                        <code class="text-emerald-600 font-mono text-sm">dapat orderan 500rb</code>
-                                        <p class="text-xs text-neutral-500 mt-1">Pemasukan dari orderan</p>
+                                        <code class="text-emerald-600 font-mono text-sm">penjualan hari ini 500rb</code>
+                                        <p class="text-xs text-neutral-500 mt-1">Hasil penjualan</p>
                                     </div>
                                     <div class="bg-white rounded-xl p-4 border border-emerald-200">
-                                        <code class="text-emerald-600 font-mono text-sm">terima transfer 1.5jt</code>
-                                        <p class="text-xs text-neutral-500 mt-1">Transfer masuk</p>
+                                        <code class="text-emerald-600 font-mono text-sm">laku 1.5jt</code>
+                                        <p class="text-xs text-neutral-500 mt-1">Barang terjual</p>
                                     </div>
                                     <div class="bg-white rounded-xl p-4 border border-emerald-200">
-                                        <code class="text-emerald-600 font-mono text-sm">dapet bayaran 2jt</code>
-                                        <p class="text-xs text-neutral-500 mt-1">Pembayaran customer</p>
+                                        <code class="text-emerald-600 font-mono text-sm">order masuk 2jt</code>
+                                        <p class="text-xs text-neutral-500 mt-1">Orderan baru</p>
                                     </div>
                                     <div class="bg-white rounded-xl p-4 border border-emerald-200">
-                                        <code class="text-emerald-600 font-mono text-sm">gaji bulan ini 5jt</code>
-                                        <p class="text-xs text-neutral-500 mt-1">Gaji atau honor</p>
+                                        <code class="text-emerald-600 font-mono text-sm">dp masuk 500rb</code>
+                                        <p class="text-xs text-neutral-500 mt-1">Down payment customer</p>
+                                    </div>
+                                    <div class="bg-white rounded-xl p-4 border border-emerald-200">
+                                        <code class="text-emerald-600 font-mono text-sm">cuan 300rb</code>
+                                        <p class="text-xs text-neutral-500 mt-1">Keuntungan hari ini</p>
+                                    </div>
+                                    <div class="bg-white rounded-xl p-4 border border-emerald-200">
+                                        <code class="text-emerald-600 font-mono text-sm">omset hari ini 3jt</code>
+                                        <p class="text-xs text-neutral-500 mt-1">Total omset</p>
                                     </div>
                                 </div>
                             </div>
@@ -219,22 +227,25 @@ const menuItems = [
                                 <div class="bg-white border border-neutral-200 rounded-2xl p-5">
                                     <h4 class="font-semibold text-neutral-800 mb-3">🏪 Toko/Warung</h4>
                                     <div class="space-y-2 font-mono text-sm text-neutral-600">
-                                        <div class="bg-neutral-50 p-2 rounded">dapat jual hari ini 1.2jt</div>
-                                        <div class="bg-neutral-50 p-2 rounded">dapet orderan gofood 150rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">laku 1.2jt hari ini</div>
+                                        <div class="bg-neutral-50 p-2 rounded">order masuk gofood 150rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">closing deal 500rb</div>
                                     </div>
                                 </div>
                                 <div class="bg-white border border-neutral-200 rounded-2xl p-5">
                                     <h4 class="font-semibold text-neutral-800 mb-3">💼 Jasa/Freelance</h4>
                                     <div class="space-y-2 font-mono text-sm text-neutral-600">
-                                        <div class="bg-neutral-50 p-2 rounded">terima transfer project 3jt</div>
-                                        <div class="bg-neutral-50 p-2 rounded">dapat fee design 500rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">dp masuk project 3jt</div>
+                                        <div class="bg-neutral-50 p-2 rounded">pelanggan bayar 500rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">piutang lunas 1jt</div>
                                     </div>
                                 </div>
                                 <div class="bg-white border border-neutral-200 rounded-2xl p-5">
                                     <h4 class="font-semibold text-neutral-800 mb-3">🍜 Kuliner</h4>
                                     <div class="space-y-2 font-mono text-sm text-neutral-600">
-                                        <div class="bg-neutral-50 p-2 rounded">hasil jualan 850rb</div>
-                                        <div class="bg-neutral-50 p-2 rounded">dapat pesanan katering 2.5jt</div>
+                                        <div class="bg-neutral-50 p-2 rounded">cuan hari ini 850rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">omset katering 2.5jt</div>
+                                        <div class="bg-neutral-50 p-2 rounded">laris manis 1.8jt</div>
                                     </div>
                                 </div>
                             </div>
@@ -251,47 +262,58 @@ const menuItems = [
                                 <h3 class="font-semibold text-rose-800 mb-4">Format Dasar</h3>
                                 <div class="grid sm:grid-cols-2 gap-3">
                                     <div class="bg-white rounded-xl p-4 border border-rose-200 flex justify-between items-center">
-                                        <code class="text-rose-600 font-mono text-sm">beli bahan baku 500rb</code>
-                                        <span class="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">Belanja</span>
+                                        <code class="text-rose-600 font-mono text-sm">kulakan 500rb</code>
+                                        <span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">Modal</span>
                                     </div>
                                     <div class="bg-white rounded-xl p-4 border border-rose-200 flex justify-between items-center">
-                                        <code class="text-rose-600 font-mono text-sm">bayar listrik 450rb</code>
-                                        <span class="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">Tagihan</span>
+                                        <code class="text-rose-600 font-mono text-sm">bayar supplier 1.5jt</code>
+                                        <span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">Modal</span>
                                     </div>
                                     <div class="bg-white rounded-xl p-4 border border-rose-200 flex justify-between items-center">
-                                        <code class="text-rose-600 font-mono text-sm">ongkos kirim 25rb</code>
-                                        <span class="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">Transport</span>
+                                        <code class="text-rose-600 font-mono text-sm">beli stok 2jt</code>
+                                        <span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">Modal</span>
                                     </div>
                                     <div class="bg-white rounded-xl p-4 border border-rose-200 flex justify-between items-center">
-                                        <code class="text-rose-600 font-mono text-sm">bensin motor 50rb</code>
-                                        <span class="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">Transport</span>
+                                        <code class="text-rose-600 font-mono text-sm">packaging 50rb</code>
+                                        <span class="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">Operasional</span>
+                                    </div>
+                                    <div class="bg-white rounded-xl p-4 border border-rose-200 flex justify-between items-center">
+                                        <code class="text-rose-600 font-mono text-sm">ongkir JNE 25rb</code>
+                                        <span class="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">Operasional</span>
+                                    </div>
+                                    <div class="bg-white rounded-xl p-4 border border-rose-200 flex justify-between items-center">
+                                        <code class="text-rose-600 font-mono text-sm">sewa toko 3jt</code>
+                                        <span class="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">Hunian</span>
                                     </div>
                                 </div>
                             </div>
 
                             <div class="grid sm:grid-cols-3 gap-4">
                                 <div class="bg-white border border-neutral-200 rounded-2xl p-5">
-                                    <h4 class="font-semibold text-neutral-800 mb-3">📦 Modal/Bahan Baku</h4>
+                                    <h4 class="font-semibold text-neutral-800 mb-3">📦 Modal & Stok</h4>
                                     <div class="space-y-2 font-mono text-sm text-neutral-600">
-                                        <div class="bg-neutral-50 p-2 rounded">beli bahan baku 750rb</div>
-                                        <div class="bg-neutral-50 p-2 rounded">belanja stok dagangan 2jt</div>
-                                        <div class="bg-neutral-50 p-2 rounded">beli kemasan 150rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">kulakan barang 750rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">restok dagangan 2jt</div>
+                                        <div class="bg-neutral-50 p-2 rounded">bayar supplier 1.5jt</div>
+                                        <div class="bg-neutral-50 p-2 rounded">modal bahan baku 500rb</div>
                                     </div>
                                 </div>
                                 <div class="bg-white border border-neutral-200 rounded-2xl p-5">
-                                    <h4 class="font-semibold text-neutral-800 mb-3">⚙️ Operasional</h4>
+                                    <h4 class="font-semibold text-neutral-800 mb-3">🏪 Operasional Bisnis</h4>
                                     <div class="space-y-2 font-mono text-sm text-neutral-600">
-                                        <div class="bg-neutral-50 p-2 rounded">bayar listrik toko 500rb</div>
-                                        <div class="bg-neutral-50 p-2 rounded">bayar sewa 2.5jt</div>
-                                        <div class="bg-neutral-50 p-2 rounded">bensin motor 100rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">packaging 100rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">ongkir JNE 50rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">ekspedisi sicepat 35rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">biaya operasional 200rb</div>
                                     </div>
                                 </div>
                                 <div class="bg-white border border-neutral-200 rounded-2xl p-5">
-                                    <h4 class="font-semibold text-neutral-800 mb-3">👥 Gaji & Kesejahteraan</h4>
+                                    <h4 class="font-semibold text-neutral-800 mb-3">👥 Gaji & Sewa</h4>
                                     <div class="space-y-2 font-mono text-sm text-neutral-600">
-                                        <div class="bg-neutral-50 p-2 rounded">gaji karyawan 5jt</div>
-                                        <div class="bg-neutral-50 p-2 rounded">kasih THR 1jt</div>
-                                        <div class="bg-neutral-50 p-2 rounded">bonus karyawan 250rb</div>
+                                        <div class="bg-neutral-50 p-2 rounded">gaji pegawai 5jt</div>
+                                        <div class="bg-neutral-50 p-2 rounded">bayar karyawan 2jt</div>
+                                        <div class="bg-neutral-50 p-2 rounded">sewa toko 3jt</div>
+                                        <div class="bg-neutral-50 p-2 rounded">sewa gudang 1.5jt</div>
                                     </div>
                                 </div>
                             </div>
@@ -620,6 +642,121 @@ const menuItems = [
                                         <div class="bg-white p-3 rounded-lg border border-fuchsia-200 text-fuchsia-700">cek target</div>
                                     </div>
                                 </div>
+                            </div>
+                        </section>
+
+                        <!-- Keyword Bisnis UMKM -->
+                        <section id="keyword-umkm" class="scroll-mt-8">
+                            <h2 class="text-3xl font-bold text-neutral-900 mb-6 flex items-center gap-3">
+                                <span class="text-4xl">🏪</span>
+                                Daftar Keyword Bisnis
+                            </h2>
+
+                            <p class="text-neutral-600 mb-6">
+                                FinWa mendukung berbagai keyword khusus untuk UMKM dan bisnis. Berikut daftar lengkap keyword yang bisa Anda gunakan:
+                            </p>
+
+                            <div class="grid md:grid-cols-2 gap-6">
+                                <!-- Pemasukan Bisnis -->
+                                <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-6 border border-emerald-100">
+                                    <h3 class="font-semibold text-emerald-800 mb-4 flex items-center gap-2">
+                                        <span class="text-xl">💰</span>
+                                        Keyword Pemasukan Bisnis
+                                    </h3>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">penjualan</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">omset</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">laku</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">laris</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">order masuk</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">orderan</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">dp masuk</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">down payment</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">piutang lunas</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">closing</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">deal</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">cuan</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">untung</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">profit</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">cash masuk</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-emerald-200 text-emerald-700">pelanggan bayar</span>
+                                    </div>
+                                </div>
+
+                                <!-- Pengeluaran Modal -->
+                                <div class="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-6 border border-amber-100">
+                                    <h3 class="font-semibold text-amber-800 mb-4 flex items-center gap-2">
+                                        <span class="text-xl">📦</span>
+                                        Keyword Modal & Stok
+                                    </h3>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">modal</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">kulakan</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">stok</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">restock</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">bahan baku</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">supplier</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">vendor</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">distributor</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">grosir</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-amber-200 text-amber-700">agen</span>
+                                    </div>
+                                </div>
+
+                                <!-- Pengeluaran Operasional -->
+                                <div class="bg-gradient-to-br from-orange-50 to-rose-50 rounded-2xl p-6 border border-orange-100">
+                                    <h3 class="font-semibold text-orange-800 mb-4 flex items-center gap-2">
+                                        <span class="text-xl">🏪</span>
+                                        Keyword Operasional Bisnis
+                                    </h3>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">packaging</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">packing</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">kemasan</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">kardus</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">ekspedisi</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">JNE</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">J&T</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">SiCepat</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">AnterAja</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">operasional</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-orange-200 text-orange-700">ongkir kirim</span>
+                                    </div>
+                                </div>
+
+                                <!-- Gaji & Sewa -->
+                                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
+                                    <h3 class="font-semibold text-blue-800 mb-4 flex items-center gap-2">
+                                        <span class="text-xl">👥</span>
+                                        Keyword Gaji & Sewa
+                                    </h3>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-blue-200 text-blue-700">gaji pegawai</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-blue-200 text-blue-700">upah pegawai</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-blue-200 text-blue-700">bayar karyawan</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-blue-200 text-blue-700">sewa toko</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-blue-200 text-blue-700">sewa gudang</span>
+                                        <span class="bg-white px-3 py-1.5 rounded-lg text-sm border border-blue-200 text-blue-700">sewa ruko</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-6 bg-blue-50 border border-blue-200 rounded-2xl p-5">
+                                <h4 class="font-semibold text-blue-800 mb-3">💡 Tips Penggunaan Keyword</h4>
+                                <ul class="space-y-2 text-neutral-700">
+                                    <li class="flex items-center gap-2">
+                                        <span class="text-green-500">✅</span>
+                                        Keyword pemasukan otomatis dicatat sebagai <strong class="text-emerald-600">uang masuk</strong>
+                                    </li>
+                                    <li class="flex items-center gap-2">
+                                        <span class="text-green-500">✅</span>
+                                        Keyword modal & operasional otomatis dicatat sebagai <strong class="text-rose-600">uang keluar</strong>
+                                    </li>
+                                    <li class="flex items-center gap-2">
+                                        <span class="text-green-500">✅</span>
+                                        Cukup tulis keyword + nominal, misalnya: <code class="bg-white px-2 py-1 rounded text-emerald-600">laku 500rb</code>
+                                    </li>
+                                </ul>
                             </div>
                         </section>
 

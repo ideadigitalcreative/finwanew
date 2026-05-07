@@ -10,8 +10,8 @@
                 <div
                     v-for="(faq, index) in faqs"
                     :key="index"
-                    class="group rounded-2xl ring-1 ring-gray-200 bg-white hover:bg-gray-50 hover:ring-emerald-500/20 transition-all duration-300 overflow-hidden"
-                    :class="{ 'ring-emerald-500/30 bg-emerald-50/30': openIndex === index }"
+                    class="group rounded-2xl ring-1 ring-gray-200 bg-white hover:bg-gray-50 hover:ring-[color:var(--fw-a20)] transition-all duration-300 overflow-hidden"
+                    :class="{ 'ring-[color:var(--fw-a30)] bg-[var(--fw-50)]/30': openIndex === index }"
                 >
                     <button
                         type="button"
@@ -19,10 +19,10 @@
                         :aria-expanded="openIndex === index"
                         class="w-full flex items-center justify-between p-5 text-left focus:outline-none"
                     >
-                        <span class="text-base font-semibold text-gray-900 group-hover:text-emerald-700 transition-colors">{{ faq.question }}</span>
+                        <h3 class="text-base font-semibold text-gray-900 group-hover:text-[var(--fw-700)] transition-colors">{{ faq.question }}</h3>
                         <span 
-                            class="shrink-0 h-8 w-8 grid place-items-center rounded-full bg-gray-100 ring-1 ring-gray-200 text-gray-500 group-hover:bg-emerald-100 group-hover:text-emerald-600 group-hover:ring-emerald-200 transition-all duration-300" 
-                            :class="{ 'rotate-45 bg-emerald-100 text-emerald-600 ring-emerald-200': openIndex === index }"
+                            class="shrink-0 h-8 w-8 grid place-items-center rounded-full bg-gray-100 ring-1 ring-gray-200 text-gray-500 group-hover:bg-[var(--fw-100)] group-hover:text-[var(--fw-600)] group-hover:ring-[var(--fw-200)] transition-all duration-300" 
+                            :class="{ 'rotate-45 bg-[var(--fw-100)] text-[var(--fw-600)] ring-[var(--fw-200)]': openIndex === index }"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         </span>

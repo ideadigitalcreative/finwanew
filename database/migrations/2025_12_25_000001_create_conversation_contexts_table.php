@@ -16,7 +16,7 @@ return new class extends Migration
             $table->json('entities')->nullable(); // category, amount, time_period, etc
             $table->string('response_type')->nullable(); // query, transaction, help, etc
             $table->timestamps();
-            
+
             $table->index(['tenant_id', 'created_at']);
         });
     }

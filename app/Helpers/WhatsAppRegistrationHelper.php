@@ -2,14 +2,15 @@
 
 namespace App\Helpers;
 
-use App\Models\User;
-use App\Models\Tenant;
-use App\Models\UserWhatsAppNumber;
 use App\Models\Subscription;
+use App\Models\Tenant;
+use App\Models\User;
+use App\Models\UserWhatsAppNumber;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Cache;
-use Carbon\Carbon;
 
 class WhatsAppRegistrationHelper
 {
@@ -80,7 +81,7 @@ class WhatsAppRegistrationHelper
     {
         $normalized = strtolower(trim($message));
         $confirmWords = ['ya', 'iya', 'ok', 'oke', 'daftar', 'yes', 'yup', 'yoi', 'boleh', 'mau'];
-        
+
         return in_array($normalized, $confirmWords);
     }
 
@@ -91,7 +92,7 @@ class WhatsAppRegistrationHelper
     {
         $normalized = strtolower(trim($message));
         $rejectWords = ['tidak', 'nggak', 'no', 'gak', 'cancel', 'batal', 'engga', 'enggak'];
-        
+
         return in_array($normalized, $rejectWords);
     }
 
@@ -100,6 +101,13 @@ class WhatsAppRegistrationHelper
      */
     public static function isValidEmail(string $email): bool
     {
+        // Thoroughly clean the email string
+        // Remove zero-width spaces and other invisible characters
+        $email = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $email);
+        // Remove any other non-printable characters
+        $email = preg_replace('/[[:^print:]]/', '', $email);
+        $email = trim($email);
+
         return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
 
@@ -111,7 +119,8 @@ class WhatsAppRegistrationHelper
         // Generate easy to type password: 3 letters + 3 numbers
         $letters = strtoupper(Str::random(3));
         $numbers = rand(100, 999);
-        return $letters . $numbers;
+
+        return $letters.$numbers;
     }
 
     /**
@@ -120,32 +129,22 @@ class WhatsAppRegistrationHelper
     public static function createAccount(array $data): array
     {
         $password = self::generatePassword();
-        
+
         // Generate slug from name
-        $slug = Str::slug($data['name']) . '-' . Str::random(6);
-        
+        $slug = Str::slug($data['name']).'-'.Str::random(6);
+
         // Create tenant
         $tenant = Tenant::create([
-            'name' => $data['name'] . "'s Business",
+            'name' => $data['name']."'s Business",
             'slug' => $slug,
             'is_active' => true,
             'trial_ends_at' => Carbon::now()->addDays(3),
         ]);
 
-        // Create default wallet for new tenant
-        \App\Models\Balance::create([
-            'tenant_id' => $tenant->id,
-            'account_name' => 'Dompet Utama',
-            'account_type' => 'cash',
-            'currency' => 'IDR',
-            'balance' => 0,
-            'balance_date' => now(),
-            'is_active' => true,
-            'is_default' => true,
-        ]);
+        app(\App\Services\TenantProvisioningService::class)->ensureDefaultWallet($tenant->id, 'whatsapp_registration');
 
         // Get owner role ID
-        $ownerRole = \DB::table('roles')->where('name', 'owner')->first();
+        $ownerRole = DB::table('roles')->where('name', 'owner')->first();
         $roleId = $ownerRole ? $ownerRole->id : null;
 
         // Create user
@@ -181,21 +180,25 @@ class WhatsAppRegistrationHelper
             'is_lid' => false,
         ]);
 
-        // Create free trial subscription
+        // Create permanent free plan subscription
         Subscription::create([
             'tenant_id' => $tenant->id,
-            'plan' => 'free',  // Changed from 'trial' to 'free'
-            'duration_months' => 1,
+            'plan' => 'free',
+            'duration_months' => 0,
             'price' => 0,
             'status' => 'active',
             'starts_at' => Carbon::now(),
-            'ends_at' => Carbon::now()->addDays(3),
-            'payment_provider' => 'free_trial',
+            'ends_at' => null,
+            'payment_provider' => 'internal',
             'metadata' => [
                 'registered_via' => 'whatsapp',
                 'registered_at' => Carbon::now()->toIso8601String(),
+                'is_free_plan' => true,
             ],
         ]);
+
+        // Create default categories for the new tenant
+        self::createDefaultCategories($tenant->id);
 
         return [
             'user' => $user,
@@ -205,14 +208,66 @@ class WhatsAppRegistrationHelper
     }
 
     /**
+     * Create default categories for a new tenant
+     */
+    private static function createDefaultCategories(int $tenantId): void
+    {
+        $categories = [
+            // Pendapatan
+            ['type' => 'pendapatan_gaji', 'name' => 'Gaji', 'slug' => 'gaji', 'icon' => '💰', 'color' => '#10b981'],
+            ['type' => 'pendapatan_bonus', 'name' => 'Bonus', 'slug' => 'bonus', 'icon' => '🎁', 'color' => '#10b981'],
+            ['type' => 'pendapatan_investasi', 'name' => 'Investasi', 'slug' => 'investasi', 'icon' => '📈', 'color' => '#10b981'],
+            ['type' => 'pendapatan_lainnya', 'name' => 'Pendapatan Lainnya', 'slug' => 'pendapatan-lainnya', 'icon' => '💵', 'color' => '#10b981'],
+
+            // Pengeluaran
+            ['type' => 'pengeluaran_makanan', 'name' => 'Makanan & Minuman', 'slug' => 'makanan-minuman', 'icon' => '🍽️', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_transport', 'name' => 'Transport', 'slug' => 'transport', 'icon' => '🚗', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_hunian', 'name' => 'Hunian', 'slug' => 'hunian', 'icon' => '🏠', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_utilitas', 'name' => 'Utilitas', 'slug' => 'utilitas', 'icon' => '⚡', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_kesehatan', 'name' => 'Kesehatan', 'slug' => 'kesehatan', 'icon' => '🏥', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_pendidikan', 'name' => 'Pendidikan', 'slug' => 'pendidikan', 'icon' => '📚', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_belanja', 'name' => 'Belanja', 'slug' => 'belanja', 'icon' => '🛒', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_hiburan', 'name' => 'Hiburan', 'slug' => 'hiburan', 'icon' => '🎬', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_pulsa_token', 'name' => 'Pulsa & Token', 'slug' => 'pulsa-token', 'icon' => '📱', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_tagihan', 'name' => 'Tagihan', 'slug' => 'tagihan', 'icon' => '📄', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_investasi', 'name' => 'Investasi', 'slug' => 'investasi-pengeluaran', 'icon' => '💼', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_pinjaman', 'name' => 'Pinjaman', 'slug' => 'pinjaman', 'icon' => '💳', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_cicilan', 'name' => 'Cicilan', 'slug' => 'cicilan', 'icon' => '🏦', 'color' => '#dc2626'],
+            ['type' => 'pengeluaran_asuransi', 'name' => 'Asuransi', 'slug' => 'asuransi', 'icon' => '🛡️', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_pajak', 'name' => 'Pajak', 'slug' => 'pajak', 'icon' => '📊', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_donasi', 'name' => 'Donasi', 'slug' => 'donasi', 'icon' => '❤️', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_lainnya', 'name' => 'Pengeluaran Lainnya', 'slug' => 'pengeluaran-lainnya', 'icon' => '📝', 'color' => '#ef4444'],
+            // Special category for Gaji Karyawan (often used in business)
+            ['type' => 'pengeluaran_gaji', 'name' => 'Gaji Karyawan', 'slug' => 'gaji-karyawan', 'icon' => '👷', 'color' => '#ef4444'],
+        ];
+
+        foreach ($categories as $categoryData) {
+            \App\Models\Category::firstOrCreate(
+                [
+                    'tenant_id' => $tenantId,
+                    'type' => $categoryData['type'],
+                    'slug' => $categoryData['slug'],
+                ],
+                [
+                    'name' => $categoryData['name'],
+                    'description' => 'Kategori '.$categoryData['name'],
+                    'icon' => $categoryData['icon'],
+                    'color' => $categoryData['color'],
+                    'is_system' => true,
+                ]
+            );
+        }
+    }
+
+    /**
      * Get welcome message for unregistered user
      */
     public static function getWelcomeMessage(): string
     {
         return "👋 *Halo!*\n\n"
-            . "Sepertinya Anda belum terdaftar di FinWa.\n\n"
-            . "Mau daftar sekarang? Gratis trial 3 hari! 🎉\n\n"
-            . "Ketik *Ya* untuk daftar atau *Tidak* untuk batal.";
+            ."Sepertinya Anda belum terdaftar di FinWa.\n\n"
+            ."Mau daftar sekarang? *Gratis selamanya!* 🎉\n\n"
+            .'Ketik *Ya* untuk daftar atau *Tidak* untuk batal.';
     }
 
     /**
@@ -220,8 +275,10 @@ class WhatsAppRegistrationHelper
      */
     public static function getAskNameMessage(): string
     {
-        return "✅ Oke, mari kita daftar!\n\n"
-            . "Silakan kirim *nama lengkap* Anda:";
+        return "👋 *Halo, senang bertemu!*\n\n"
+            ."Saya FinWa — asisten keuangan yang siap bantu catat pemasukan & pengeluaran Anda.\n\n"
+            ."Daftarnya singkat saja. Langkah pertama:\n"
+            .'📝 *Ketik nama lengkap Anda* (contoh: Budi Santoso)';
     }
 
     /**
@@ -230,7 +287,7 @@ class WhatsAppRegistrationHelper
     public static function getAskEmailMessage(string $name): string
     {
         return "Terima kasih, *{$name}*! 👍\n\n"
-            . "Sekarang silakan kirim *alamat email* Anda:";
+            .'Sekarang silakan kirim *alamat email* Anda:';
     }
 
     /**
@@ -239,16 +296,21 @@ class WhatsAppRegistrationHelper
     public static function getSuccessMessage(array $result): string
     {
         return "🎉 *Akun Berhasil Dibuat!*\n\n"
-            . "📧 Email: *{$result['user']->email}*\n"
-            . "🔑 Password: *{$result['password']}*\n\n"
-            . "🌐 Login di: https://finwa.web.id/login\n\n"
-            . "✨ Trial 3 hari sudah aktif!\n\n"
-            . "Sekarang Anda bisa langsung kirim transaksi ke saya. Contoh:\n"
-            . "• _beli makan 25rb_\n"   
-            . "• _terima gaji 5jt_\n\n"
-            . "💡 Ketik *help* untuk panduan singkat\n"
-            . "📖 Panduan lengkap: https://finwa.web.id/panduan-umkm\n\n"
-            . "Selamat mencoba! 🚀";
+            ."📧 Email: *{$result['user']->email}*\n"
+            ."🔑 Password: *{$result['password']}*\n\n"
+            ."🌐 Login di: https://finwa.web.id/login\n"
+            ."📱 Download di Play Store: https://play.google.com/store/apps/details?id=com.idea.finwa\n\n"
+            ."✨ *Paket Gratis sudah aktif!*\n"
+            ."📊 50 transaksi/bulan | Catat via chat\n\n"
+            ."Sekarang Anda bisa langsung kirim transaksi ke saya. Contoh:\n"
+            ."• _beli makan 25rb_\n"
+            ."• _terima gaji 5jt_\n\n"
+            ."💡 Ketik *help* untuk panduan singkat\n"
+            ."📖 Panduan lengkap: https://finwa.web.id/panduan-umkm\n"
+            ."💬 Gabung Grup: https://chat.whatsapp.com/DAjG9zU2e9vAi8jiDp5jar\n\n"
+            ."🚀 *Upgrade ke Premium* untuk scan struk & download laporan!\n"
+            ."👉 https://finwa.web.id/subscriptions\n\n"
+            .'Selamat mencoba! 🎉';
     }
 
     /**
@@ -257,6 +319,6 @@ class WhatsAppRegistrationHelper
     public static function getCancellationMessage(): string
     {
         return "Baik, pendaftaran dibatalkan.\n\n"
-            . "Jika berubah pikiran, kirim pesan lagi ya! 😊";
+            .'Jika berubah pikiran, kirim pesan lagi ya! 😊';
     }
 }

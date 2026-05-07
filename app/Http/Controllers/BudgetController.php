@@ -4,10 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Budget;
 use App\Models\Category;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Http\RedirectResponse;
 
 class BudgetController extends Controller
 {
@@ -156,10 +156,10 @@ class BudgetController extends Controller
             ->get();
 
         $totalBudget = $budgets->sum('amount');
-        $totalSpending = $budgets->sum(fn($b) => $b->getCurrentSpending());
+        $totalSpending = $budgets->sum(fn ($b) => $b->getCurrentSpending());
         $totalRemaining = max(0, $totalBudget - $totalSpending);
-        $overBudgetCount = $budgets->filter(fn($b) => $b->isOverBudget())->count();
-        $alertCount = $budgets->filter(fn($b) => $b->shouldTriggerAlert())->count();
+        $overBudgetCount = $budgets->filter(fn ($b) => $b->isOverBudget())->count();
+        $alertCount = $budgets->filter(fn ($b) => $b->shouldTriggerAlert())->count();
 
         return response()->json([
             'total_budget' => $totalBudget,
@@ -184,7 +184,7 @@ class BudgetController extends Controller
             abort(403);
         }
 
-        $budget->update(['is_active' => !$budget->is_active]);
+        $budget->update(['is_active' => ! $budget->is_active]);
 
         return redirect()->route('budgets.index')
             ->with('success', 'Status budget berhasil diubah!');

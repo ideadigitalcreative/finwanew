@@ -9,6 +9,7 @@ class OcrJob extends Model
 {
     protected $fillable = [
         'tenant_id',
+        'user_id',
         'message_id',
         'attachment_id',
         'file_path',
@@ -20,18 +21,23 @@ class OcrJob extends Model
         'error_message',
         'processing_time_ms',
         'started_at',
-        'completed_at'
+        'completed_at',
     ];
 
     protected $casts = [
         'metadata' => 'array',
         'started_at' => 'datetime',
-        'completed_at' => 'datetime'
+        'completed_at' => 'datetime',
     ];
 
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function message(): BelongsTo
