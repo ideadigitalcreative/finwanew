@@ -248,6 +248,10 @@ class IntentDetectionService
             return true;
         }
 
+        if ($textLower === 'hapus' || $textLower === 'delete') {
+            return true;
+        }
+
         // Delete transaction
         if ($hasAmount && preg_match('/\b(hapus|delete|hilangkan)\b/u', $textLower)) {
             return true;

@@ -76,6 +76,7 @@ it('detects edit context with amount', function () {
 it('detects undo/delete', function () {
     expect($this->service->isUndoOrDelete('undo', false))->toBeTrue();
     expect($this->service->isUndoOrDelete('batalkan', false))->toBeTrue();
+    expect($this->service->isUndoOrDelete('hapus', false))->toBeTrue();
     expect($this->service->isUndoOrDelete('hapus 50rb', true))->toBeTrue();
 });
 

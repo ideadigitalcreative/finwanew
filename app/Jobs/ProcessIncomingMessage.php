@@ -969,7 +969,7 @@ class ProcessIncomingMessage implements ShouldQueue
             'hapus yang tadi', 'delete yang tadi', 'yang barusan salah'
         ];
         foreach ($undoKeywords as $keyword) {
-            if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $textLower) || $textLower === 'batal' || $textLower === 'undo') {
+            if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $textLower) || $textLower === 'batal' || $textLower === 'undo' || $textLower === 'hapus' || $textLower === 'delete') {
                 $this->transactionService->handleDeleteTransaction();
                 return;
             }
