@@ -165,6 +165,7 @@ __pycache__/
 /DEPLOY_*.md
 /DEPLOY_*.sh
 /DEPLOYMENT_*.sh
+/DEPLOYMENT_*.md
 /*_CHECKLIST.sh
 /*_FIX_*.sh
 /*_FIX_*.md
@@ -175,6 +176,10 @@ __pycache__/
 /LAPORAN_*.md
 /RENCANA_*.md
 /REFACTORING_*.md
+
+# Script sensitif (jangan pernah di-commit)
+/scripts/dev/send_credentials.php
+/scripts/dev/get_password_from_log.php
 
 # File kredensial / sensitif — WAJIB tidak pernah masuk repo
 /*credentials*
