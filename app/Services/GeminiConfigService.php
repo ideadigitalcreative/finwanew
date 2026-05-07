@@ -54,10 +54,9 @@ class GeminiConfigService
             return $defaults;
         }
         if (! empty($v['model']) && is_string($v['model'])) {
+            $defaults['model'] = trim($v['model']);
         }
         if (array_key_exists('base_url', $v) && is_string($v['base_url'])) {
-            $defaults['base_url'] = trim($v['base_url']);
-        }
             $defaults['base_url'] = trim($v['base_url']);
         }
 
