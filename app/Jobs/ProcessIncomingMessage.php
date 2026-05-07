@@ -671,6 +671,26 @@ class ProcessIncomingMessage implements ShouldQueue
                 return;
             }
         }
+
+        // FAST PATH 1.92: Transfer between wallets (internal transfer)
+        // e.g., "transfer saldo Jago Hadi ke BRI 300rb", "transfer ke Jago 200rb dari BCA Hadi"
+        $transferBetweenWalletPatterns = [
+            // "transfer 100rb dari BCA ke Mandiri"
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?\s+(?:dari\s+)?[a-zA-Z0-9\s]+?\s+ke\s+[a-zA-Z0-9\s]+/i',
+            // "transfer dari BCA ke Mandiri 100rb"
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?(?:dari\s+)?[a-zA-Z0-9\s]+?\s+ke\s+[a-zA-Z0-9\s]+?\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?/i',
+            // "transfer ke Jago 200rb dari BCA Hadi"
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?ke\s+[a-zA-Z0-9\s]+?\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?\s+dari\s+[a-zA-Z0-9\s]+/i',
+            // "transfer ke Jago dari BCA Hadi 200rb"
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?ke\s+[a-zA-Z0-9\s]+?\s+dari\s+[a-zA-Z0-9\s]+?\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta)?/i',
+        ];
+
+        foreach ($transferBetweenWalletPatterns as $pattern) {
+            if (preg_match($pattern, $messageText)) {
+                $this->walletCommand->handleTransferBetweenWallets();
+                return;
+            }
+        }
         
         // FAST PATH 1.9b: Catch INCOMPLETE "tambah saldo" commands (missing amount)
         // e.g., "tambah saldo BCA" without nominal - give helpful error message

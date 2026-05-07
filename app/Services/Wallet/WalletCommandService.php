@@ -1803,6 +1803,10 @@ class WalletCommandService
             '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?(?:dari\s+)?([a-zA-Z0-9\s]+?)\s+(?:ke\s+)([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
             // 2: Pindahkan saldo bank BRI ke bank jago 300 rb (sumber + nominal + ke tujuan)
             '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?(?:dari\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(?:ke\s+)([a-zA-Z0-9\s]+)/i',
+            // 3: transfer ke Jago 200rb dari BCA Hadi
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?ke\s+([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+dari\s+([a-zA-Z0-9\s]+)/i',
+            // 4: transfer ke Jago dari BCA Hadi 200rb
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?ke\s+([a-zA-Z0-9\s]+?)\s+dari\s+([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
         ];
 
         $amount = null;
@@ -1823,6 +1827,14 @@ class WalletCommandService
                     $fromWalletName = trim($matches[1]);
                     $amount = $this->extractAmountFromText($matches[2]);
                     $toWalletName = trim($matches[3]);
+                } elseif ($index === 3) {
+                    $toWalletName = trim($matches[1]);
+                    $amount = $this->extractAmountFromText($matches[2]);
+                    $fromWalletName = trim($matches[3]);
+                } elseif ($index === 4) {
+                    $toWalletName = trim($matches[1]);
+                    $fromWalletName = trim($matches[2]);
+                    $amount = $this->extractAmountFromText($matches[3]);
                 }
                 break;
             }
