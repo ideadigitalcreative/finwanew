@@ -1,0 +1,195 @@
+1. Alur Sistem (Workflow)
+A. Penerimaan Sampel
+
+Kepala Instalasi menerima sampel dari pemohon.
+
+Sampel dicatat dengan informasi awal:
+
+Nomor Sampel
+
+Jenis Sampel
+
+Jumlah Sampel
+
+Tanggal diterima
+
+B. Penerbitan SSTP (Surat Tugas Personil)
+
+Kepala Instalasi membuat SSTP untuk petugas analis.
+
+Setiap SSTP berisi:
+
+Nomor Sampel
+
+Jenis Sampel
+
+Jumlah Sampel
+
+Nama Petugas Analis
+
+Deadline penyelesaian
+
+Data SSTP otomatis masuk ke Spreadsheet.
+
+Sistem mendistribusikan data ke masing-masing petugas analis sesuai penugasan.
+
+C. Pengerjaan oleh Petugas Analis
+
+Petugas Analis melihat daftar sampel yang ditugaskan kepadanya.
+
+Sampel dikerjakan sesuai waktu pengerjaan (TAT) masing-masing jenis sampel.
+
+Status pekerjaan:
+
+Belum dikerjakan
+
+Proses
+
+Selesai
+
+2. Pengisian Hasil Pengujian (Oleh Petugas Analis)
+A. Data Umum Pengujian
+
+Petugas analis mengisi form dengan field berikut:
+
+Nomor Urut
+
+Tanggal Pengujian
+
+Nomor Sampel
+
+Jenis Sampel
+
+Volume yang Difilter
+
+Jumlah Koloni:
+
+Total Coliform
+
+E. coli
+
+Warna Koloni
+
+B. Verifikasi Hasil
+1. Total Coliform
+
+Metode LTB 1/2
+
+Jumlah Tabung
+
+Metode BGLB
+
+Jumlah Tabung
+
+2. E. coli
+
+Metode EC MUG
+
+Jumlah Tabung
+
+C. Perhitungan Otomatis (Spreadsheet / Sistem)
+1. Total Coliform
+(Jumlah koloni terverifikasi / 
+Jumlah koloni yang diverifikasi) 
+x Total koloni terduga Coliform
+
+2. Total E. coli
+(Jumlah koloni terverifikasi / 
+Jumlah koloni yang diverifikasi) 
+x Total koloni terduga E. coli
+
+D. Hasil Pengujian
+
+Total Coliform
+
+E. coli
+
+3. Monitoring & Kontrol Kualitas
+
+Field tambahan yang wajib diisi:
+
+Deadline (Tanggal harus selesai)
+
+TAT (Turn Around Time)
+
+Tanggal Selesai (diisi analis)
+
+IQC (Internal Quality Control)
+
+Verifikasi LHU / LHUS
+
+4. Dashboard Kepala Instalasi
+Informasi yang Ditampilkan:
+
+Jumlah sampel masuk
+
+Status pengerjaan per analis
+
+Sampel yang mendekati deadline
+
+Sampel terlambat
+
+Hasil pengujian (Total Coliform & E. coli)
+
+Status verifikasi (IQC & LHU/LHUS)
+
+Dashboard otomatis menarik data dari Spreadsheet, sehingga:
+
+Kepala instalasi tidak perlu input manual
+
+Progres dapat dipantau real-time
+
+5. Struktur Spreadsheet (Saran Sheet)
+
+Sheet Master Sampel
+
+Sheet SSTP & Penugasan
+
+Sheet Pengerjaan Analis
+
+Sheet Hasil Pengujian
+
+Sheet Verifikasi & QC
+
+Sheet Dashboard (Read Only)
+
+Gunakan data berikut sebagai referensi jenis pengujian laboratorium beserta waktu pengerjaan (Turn Around Time/TAT).
+Data ini digunakan untuk keperluan pengujian, simulasi sistem, dokumentasi, atau validasi proses layanan.
+
+Daftar Jenis Pengujian dan TAT:
+
+Air Minum – parameter lengkap – 5 hari
+
+Air Higiene – parameter lengkap – 5 hari
+
+Air Kolam Renang dan Air SPA – parameter lengkap – 5 hari
+
+Air Permandian Umum – 5 hari
+
+Air Limbah – parameter lengkap – 6 hari
+
+Air Badan Air – parameter lengkap – 6 hari
+
+Air Laut – parameter lengkap – 6 hari
+
+Udara Ambien – parameter lengkap – 3 hari
+
+Udara Ruang – parameter lengkap – 3 hari
+
+Emisi Tidak Bergerak – parameter lengkap – 2 hari
+
+Kualitas Makanan & Kualitas Swab – 4 hari
+
+Jasa Kalibrasi Alat Sanitarian Kit – 5 hari
+
+Pemeriksaan Vektor dan Binatang Pembawa Penyakit – 3 hari
+
+Pemeriksaan Mikroskopik – 3 hari
+
+Pengujian Virus (ELISA/PCR) – 2 hari
+
+Pengujian Parasitologi – 1 hari
+
+Pengujian Bakteriologi (PCR) – 3 hari
+
+Pastikan sistem mampu menampilkan, mengelola, dan menghitung estimasi waktu selesai berdasarkan jenis pengujian yang dipilih.

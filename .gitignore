@@ -15,6 +15,7 @@
 .env.backup
 .env.production
 .env.*.backup
+.env.*.bak
 .phpactor.json
 .phpunit.result.cache
 Homestead.json
@@ -33,59 +34,159 @@ yarn-error.log
 # YoYo AI version control directory
 .yoyo/
 
-# Test files
-/tests/
-phpunit.xml
+# Test cache
+phpunit.xml.bak
 .phpunit.result.cache
 
-# Debug and temporary files
+# Logs & debug
 *.log
 *.cache
 *.tmp
 /storage/logs/*
 !/storage/logs/.gitkeep
 
-# Editor and IDE files
-.editorconfig
+# Editor / IDE
 *.swp
 *.swo
 
 # Build artifacts
-/public/build/
 /public/mix-manifest.json
 
-# Misc
+# Archives & DB dumps (jangan di-commit ke repo)
 *.zip
 *.tar.gz
+*.tgz
+*.rar
 *.sql
-tambah_transaksi*.php
+*.sqlite
+*.dump
+/archive/
 
-# Python virtual environments
+# Python virtual envs
 venv/
 **/venv/
 __pycache__/
 *.pyc
 .Python
 
-# Services (microservices with their own repos)
+# Microservices (own repos)
 /services/
 
-# WhatsApp cache
+# WhatsApp runtime cache
 .wwebjs_cache/
 .wwebjs_auth/
+/storage/wa-sessions/*
+!/storage/wa-sessions/.gitkeep
 
-# Debug and patch files
-DEBUG_*.php
-*_PATCH.php
-DEPLOY_*.sh
-DEPLOY_*.md
-*_FIX_*.sh
-*_FIX_*.md
-*_CHECKLIST.sh
-verify_*.php
-fix_*.php
+# --------------------------------------------------------------------
+# Developer scratch files — JANGAN taruh di root proyek!
+# Folder scripts/dev/ boleh di-commit untuk script yang berguna berulang,
+# tapi backup data (JSON/SQL/ZIP) di dalam scripts/dev/ tetap di-ignore.
+# --------------------------------------------------------------------
+/scripts/dev/backups/*
+!/scripts/dev/backups/.gitkeep
+/scripts/dev/**/*.sql
+/scripts/dev/**/*.zip
+/scripts/dev/**/*.tar.gz
+/scripts/dev/**/*backup*.json
 
-# Analysis and documentation (not needed in repo)
-ANALISIS_*.md
-ATURAN_*.md
-BUG_FIX_*.md
+# Pola script scratch di root (fallback, agar tidak ada lagi yang masuk root)
+/check_*.php
+/check_*.sh
+/cleanup_*.php
+/cleanup-*.php
+/clean_*.php
+/debug_*.php
+/DEBUG_*.php
+/delete_*.php
+/detective_*.php
+/extend_*.php
+/find_*.php
+/fix_*.php
+/FIX_*.php
+/force_*.php
+/get_password_*.php
+/global_search.php
+/investigate_*.php
+/link_*.php
+/list_*.php
+/list-*.php
+/manual_*.php
+/patch_*.php
+/prevent_*.php
+/reset_*.php
+/restore_*.php
+/send_credentials.php
+/set_*.php
+/tambah_transaksi*.php
+/test_*.php
+/test-*.php
+/tmp_*.php
+/update_*.php
+/update-*.php
+/verify_*.php
+/backup_*.php
+/backup_*.json
+/add_*.php
+/audit_*.php
+/auto_send_*.php
+/cek_*.php
+/comprehensive_*.php
+/create_purwa_*.php
+/reconnect-session.js
+/USER_CASCADE_DELETE_CODE.php
+/WHATSAPP_REGISTRATION_INTEGRATION.php
+
+# Dokumen scratch di root (fallback, taruh di docs/)
+/ANALISA_*.md
+/ANALISIS_*.md
+/ATURAN_*.md
+/BUG_FIX_*.md
+/FIX_*.md
+/FINWA_AI_*.md
+/IMPLEMENTASI_*.md
+/IMPLEMENTATION_*.md
+/MASALAH_*.md
+/MIGRASI_*.md
+/OLLAMA_*.md
+/OPTIMIZE-OLLAMA-*.md
+/PANDUAN_*.md
+/QUICKSTART_*.md
+/SEO_*.md
+/SOLUSI_*.md
+/WHATSAPP_REGISTRATION_*.md
+/refactoring-plan.md
+/DEPLOY_*.md
+/DEPLOY_*.sh
+/DEPLOYMENT_*.sh
+/*_CHECKLIST.sh
+/*_FIX_*.sh
+/*_FIX_*.md
+/*_PATCH.php
+
+# File kredensial / sensitif — WAJIB tidak pernah masuk repo
+/*credentials*
+/*credential*
+/Email.txt
+/eder.txt
+/Komerce*.txt
+/login*Hosting*.txt
+/aaPanel*.txt
+/hosting-ssh-commands.txt
+/target_phone.txt
+/targets.txt
+/.env.*.backup
+/.env.*.bak
+/.env.groq*
+/.env.openai*
+/.env.local
+/.env.staging
+/get_password_*.txt
+/git_log.txt
+
+# File aneh dari redirect error terminal
+/count()
+/toArray())
+/Type)
+/type
+/analisa_hutang_piutang
