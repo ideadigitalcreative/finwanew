@@ -96,6 +96,11 @@ __pycache__/
 /scripts/dev/**/*.tar.gz
 /scripts/dev/**/*backup*.json
 
+# Debug / temporary scripts (jangan di-commit)
+/scripts/dev/debug_*
+/scripts/dev/DEBUG_*
+/scripts/dev/tmp_*
+
 # Pola script scratch di root (fallback, agar tidak ada lagi yang masuk root)
 /check_*.php
 /check_*.sh
@@ -180,6 +185,12 @@ __pycache__/
 # Script sensitif (jangan pernah di-commit)
 /scripts/dev/send_credentials.php
 /scripts/dev/get_password_from_log.php
+
+# Assets source files (design)
+/public/*.psd
+
+# Internal prompts / scratch briefs
+/finwa-risen-ai-laravel-vue-prompt.md
 
 # File kredensial / sensitif — WAJIB tidak pernah masuk repo
 /*credentials*
