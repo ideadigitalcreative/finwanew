@@ -328,10 +328,20 @@ class OcrProcessorService
                 'items' => $items,
             ];
 
+            $existingMeta = $ocrJob->metadata ?? [];
+            if (isset($existingMeta['receipt_transaction_id']) && is_numeric($existingMeta['receipt_transaction_id'])) {
+                Log::info('Gemini Vision: receipt already recorded, skipping create', [
+                    'ocr_job_id' => $ocrJob->id,
+                    'transaction_id' => $existingMeta['receipt_transaction_id'],
+                ]);
+
+                return;
+            }
+
             $ocrJob->update([
                 'status' => 'completed',
                 'extracted_text' => $extractedText,
-                'metadata' => array_merge($ocrJob->metadata ?? [], [
+                'metadata' => array_merge($existingMeta, [
                     'ai_source' => 'gemini-vision',
                     'confidence_score' => 0.95,
                     'model' => config('services.gemini.model', 'gemini-2.5-flash'),
@@ -342,19 +352,47 @@ class OcrProcessorService
                 'completed_at' => now(),
             ]);
 
-            // Update message type ke text agar second-pass bisa membaca structured_data
-            $message = $ocrJob->message;
-            $message->update([
-                'type' => 'text',
-                'content' => $extractedText,
+            $categoryText = mb_strtolower(trim(($merchant ?? '').' '.implode(' ', array_map(
+                fn ($it) => (string) ($it['name'] ?? ''),
+                $items
+            ))));
+            $foodKeywords = [
+                'bakso', 'mie', 'ayam', 'soto', 'nasi', 'jus', 'es ', 'kopi', 'teh', 'minum', 'makan',
+                'pangsit', 'goreng', 'urat', 'mineral',
+            ];
+            $categoryType = 'pengeluaran_belanja';
+            foreach ($foodKeywords as $kw) {
+                if ($kw !== '' && str_contains($categoryText, $kw)) {
+                    $categoryType = 'pengeluaran_makanan';
+                    break;
+                }
+            }
+
+            $txData = [
+                'type' => 'expense',
+                'amount' => $total,
+                'category_type' => $categoryType,
+                'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw),
+                'description' => $merchant ? "Belanja di {$merchant}" : 'Belanja dari struk',
+                'source' => 'receipt_ai',
+                'confidence_score' => 0.95,
+                'account_name' => null,
+            ];
+
+            $transaction = $this->transactionService->createTransaction($txData, false);
+            if (! $transaction) {
+                ($this->sendReplyCallback)('⚠️ Gagal mencatat transaksi dari struk. Silakan coba lagi.');
+
+                return;
+            }
+
+            $ocrJob->update([
+                'metadata' => array_merge($ocrJob->metadata ?? [], [
+                    'receipt_transaction_id' => $transaction->id,
+                ]),
             ]);
 
-            Log::info('Gemini Vision done — dispatching second pass', [
-                'message_id' => $message->id,
-                'total' => $total,
-            ]);
-
-            \App\Jobs\ProcessIncomingMessage::dispatch($message->fresh());
+            $this->confirmationService->sendReceiptConfirmation($transaction, $items, $merchant);
 
         } catch (\Throwable $e) {
             Log::error('Gemini Vision process failed', [
