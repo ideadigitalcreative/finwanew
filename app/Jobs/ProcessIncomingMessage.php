@@ -934,6 +934,12 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
         
+        // 1.6af2.5: Edit last transaction by context - "edit jadi 45rb", "edit terakhir jadi 45rb"
+        if ($hasAmount && preg_match('/^(ubah|edit|ganti|koreksi)\s+(?:transaksi\s+)?(?:terakhir\s+)?(?:jadi|ke)\b/i', $textLower)) {
+            $this->transactionService->handleEditWithContext($messageText);
+            return;
+        }
+        
         // 1.6af3: Edit specific transaction by keyword - "ubah beli kue jadi 25rb", "edit makan siang 30rb"
         // Must have keyword + amount
         if (preg_match('/^(ubah|edit|ganti|koreksi)\s+(?!transaksi\s*$)(?!jadi\s)(?!ke\s)/i', $textLower) && $hasAmount) {

@@ -70,6 +70,7 @@ it('detects adjust wallet balance', function () {
 it('detects edit context with amount', function () {
     expect($this->service->isEditContext('koreksi jadi 50rb', true))->toBeTrue();
     expect($this->service->isEditContext('harusnya 100rb', true))->toBeTrue();
+    expect($this->service->isEditContext('edit jadi 45rb', true))->toBeTrue();
 });
 
 // ===== UNDO/DELETE =====

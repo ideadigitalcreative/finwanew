@@ -222,6 +222,7 @@ class IntentDetectionService
 
         $editContextKeywords = [
             'salah', 'koreksi', 'harusnya', 'seharusnya', 'ubah jadi', 'ganti jadi',
+            'edit jadi', 'edit ke', 'ubah ke', 'ganti ke',
             'yang bener', 'yang benar', 'ralat',
         ];
 
