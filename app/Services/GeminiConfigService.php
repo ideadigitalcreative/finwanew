@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\AppSetting;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -29,7 +29,7 @@ class GeminiConfigService
             'api_keys' => $this->apiKeysFromEnv(),
         ];
 
-        $rawValue = AppSetting::query()
+        $rawValue = DB::table('app_settings')
             ->where('key', self::SETTING_KEY)
             ->value('value');
         if (! is_string($rawValue) || trim($rawValue) === '') {
