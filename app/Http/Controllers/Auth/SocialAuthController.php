@@ -85,7 +85,7 @@ class SocialAuthController extends Controller
                 'name' => $googleUser->getName()."'s Organization",
                 'slug' => $slug,
                 'is_active' => true, // Free trial is immediately active
-                'trial_ends_at' => Carbon::now()->addDays(3),
+                'trial_ends_at' => null,
             ]);
 
             // Create default categories for this tenant

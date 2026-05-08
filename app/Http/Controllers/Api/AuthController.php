@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -130,7 +131,7 @@ class AuthController extends Controller
                     'name' => $name."'s Workspace",
                     'slug' => Str::slug($name.' '.Str::random(6)),
                     'is_active' => true,
-                    'trial_ends_at' => \Carbon\Carbon::now()->addDays(3),
+                    'trial_ends_at' => null,
                 ]);
 
                 // Attach User to Tenant
@@ -138,6 +139,23 @@ class AuthController extends Controller
                     'role_id' => 1, // Assuming 1 is Owner
                     'is_active' => true,
                     'joined_at' => now(),
+                ]);
+
+                Subscription::create([
+                    'tenant_id' => $tenant->id,
+                    'plan' => 'free',
+                    'duration_months' => 0,
+                    'price' => 0,
+                    'status' => 'active',
+                    'starts_at' => now(),
+                    'ends_at' => null,
+                    'payment_provider' => 'internal',
+                    'payment_reference' => null,
+                    'metadata' => array_filter([
+                        'registered_from' => 'api_google',
+                        'registered_at' => now()->toIso8601String(),
+                        'is_free_plan' => true,
+                    ]),
                 ]);
 
                 // Set default

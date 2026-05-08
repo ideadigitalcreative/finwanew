@@ -4,12 +4,14 @@ namespace App\Helpers;
 
 use App\Models\Subscription;
 use App\Models\Tenant;
+use App\Models\Message;
 use App\Models\User;
 use App\Models\UserWhatsAppNumber;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class WhatsAppRegistrationHelper
@@ -19,7 +21,11 @@ class WhatsAppRegistrationHelper
      */
     public static function isInRegistrationFlow(string $phoneNumber): bool
     {
-        return Cache::has("wa_reg_flow:{$phoneNumber}");
+        if (Cache::has("wa_reg_flow:{$phoneNumber}")) {
+            return true;
+        }
+
+        return self::recoverFlowFromRecentMessages($phoneNumber) !== null;
     }
 
     /**
@@ -27,7 +33,14 @@ class WhatsAppRegistrationHelper
      */
     public static function getCurrentStep(string $phoneNumber): ?string
     {
-        return Cache::get("wa_reg_flow:{$phoneNumber}");
+        $step = Cache::get("wa_reg_flow:{$phoneNumber}");
+        if (is_string($step) && $step !== '') {
+            return $step;
+        }
+
+        $recovered = self::recoverFlowFromRecentMessages($phoneNumber);
+
+        return $recovered['step'] ?? null;
     }
 
     /**
@@ -35,7 +48,14 @@ class WhatsAppRegistrationHelper
      */
     public static function getRegistrationData(string $phoneNumber): array
     {
-        return Cache::get("wa_reg_data:{$phoneNumber}", []);
+        $data = Cache::get("wa_reg_data:{$phoneNumber}", []);
+        if (is_array($data) && $data !== []) {
+            return $data;
+        }
+
+        $recovered = self::recoverFlowFromRecentMessages($phoneNumber);
+
+        return is_array($recovered['data'] ?? null) ? $recovered['data'] : [];
     }
 
     /**
@@ -43,7 +63,7 @@ class WhatsAppRegistrationHelper
      */
     public static function setStep(string $phoneNumber, string $step): void
     {
-        Cache::put("wa_reg_flow:{$phoneNumber}", $step, now()->addMinutes(30));
+        Cache::put("wa_reg_flow:{$phoneNumber}", $step, now()->addHours(24));
     }
 
     /**
@@ -53,7 +73,7 @@ class WhatsAppRegistrationHelper
     {
         $existing = self::getRegistrationData($phoneNumber);
         $merged = array_merge($existing, $data);
-        Cache::put("wa_reg_data:{$phoneNumber}", $merged, now()->addMinutes(30));
+        Cache::put("wa_reg_data:{$phoneNumber}", $merged, now()->addHours(24));
     }
 
     /**
@@ -72,6 +92,110 @@ class WhatsAppRegistrationHelper
     {
         self::setStep($phoneNumber, 'awaiting_name');
         self::saveData($phoneNumber, ['phone' => $phoneNumber]);
+    }
+
+    protected static function recoverFlowFromRecentMessages(string $phoneNumber): ?array
+    {
+        $lockKey = "wa_reg_recover_lock:{$phoneNumber}";
+        if (! Cache::add($lockKey, true, now()->addSeconds(10))) {
+            return null;
+        }
+
+        $candidates = [$phoneNumber];
+        if (str_starts_with($phoneNumber, '62') && strlen($phoneNumber) >= 10) {
+            $candidates[] = '0'.substr($phoneNumber, 2);
+            $candidates[] = substr($phoneNumber, 2);
+        } elseif (str_starts_with($phoneNumber, '0') && strlen($phoneNumber) >= 10) {
+            $candidates[] = '62'.substr($phoneNumber, 1);
+        } elseif (str_starts_with($phoneNumber, '8') && strlen($phoneNumber) >= 9) {
+            $candidates[] = '62'.$phoneNumber;
+            $candidates[] = '0'.$phoneNumber;
+        }
+
+        $messages = Message::query()
+            ->whereIn('sender_id', array_values(array_unique($candidates)))
+            ->where('created_at', '>=', now()->subHours(6))
+            ->orderByDesc('id')
+            ->limit(6)
+            ->get(['content', 'created_at']);
+
+        if ($messages->isEmpty()) {
+            return null;
+        }
+
+        $texts = $messages->pluck('content')->filter(fn ($v) => is_string($v))->map(fn ($v) => trim($v))->values()->all();
+        if ($texts === []) {
+            return null;
+        }
+
+        $latest = $texts[0] ?? '';
+        $prev = $texts[1] ?? '';
+
+        $step = null;
+        $data = ['phone' => $phoneNumber];
+
+        if ($latest !== '' && self::isValidEmail($latest)) {
+            $step = 'awaiting_email';
+            $data['email'] = $latest;
+
+            $nameCandidate = null;
+            foreach (array_slice($texts, 1) as $t) {
+                $t = trim((string) $t);
+                if ($t === '') {
+                    continue;
+                }
+                if (self::isValidEmail($t)) {
+                    continue;
+                }
+                if (self::isConfirmation($t) || self::isRejection($t)) {
+                    continue;
+                }
+                if (preg_match('/\d/', $t)) {
+                    continue;
+                }
+                if (mb_strlen($t) < 3 || mb_strlen($t) > 60) {
+                    continue;
+                }
+                if (preg_match('/[a-zA-Z\p{L}]/u', $t) !== 1) {
+                    continue;
+                }
+                $nameCandidate = $t;
+                break;
+            }
+            if ($nameCandidate !== null) {
+                $data['name'] = $nameCandidate;
+            }
+        } elseif ($latest !== '' && ! self::isConfirmation($latest) && ! self::isRejection($latest) && ! self::isValidEmail($latest)) {
+            $looksLikeName = ! preg_match('/\d/', $latest)
+                && mb_strlen($latest) >= 3
+                && mb_strlen($latest) <= 60
+                && preg_match('/[a-zA-Z\p{L}]/u', $latest) === 1;
+
+            if ($looksLikeName) {
+                $step = 'awaiting_email';
+                $data['name'] = $latest;
+            } elseif (self::isConfirmation($latest) || self::isConfirmation($prev)) {
+                $step = 'awaiting_name';
+            }
+        } elseif (self::isConfirmation($latest) || self::isConfirmation($prev)) {
+            $step = 'awaiting_name';
+        }
+
+        if ($step === null) {
+            return null;
+        }
+
+        Log::info('Recovered WhatsApp registration flow from recent messages', [
+            'phone' => $phoneNumber,
+            'step' => $step,
+            'has_name' => isset($data['name']),
+            'has_email' => isset($data['email']),
+        ]);
+
+        self::setStep($phoneNumber, $step);
+        self::saveData($phoneNumber, $data);
+
+        return ['step' => $step, 'data' => $data];
     }
 
     /**
@@ -138,7 +262,7 @@ class WhatsAppRegistrationHelper
             'name' => $data['name']."'s Business",
             'slug' => $slug,
             'is_active' => true,
-            'trial_ends_at' => Carbon::now()->addDays(3),
+            'trial_ends_at' => null,
         ]);
 
         app(\App\Services\TenantProvisioningService::class)->ensureDefaultWallet($tenant->id, 'whatsapp_registration');
@@ -159,7 +283,7 @@ class WhatsAppRegistrationHelper
         ]);
 
         // Create pivot table entry for user-tenant relationship
-        \DB::table('user_tenants')->insert([
+        DB::table('user_tenants')->insert([
             'user_id' => $user->id,
             'tenant_id' => $tenant->id,
             'role_id' => $roleId,

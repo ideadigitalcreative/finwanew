@@ -194,7 +194,7 @@ class RegistrationFlowService
                 $sessId = $this->getSessionId();
                 app(\App\Services\WhatsAppService::class)->sendMessage(
                     $sessId, $this->message->sender_id,
-                    "👋 *Halo!*\n\nSepertinya Anda belum terdaftar di FinWa.\n\n*Pilihan:*\n1️⃣ Sudah punya akun? Kirim nomor HP Anda (contoh: 08123456789)\n2️⃣ Belum punya akun? Ketik *Daftar* untuk registrasi gratis (trial 3 hari)",
+                    "👋 *Halo!*\n\nSepertinya Anda belum terdaftar di FinWa.\n\n*Pilihan:*\n1️⃣ Sudah punya akun? Kirim nomor HP Anda (contoh: 08123456789)\n2️⃣ Belum punya akun? Ketik *Daftar* untuk registrasi gratis",
                     'text', $originalLid
                 );
             } catch (\Exception $e) {
@@ -271,6 +271,15 @@ class RegistrationFlowService
 
                     RegHelper::saveData($senderNumber, ['email' => $email]);
                     $regData = RegHelper::getRegistrationData($senderNumber);
+                    if (empty($regData['name'])) {
+                        RegHelper::setStep($senderNumber, 'awaiting_name');
+                        $whatsappService->sendMessage(
+                            $sessId, $this->message->sender_id,
+                            RegHelper::getAskNameMessage(),
+                            'text', $originalLid
+                        );
+                        return true;
+                    }
                     $result = RegHelper::createAccount($regData);
 
                     $existingLidMapping = UserWhatsAppNumber::where('user_id', $result['user']->id)
@@ -436,6 +445,15 @@ class RegistrationFlowService
 
                     RegHelper::saveData($senderNumber, ['email' => $email]);
                     $regData = RegHelper::getRegistrationData($senderNumber);
+                    if (empty($regData['name'])) {
+                        RegHelper::setStep($senderNumber, 'awaiting_name');
+                        $whatsappService->sendMessage(
+                            $sessId, $this->message->sender_id,
+                            RegHelper::getAskNameMessage(),
+                            'text'
+                        );
+                        return true;
+                    }
                     $result = RegHelper::createAccount($regData);
 
                     try {

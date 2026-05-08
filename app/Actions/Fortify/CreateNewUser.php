@@ -78,7 +78,7 @@ class CreateNewUser implements CreatesNewUsers
                 'name' => $input['tenant_name'] ?? $input['name']."'s Organization",
                 'slug' => $slug,
                 'is_active' => $isActive,
-                'trial_ends_at' => Carbon::now()->addDays(3),
+                'trial_ends_at' => null,
             ]);
 
             // Create default categories for this tenant
@@ -139,6 +139,24 @@ class CreateNewUser implements CreatesNewUsers
                         'registered_from' => 'checkout',
                         'registered_at' => Carbon::now()->toIso8601String(),
                         'is_free_plan' => $isFreePlan ? true : null,
+                    ]),
+                ]);
+            }
+            if (! $subscription) {
+                $subscription = Subscription::create([
+                    'tenant_id' => $tenant->id,
+                    'plan' => 'free',
+                    'duration_months' => 0,
+                    'price' => 0,
+                    'status' => 'active',
+                    'starts_at' => Carbon::now(),
+                    'ends_at' => null,
+                    'payment_provider' => 'internal',
+                    'payment_reference' => null,
+                    'metadata' => array_filter([
+                        'registered_from' => 'fortify',
+                        'registered_at' => Carbon::now()->toIso8601String(),
+                        'is_free_plan' => true,
                     ]),
                 ]);
             }
