@@ -622,11 +622,15 @@ class WhatsAppService
      * @param  string  $toNumber  Phone number to send to
      * @param  string  $filePath  Path to the document file
      * @param  string  $caption  Caption for the document
+     * @param  string|null  $filename  Override filename shown to user
+     * @param  string|null  $originalLid  Original LID address for fallback
      */
-    public function sendDocument(string $sessionId, string $toNumber, string $filePath, string $caption = ''): array
+    public function sendDocument(string $sessionId, string $toNumber, string $filePath, string $caption = '', ?string $filename = null, ?string $originalLid = null): array
     {
         try {
-            $cleanedNumber = $this->cleanPhoneNumber($toNumber);
+            $resolvedTo = str_contains($toNumber, '@lid')
+                ? $toNumber
+                : $this->cleanPhoneNumber($toNumber);
 
             // Check if file exists
             if (! file_exists($filePath)) {
@@ -654,7 +658,9 @@ class WhatsAppService
 
             Log::info('Sending WhatsApp document', [
                 'session_id' => $sessionId,
-                'to_number' => $cleanedNumber,
+                'to_number' => $toNumber,
+                'resolved_to' => $resolvedTo,
+                'original_lid' => $originalLid,
                 'file_path' => $filePath,
                 'file_size' => $fileSize,
                 'caption' => $caption,
@@ -672,20 +678,26 @@ class WhatsAppService
             $mimeType = function_exists('mime_content_type')
                 ? (mime_content_type($filePath) ?: 'application/pdf')
                 : 'application/pdf';
-            $fileName = basename($filePath);
+            $fileName = $filename ?: basename($filePath);
+
+            $payload = [
+                'to' => $resolvedTo,
+                'document' => $base64Content,
+                'filename' => $fileName,
+                'mimetype' => $mimeType,
+                'caption' => $caption,
+            ];
+
+            if ($originalLid && ! str_contains($resolvedTo, '@lid')) {
+                $payload['originalLid'] = $originalLid;
+            }
 
             $response = Http::timeout(60)
                 ->withHeaders([
                     'X-API-Key' => $this->apiKey,
                     'Content-Type' => 'application/json',
                 ])
-                ->post("{$this->engineUrl}/sessions/{$sessionId}/send-document", [
-                    'to' => $cleanedNumber,
-                    'document' => $base64Content,
-                    'filename' => $fileName,
-                    'mimetype' => $mimeType,
-                    'caption' => $caption,
-                ]);
+                ->post("{$this->engineUrl}/sessions/{$sessionId}/send-document", $payload);
 
             Log::info('WhatsApp document response', [
                 'session_id' => $sessionId,

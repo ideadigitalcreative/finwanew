@@ -4,8 +4,9 @@ namespace App\Services;
 
 use App\Models\Budget;
 use App\Models\Transaction;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -127,15 +128,20 @@ class PdfReportService
                 'pieChartData' => $this->generatePieChartData($expenseByCategory, $totalExpense),
             ];
 
-            // Generate PDF
-            $pdf = Pdf::loadView('reports.monthly', $data);
-            $pdf->setPaper('a4', 'portrait');
+            $html = view('reports.monthly', $data)->render();
+            $options = new Options;
+            $options->set('isHtml5ParserEnabled', true);
+            $options->set('defaultFont', 'DejaVu Sans');
+            $dompdf = new Dompdf($options);
+            $dompdf->loadHtml($html, 'UTF-8');
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
 
             // Save to storage
             $filename = "laporan-keuangan-{$year}-{$month}-".time().'.pdf';
             $path = "reports/{$this->tenantId}/{$filename}";
 
-            Storage::disk('public')->put($path, $pdf->output());
+            Storage::disk('public')->put($path, $dompdf->output());
 
             Log::info('PDF report generated', [
                 'tenant_id' => $this->tenantId,
@@ -212,13 +218,19 @@ class PdfReportService
                 'recentTransactions' => $transactions->take(20),
             ];
 
-            $pdf = Pdf::loadView('reports.monthly', $data);
-            $pdf->setPaper('a4', 'portrait');
+            $html = view('reports.monthly', $data)->render();
+            $options = new Options;
+            $options->set('isHtml5ParserEnabled', true);
+            $options->set('defaultFont', 'DejaVu Sans');
+            $dompdf = new Dompdf($options);
+            $dompdf->loadHtml($html, 'UTF-8');
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
 
             $filename = "laporan-{$label}-".time().'.pdf';
             $path = "reports/{$this->tenantId}/{$filename}";
 
-            Storage::disk('public')->put($path, $pdf->output());
+            Storage::disk('public')->put($path, $dompdf->output());
 
             return Storage::disk('public')->path($path);
 

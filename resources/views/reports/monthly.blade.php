@@ -7,8 +7,8 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #333; line-height: 1.4; }
         .container { padding: 20px; }
-        .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #2563eb; }
-        .header h1 { font-size: 20px; color: #2563eb; margin-bottom: 5px; }
+        .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #0f766e; }
+        .header h1 { font-size: 20px; color: #0f766e; margin-bottom: 5px; }
         .header p { color: #666; font-size: 10px; }
         
         .summary { margin-bottom: 20px; }
@@ -20,7 +20,7 @@
         .summary-value { font-size: 16px; font-weight: bold; }
         
         .section { margin-bottom: 20px; }
-        .section-title { font-size: 12px; font-weight: bold; color: #2563eb; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
+        .section-title { font-size: 12px; font-weight: bold; color: #0f766e; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 8px; }
         th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 10px; }
@@ -30,7 +30,7 @@
         .bar-container { margin-bottom: 6px; }
         .bar-label { display: inline-block; width: 100px; font-size: 10px; }
         .bar-amount { display: inline-block; width: 80px; font-size: 10px; text-align: right; }
-        .bar { display: inline-block; height: 12px; background: #3b82f6; border-radius: 2px; }
+        .bar { display: inline-block; height: 12px; background: #0f766e; border-radius: 2px; }
         
         .progress-bar { background: #e5e7eb; height: 6px; border-radius: 3px; overflow: hidden; }
         .progress-fill { height: 100%; border-radius: 3px; }
@@ -80,7 +80,7 @@
             
             @if(!empty($pieChartData))
             @php 
-                $chartColors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
+                $chartColors = ['#0f766e', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
             @endphp
             @foreach($pieChartData as $index => $segment)
             <div style="margin-bottom: 8px;">

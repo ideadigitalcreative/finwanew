@@ -128,7 +128,6 @@ class ReportCommandService
             $originalLid = null;
             if ($toNumber && str_contains($toNumber, '@lid')) {
                 $originalLid = $toNumber;
-                $toNumber = str_replace('@lid', '', $toNumber);
             }
 
             if (! $toNumber) {
@@ -147,7 +146,9 @@ class ReportCommandService
                 $sessionId,
                 $toNumber,
                 $filePath,
-                $caption
+                $caption,
+                null,
+                $originalLid
             );
 
             if (! $result['success']) {

@@ -105,12 +105,13 @@ class GenerateMonthlyPdfReport implements ShouldQueue
                 return;
             }
 
-            if (str_contains($toNumber, '@lid')) {
-                $toNumber = str_replace('@lid', '', $toNumber);
-            }
+            $metadata = is_array($message->metadata)
+                ? $message->metadata
+                : json_decode($message->metadata ?? '{}', true);
+            $originalLid = $metadata['original_sender_id'] ?? null;
 
             $whatsAppService = new WhatsAppService;
-            $result = $whatsAppService->sendDocument($sessionId, $toNumber, $filePath, $caption);
+            $result = $whatsAppService->sendDocument($sessionId, $toNumber, $filePath, $caption, null, $originalLid);
 
             if (isset($result['success']) && $result['success'] === true) {
                 return;
