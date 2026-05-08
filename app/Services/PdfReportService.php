@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Budget;
-use App\Models\Category;
 use App\Models\Transaction;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -48,7 +47,7 @@ class PdfReportService
                 ->groupBy('category_id')
                 ->map(function ($items) {
                     return [
-                        'name' => $items->first()->category->name ?? 'Lainnya',
+                        'name' => optional($items->first()->category)->name ?? 'Lainnya',
                         'total' => $items->sum('amount'),
                         'count' => $items->count(),
                     ];
@@ -62,7 +61,7 @@ class PdfReportService
                 ->groupBy('category_id')
                 ->map(function ($items) {
                     return [
-                        'name' => $items->first()->category->name ?? 'Lainnya',
+                        'name' => optional($items->first()->category)->name ?? 'Lainnya',
                         'total' => $items->sum('amount'),
                         'count' => $items->count(),
                     ];
@@ -90,7 +89,7 @@ class PdfReportService
                         ->sum('amount');
 
                     return [
-                        'category' => $budget->category->name ?? 'Unknown',
+                        'category' => optional($budget->category)->name ?? 'Unknown',
                         'budget' => $budget->amount,
                         'spent' => $spent,
                         'percentage' => $budget->amount > 0 ? round(($spent / $budget->amount) * 100) : 0,
@@ -147,7 +146,7 @@ class PdfReportService
 
             return Storage::disk('public')->path($path);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Failed to generate PDF report', [
                 'tenant_id' => $this->tenantId,
                 'error' => $e->getMessage(),
@@ -189,7 +188,7 @@ class PdfReportService
             $expenseByCategory = $transactions->where('type', 'expense')
                 ->groupBy('category_id')
                 ->map(fn ($items) => [
-                    'name' => $items->first()->category->name ?? 'Lainnya',
+                    'name' => optional($items->first()->category)->name ?? 'Lainnya',
                     'total' => $items->sum('amount'),
                     'count' => $items->count(),
                 ])
@@ -223,7 +222,7 @@ class PdfReportService
 
             return Storage::disk('public')->path($path);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Failed to generate custom PDF report', [
                 'tenant_id' => $this->tenantId,
                 'error' => $e->getMessage(),
@@ -238,7 +237,7 @@ class PdfReportService
      */
     public function getPublicUrl(string $path): string
     {
-        return Storage::disk('public')->url($path);
+        return url('storage/'.ltrim($path, '/'));
     }
 
     /**

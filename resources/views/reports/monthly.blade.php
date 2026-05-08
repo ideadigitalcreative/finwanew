@@ -84,7 +84,7 @@
             @endphp
             @foreach($pieChartData as $index => $segment)
             <div style="margin-bottom: 8px;">
-                <div style="display: inline-block; width: 100px; font-size: 10px;">{{ Str::limit($segment['name'], 12) }}</div>
+                <div style="display: inline-block; width: 100px; font-size: 10px;">{{ \Illuminate\Support\Str::limit($segment['name'], 12) }}</div>
                 <div style="display: inline-block; width: {{ min($segment['percentage'] * 2, 200) }}px; height: 14px; background: {{ $chartColors[$index % count($chartColors)] }};"></div>
                 <span style="font-size: 10px; margin-left: 5px; font-weight: 600;">{{ $segment['percentage'] }}%</span>
                 <span style="font-size: 9px; color: #666; margin-left: 5px;">Rp {{ number_format($segment['total'], 0, ',', '.') }}</span>
@@ -94,7 +94,7 @@
             @php $maxExpense = collect($expenseByCategory)->max('total'); @endphp
             @foreach(array_slice($expenseByCategory, 0, 6) as $cat)
             <div class="bar-container">
-                <span class="bar-label">{{ Str::limit($cat['name'], 12) }}</span>
+                <span class="bar-label">{{ \Illuminate\Support\Str::limit($cat['name'], 12) }}</span>
                 <span class="bar" style="width: {{ $maxExpense > 0 ? min(($cat['total'] / $maxExpense * 150), 150) : 5 }}px;"></span>
                 <span class="bar-amount">Rp {{ number_format($cat['total'], 0, ',', '.') }}</span>
             </div>
@@ -149,8 +149,8 @@
                     @foreach($recentTransactions as $tx)
                     <tr>
                         <td>{{ $tx->transaction_date->format('d/m') }}</td>
-                        <td>{{ Str::limit($tx->category->name ?? 'Lainnya', 15) }}</td>
-                        <td>{{ Str::limit($tx->description ?? '-', 20) }}</td>
+                        <td>{{ \Illuminate\Support\Str::limit(optional($tx->category)->name ?? 'Lainnya', 15) }}</td>
+                        <td>{{ \Illuminate\Support\Str::limit($tx->description ?? '-', 20) }}</td>
                         <td class="text-right">
                             <span class="badge {{ $tx->type === 'income' ? 'badge-income' : 'badge-expense' }}">
                                 {{ $tx->type === 'income' ? '+' : '-' }}{{ number_format($tx->amount, 0, ',', '.') }}

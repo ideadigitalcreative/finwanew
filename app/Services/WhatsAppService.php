@@ -636,18 +636,42 @@ class WhatsAppService
                 ];
             }
 
+            $fileSize = filesize($filePath);
+            if ($fileSize === false) {
+                return [
+                    'success' => false,
+                    'error' => 'Unable to read file size: '.$filePath,
+                ];
+            }
+
+            $maxBytes = 8 * 1024 * 1024;
+            if ($fileSize > $maxBytes) {
+                return [
+                    'success' => false,
+                    'error' => 'File too large for WhatsApp document: '.$fileSize.' bytes',
+                ];
+            }
+
             Log::info('Sending WhatsApp document', [
                 'session_id' => $sessionId,
                 'to_number' => $cleanedNumber,
                 'file_path' => $filePath,
-                'file_size' => filesize($filePath),
+                'file_size' => $fileSize,
                 'caption' => $caption,
             ]);
 
             // Read file and convert to base64
             $fileContent = file_get_contents($filePath);
+            if ($fileContent === false) {
+                return [
+                    'success' => false,
+                    'error' => 'Unable to read file: '.$filePath,
+                ];
+            }
             $base64Content = base64_encode($fileContent);
-            $mimeType = mime_content_type($filePath);
+            $mimeType = function_exists('mime_content_type')
+                ? (mime_content_type($filePath) ?: 'application/pdf')
+                : 'application/pdf';
             $fileName = basename($filePath);
 
             $response = Http::timeout(60)
@@ -688,7 +712,7 @@ class WhatsAppService
                 'status_code' => $response->status(),
             ];
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Error sending WhatsApp document', [
                 'session_id' => $sessionId,
                 'to_number' => $toNumber,
