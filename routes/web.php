@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -57,11 +58,12 @@ Route::get('/reports/{tenantId}/download/{filename}', function (int $tenantId, s
  * Path memakai /finwa/launch (bukan /pwa/...) — banyak server/Nginx mem-blok atau salah arahkan URI /pwa/*.
  */
 Route::get('/finwa/launch', function () {
-    if (! auth()->check()) {
+    if (! Auth::check()) {
         return redirect('/login?source=pwa');
     }
 
-    if (auth()->user()->isSuperAdmin()) {
+    $user = Auth::user();
+    if ($user instanceof \App\Models\User && $user->isSuperAdmin()) {
         return redirect()->route('superadmin.dashboard');
     }
 
