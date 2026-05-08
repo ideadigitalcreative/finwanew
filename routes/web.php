@@ -20,7 +20,21 @@ Route::get('/', function (Request $request) {
 })->name('home');
 
 Route::get('/reports/{tenantId}/download/{filename}', function (int $tenantId, string $filename) {
+    $rawFilename = $filename;
+    $filename = trim($filename);
+    $filename = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}]/u', '', $filename) ?? $filename;
+    $filename = trim($filename, " \t\n\r\0\x0B`'\"");
+    $filename = rtrim($filename, ".,)>]");
     $filename = basename($filename);
+
+    if (! preg_match('/\.pdf$/i', $filename)) {
+        Log::warning('Report download invalid filename', [
+            'tenant_id' => $tenantId,
+            'raw_filename' => $rawFilename,
+            'normalized_filename' => $filename,
+        ]);
+        abort(404);
+    }
     $relativePath = "reports/{$tenantId}/{$filename}";
 
     $disk = Storage::disk('public');
@@ -68,7 +82,7 @@ Route::get('/reports/{tenantId}/download/{filename}', function (int $tenantId, s
         'Content-Disposition' => 'inline; filename="'.$filename.'"',
         'Cache-Control' => 'public, max-age=86400',
     ]);
-})->whereNumber('tenantId')->where('filename', '[^/]+\.pdf');
+})->whereNumber('tenantId')->where('filename', '[^/]+');
 
 /**
  * Entry khusus PWA: login jika belum auth, dashboard (atau superadmin) jika sudah.
