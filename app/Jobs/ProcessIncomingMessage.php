@@ -21,6 +21,7 @@ use App\Services\MessageReplyService;
 use App\Helpers\WhatsAppRegistrationHelper as RegHelper;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use App\Services\Reminder\ReminderCommandService;
@@ -34,6 +35,7 @@ use App\Services\STT\SttProcessorService;
 class ProcessIncomingMessage implements ShouldQueue
 {
     use Queueable;
+    use InteractsWithQueue;
 
     protected TransactionService $transactionService;
     protected OcrProcessorService $ocrProcessor;
@@ -173,7 +175,21 @@ class ProcessIncomingMessage implements ShouldQueue
     public function handle(): void
     {
         $this->initializeServices();
+        $startAt = microtime(true);
         try {
+            Log::debug('ProcessIncomingMessage: start', [
+                'message_id' => $this->message->id,
+                'tenant_id' => $this->message->tenant_id,
+                'channel_id' => $this->message->channel_id,
+                'channel_account' => $this->message->channel_account,
+                'sender_id' => $this->message->sender_id,
+                'type' => $this->message->type,
+                'content_len' => is_string($this->message->content) ? strlen($this->message->content) : null,
+                'content_preview' => is_string($this->message->content) ? mb_substr($this->message->content, 0, 120) : null,
+                'attempts' => $this->attempts(),
+                'job_id' => $this->job?->getJobId(),
+            ]);
+
             // Check if message is from super admin WhatsApp number
             // Super admin channel is only used for sending notifications, not for processing transactions
             // COMMENTED OUT: This blocks messages FROM the user's own number
@@ -232,15 +248,54 @@ class ProcessIncomingMessage implements ShouldQueue
                     break;
             }
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Error processing incoming message', [
                 'message_id' => $this->message->id,
+                'tenant_id' => $this->message->tenant_id,
+                'type' => $this->message->type,
+                'attempts' => $this->attempts(),
+                'job_id' => $this->job?->getJobId(),
+                'exception_class' => get_class($e),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
             throw $e;
+        } finally {
+            $elapsedMs = (int) round((microtime(true) - $startAt) * 1000);
+            Log::debug('ProcessIncomingMessage: finish', [
+                'message_id' => $this->message->id,
+                'tenant_id' => $this->message->tenant_id,
+                'type' => $this->message->type,
+                'elapsed_ms' => $elapsedMs,
+                'attempts' => $this->attempts(),
+                'job_id' => $this->job?->getJobId(),
+            ]);
         }
+    }
+
+    public function failed(\Throwable $e): void
+    {
+        $uid = function_exists('posix_geteuid') ? posix_geteuid() : null;
+        $user = null;
+        if ($uid !== null && function_exists('posix_getpwuid')) {
+            $pw = posix_getpwuid($uid);
+            if (is_array($pw)) {
+                $user = $pw['name'] ?? null;
+            }
+        }
+
+        Log::error('ProcessIncomingMessage: failed', [
+            'message_id' => $this->message->id,
+            'tenant_id' => $this->message->tenant_id,
+            'type' => $this->message->type,
+            'attempts' => $this->attempts(),
+            'job_id' => $this->job?->getJobId(),
+            'worker_uid' => $uid,
+            'worker_user' => $user,
+            'exception_class' => get_class($e),
+            'error' => $e->getMessage(),
+        ]);
     }
 
     /**
