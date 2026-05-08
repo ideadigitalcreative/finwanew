@@ -7,6 +7,7 @@ use App\Jobs\ProcessIncomingMessage;
 use App\Models\Attachment;
 use App\Models\Channel;
 use App\Models\Message;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
@@ -15,6 +16,11 @@ use Illuminate\Support\Facades\Validator;
 
 class WhatsAppWebhookController extends Controller
 {
+    protected function storageDisk(string $name): FilesystemAdapter
+    {
+        return Storage::disk($name);
+    }
+
     /**
      * Handle incoming WhatsApp message
      * Payload sesuai standar: tenant_id, channel, channel_account, sender_id, message_id, type, content, timestamp
@@ -226,7 +232,7 @@ class WhatsAppWebhookController extends Controller
                 $signedUrl = url('/api/files').'?path='.urlencode($path);
             } else {
                 // Untuk S3/R2, gunakan temporary URL
-                $signedUrl = Storage::disk($diskName)->temporaryUrl($path, now()->addHours(24));
+                $signedUrl = $this->storageDisk($diskName)->temporaryUrl($path, now()->addHours(24));
             }
 
             return response()->json([
