@@ -22,11 +22,28 @@ Route::get('/reports/{tenantId}/download/{filename}', function (int $tenantId, s
     $relativePath = "reports/{$tenantId}/{$filename}";
 
     $disk = Storage::disk('public');
-    if (! $disk->exists($relativePath)) {
-        abort(404);
+    $fullPath = null;
+
+    if ($disk->exists($relativePath)) {
+        $fullPath = $disk->path($relativePath);
+    } else {
+        $fallbackPaths = [
+            storage_path('app/public/'.$relativePath),
+            public_path('storage/'.$relativePath),
+            public_path($relativePath),
+        ];
+
+        foreach ($fallbackPaths as $candidate) {
+            if (is_string($candidate) && is_file($candidate)) {
+                $fullPath = $candidate;
+                break;
+            }
+        }
     }
 
-    $fullPath = $disk->path($relativePath);
+    if (! $fullPath) {
+        abort(404);
+    }
 
     return response()->file($fullPath, [
         'Content-Type' => 'application/pdf',
