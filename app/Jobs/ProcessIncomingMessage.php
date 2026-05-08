@@ -177,7 +177,7 @@ class ProcessIncomingMessage implements ShouldQueue
         $this->initializeServices();
         $startAt = microtime(true);
         try {
-            Log::debug('ProcessIncomingMessage: start', [
+            $this->safeLog('debug', 'ProcessIncomingMessage: start', [
                 'message_id' => $this->message->id,
                 'tenant_id' => $this->message->tenant_id,
                 'channel_id' => $this->message->channel_id,
@@ -249,7 +249,7 @@ class ProcessIncomingMessage implements ShouldQueue
             }
 
         } catch (\Throwable $e) {
-            Log::error('Error processing incoming message', [
+            $this->safeLog('error', 'Error processing incoming message', [
                 'message_id' => $this->message->id,
                 'tenant_id' => $this->message->tenant_id,
                 'type' => $this->message->type,
@@ -263,7 +263,7 @@ class ProcessIncomingMessage implements ShouldQueue
             throw $e;
         } finally {
             $elapsedMs = (int) round((microtime(true) - $startAt) * 1000);
-            Log::debug('ProcessIncomingMessage: finish', [
+            $this->safeLog('debug', 'ProcessIncomingMessage: finish', [
                 'message_id' => $this->message->id,
                 'tenant_id' => $this->message->tenant_id,
                 'type' => $this->message->type,
@@ -285,7 +285,7 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
 
-        Log::error('ProcessIncomingMessage: failed', [
+        $this->safeLog('error', 'ProcessIncomingMessage: failed', [
             'message_id' => $this->message->id,
             'tenant_id' => $this->message->tenant_id,
             'type' => $this->message->type,
@@ -296,6 +296,26 @@ class ProcessIncomingMessage implements ShouldQueue
             'exception_class' => get_class($e),
             'error' => $e->getMessage(),
         ]);
+    }
+
+    protected function safeLog(string $level, string $message, array $context = []): void
+    {
+        try {
+            $allowed = ['debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'];
+            if (!in_array($level, $allowed, true)) {
+                $level = 'info';
+            }
+            Log::{$level}($message, $context);
+        } catch (\Throwable $e) {
+            $payload = [
+                'level' => $level,
+                'message' => $message,
+                'context' => $context,
+                'logger_exception_class' => get_class($e),
+                'logger_error' => $e->getMessage(),
+            ];
+            @error_log('[finwa][safeLog] ' . json_encode($payload));
+        }
     }
 
     /**
