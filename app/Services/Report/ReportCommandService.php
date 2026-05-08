@@ -163,8 +163,7 @@ class ReportCommandService
 
             // Fallback: send link instead
             $filename = basename($filePath);
-            $relativePath = str_replace(storage_path('app/public/'), '', $filePath);
-            $publicUrl = url('storage/'.$relativePath);
+            $publicUrl = url("reports/{$this->message->tenant_id}/download/{$filename}");
 
             $this->sendReply(
                 "📄 *Laporan PDF Siap*\n\n".

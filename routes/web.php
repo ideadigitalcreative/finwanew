@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
@@ -15,6 +16,24 @@ Route::get('/', function (Request $request) {
         'canRegister' => Features::enabled(Features::registration()),
     ]);
 })->name('home');
+
+Route::get('/reports/{tenantId}/download/{filename}', function (int $tenantId, string $filename) {
+    $filename = basename($filename);
+    $relativePath = "reports/{$tenantId}/{$filename}";
+
+    $disk = Storage::disk('public');
+    if (! $disk->exists($relativePath)) {
+        abort(404);
+    }
+
+    $fullPath = $disk->path($relativePath);
+
+    return response()->file($fullPath, [
+        'Content-Type' => 'application/pdf',
+        'Content-Disposition' => 'inline; filename="'.$filename.'"',
+        'Cache-Control' => 'public, max-age=86400',
+    ]);
+})->whereNumber('tenantId')->where('filename', '[^/]+\.pdf');
 
 /**
  * Entry khusus PWA: login jika belum auth, dashboard (atau superadmin) jika sudah.

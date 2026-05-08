@@ -138,6 +138,9 @@ class GenerateMonthlyPdfReport implements ShouldQueue
 
         $relativePath = ltrim(str_replace($normalizedRoot, '', $normalizedFile), '/');
         $publicUrl = url('storage/'.$relativePath);
+        if (preg_match('#^reports/(\d+)/([^/]+\.pdf)$#', $relativePath, $m)) {
+            $publicUrl = url("reports/{$m[1]}/download/{$m[2]}");
+        }
 
         return
             "📄 *Laporan PDF Siap*\n\n".

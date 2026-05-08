@@ -249,7 +249,12 @@ class PdfReportService
      */
     public function getPublicUrl(string $path): string
     {
-        return url('storage/'.ltrim($path, '/'));
+        $path = ltrim($path, '/');
+        if (preg_match('#^reports/(\d+)/([^/]+\.pdf)$#', $path, $m)) {
+            return url("reports/{$m[1]}/download/{$m[2]}");
+        }
+
+        return url('storage/'.$path);
     }
 
     /**
