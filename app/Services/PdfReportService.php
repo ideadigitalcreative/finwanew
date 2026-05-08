@@ -141,13 +141,17 @@ class PdfReportService
             $filename = "laporan-keuangan-{$year}-{$month}-".time().'.pdf';
             $path = "reports/{$this->tenantId}/{$filename}";
 
-            Storage::disk('public')->put($path, $dompdf->output());
+            $binary = $dompdf->output();
+            if (! $this->storePdfToPublicDisk($path, $binary)) {
+                throw new \RuntimeException('Failed to store generated PDF to public disk.');
+            }
 
             Log::info('PDF report generated', [
                 'tenant_id' => $this->tenantId,
                 'month' => $month,
                 'year' => $year,
                 'path' => $path,
+                'size_bytes' => is_string($binary) ? strlen($binary) : null,
             ]);
 
             return Storage::disk('public')->path($path);
@@ -230,7 +234,10 @@ class PdfReportService
             $filename = "laporan-{$label}-".time().'.pdf';
             $path = "reports/{$this->tenantId}/{$filename}";
 
-            Storage::disk('public')->put($path, $dompdf->output());
+            $binary = $dompdf->output();
+            if (! $this->storePdfToPublicDisk($path, $binary)) {
+                throw new \RuntimeException('Failed to store generated PDF to public disk.');
+            }
 
             return Storage::disk('public')->path($path);
 
@@ -255,6 +262,66 @@ class PdfReportService
         }
 
         return url('storage/'.$path);
+    }
+
+    protected function storePdfToPublicDisk(string $path, string $binary): bool
+    {
+        $path = ltrim($path, '/');
+        $disk = Storage::disk('public');
+        $dir = trim(dirname($path), '.');
+
+        try {
+            if ($dir !== '' && ! $disk->exists($dir)) {
+                $disk->makeDirectory($dir);
+            }
+
+            $ok = $disk->put($path, $binary);
+            if ($ok !== true) {
+                Log::warning('Failed to put PDF on public disk (put returned false)', [
+                    'tenant_id' => $this->tenantId,
+                    'path' => $path,
+                ]);
+                return false;
+            }
+
+            if (! $disk->exists($path)) {
+                Log::warning('Failed to put PDF on public disk (file not found after put)', [
+                    'tenant_id' => $this->tenantId,
+                    'path' => $path,
+                ]);
+                return false;
+            }
+
+            try {
+                $disk->setVisibility($path, 'public');
+            } catch (\Throwable) {
+            }
+
+            $fullPath = $disk->path($path);
+            $size = null;
+            $readable = null;
+            if (is_string($fullPath) && is_file($fullPath)) {
+                $size = @filesize($fullPath) ?: null;
+                $readable = is_readable($fullPath);
+            }
+
+            Log::info('PDF stored on public disk', [
+                'tenant_id' => $this->tenantId,
+                'path' => $path,
+                'full_path' => $fullPath,
+                'size_bytes' => $size,
+                'readable' => $readable,
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Failed to store PDF on public disk', [
+                'tenant_id' => $this->tenantId,
+                'path' => $path,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
     }
 
     /**

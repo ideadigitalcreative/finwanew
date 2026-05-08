@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
@@ -43,7 +44,23 @@ Route::get('/reports/{tenantId}/download/{filename}', function (int $tenantId, s
     }
 
     if (! $fullPath) {
+        Log::warning('Report download not found', [
+            'tenant_id' => $tenantId,
+            'filename' => $filename,
+            'relative_path' => $relativePath,
+            'disk_root' => $disk->path(''),
+        ]);
         abort(404);
+    }
+
+    if (! is_readable($fullPath)) {
+        Log::warning('Report download not readable', [
+            'tenant_id' => $tenantId,
+            'filename' => $filename,
+            'relative_path' => $relativePath,
+            'full_path' => $fullPath,
+        ]);
+        abort(403);
     }
 
     return response()->file($fullPath, [
