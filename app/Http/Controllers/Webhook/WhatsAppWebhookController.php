@@ -255,7 +255,24 @@ class WhatsAppWebhookController extends Controller
      */
     public function handleStatus(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $payload = $request->all();
+
+        if (
+            (! isset($payload['tenant_id']) || ! isset($payload['channel_account']))
+            && (isset($payload['sessionId']) || isset($payload['session_id']))
+        ) {
+            $sessionId = $payload['sessionId'] ?? $payload['session_id'];
+            if (is_string($sessionId)) {
+                $parts = explode('_', $sessionId);
+                if (count($parts) >= 3 && $parts[0] === 'wa') {
+                    $payload['tenant_id'] = (int) $parts[1];
+                    $payload['channel'] = $payload['channel'] ?? 'whatsapp';
+                    $payload['channel_account'] = $payload['channel_account'] ?? $parts[2];
+                }
+            }
+        }
+
+        $validator = Validator::make($payload, [
             'tenant_id' => 'required|exists:tenants,id',
             'channel' => 'required|in:whatsapp',
             'channel_account' => 'required|string',
