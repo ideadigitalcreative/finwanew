@@ -63,7 +63,6 @@ return [
         'resepsi nikah' => 'pengeluaran_acara',
         'hajatan' => 'pengeluaran_acara',
         'undangan' => 'pengeluaran_acara',
-        'kondangan' => 'pengeluaran_acara',
         'aqiqah' => 'pengeluaran_acara',
         'khitanan' => 'pengeluaran_acara',
         'sunatan' => 'pengeluaran_acara',
