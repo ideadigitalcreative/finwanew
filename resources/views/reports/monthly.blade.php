@@ -93,9 +93,17 @@
                 $chartColors = ['#0d9488', '#22c55e', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6'];
             @endphp
             @foreach($pieChartData as $index => $segment)
+            @php
+                $barWidth = (int) max(1, min(($segment['percentage'] ?? 0) * 2, 200));
+                $barColor = $chartColors[$index % count($chartColors)];
+            @endphp
             <div style="margin-bottom: 8px;">
                 <div style="display: inline-block; width: 100px; font-size: 10px;">{{ \Illuminate\Support\Str::limit($segment['name'], 12) }}</div>
-                <div style="display: inline-block; width: {{ min($segment['percentage'] * 2, 200) }}px; height: 14px; background: {{ $chartColors[$index % count($chartColors)] }};"></div>
+                <table cellspacing="0" cellpadding="0" style="display: inline-table; vertical-align: middle;">
+                    <tr>
+                        <td width="{{ $barWidth }}" height="14" bgcolor="{{ $barColor }}"></td>
+                    </tr>
+                </table>
                 <span style="font-size: 10px; margin-left: 5px; font-weight: 600;">{{ $segment['percentage'] }}%</span>
                 <span style="font-size: 9px; color: #666; margin-left: 5px;">Rp {{ number_format($segment['total'], 0, ',', '.') }}</span>
             </div>
@@ -103,9 +111,16 @@
             @else
             @php $maxExpense = collect($expenseByCategory)->max('total'); @endphp
             @foreach(array_slice($expenseByCategory, 0, 6) as $cat)
+            @php
+                $barWidth = (int) max(1, ($maxExpense > 0 ? min(($cat['total'] / $maxExpense * 150), 150) : 5));
+            @endphp
             <div class="bar-container">
                 <span class="bar-label">{{ \Illuminate\Support\Str::limit($cat['name'], 12) }}</span>
-                <span class="bar" style="width: {{ $maxExpense > 0 ? min(($cat['total'] / $maxExpense * 150), 150) : 5 }}px;"></span>
+                <table cellspacing="0" cellpadding="0" style="display: inline-table; vertical-align: middle; margin: 0 4px;">
+                    <tr>
+                        <td width="{{ $barWidth }}" height="12" bgcolor="#0d9488"></td>
+                    </tr>
+                </table>
                 <span class="bar-amount">Rp {{ number_format($cat['total'], 0, ',', '.') }}</span>
             </div>
             @endforeach
