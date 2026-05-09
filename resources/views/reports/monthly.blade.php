@@ -99,9 +99,9 @@
             @endphp
             <div style="margin-bottom: 8px;">
                 <div style="display: inline-block; width: 100px; font-size: 10px;">{{ \Illuminate\Support\Str::limit($segment['name'], 12) }}</div>
-                <table cellspacing="0" cellpadding="0" style="display: inline-table; vertical-align: middle;">
+                <table width="{{ $barWidth }}" cellspacing="0" cellpadding="0" style="display: inline-table; vertical-align: middle; border-collapse: collapse; table-layout: fixed; line-height: 0; font-size: 0;">
                     <tr>
-                        <td width="{{ $barWidth }}" height="14" bgcolor="{{ $barColor }}"></td>
+                        <td height="14" bgcolor="{{ $barColor }}">&nbsp;</td>
                     </tr>
                 </table>
                 <span style="font-size: 10px; margin-left: 5px; font-weight: 600;">{{ $segment['percentage'] }}%</span>
@@ -116,9 +116,9 @@
             @endphp
             <div class="bar-container">
                 <span class="bar-label">{{ \Illuminate\Support\Str::limit($cat['name'], 12) }}</span>
-                <table cellspacing="0" cellpadding="0" style="display: inline-table; vertical-align: middle; margin: 0 4px;">
+                <table width="{{ $barWidth }}" cellspacing="0" cellpadding="0" style="display: inline-table; vertical-align: middle; margin: 0 4px; border-collapse: collapse; table-layout: fixed; line-height: 0; font-size: 0;">
                     <tr>
-                        <td width="{{ $barWidth }}" height="12" bgcolor="#0d9488"></td>
+                        <td height="12" bgcolor="#0d9488">&nbsp;</td>
                     </tr>
                 </table>
                 <span class="bar-amount">Rp {{ number_format($cat['total'], 0, ',', '.') }}</span>
