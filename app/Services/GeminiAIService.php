@@ -127,7 +127,7 @@ class GeminiAIService
                     ],
                     'generationConfig' => [
                         'temperature' => 0.1,
-                        'maxOutputTokens' => 2048,
+                        'maxOutputTokens' => 8192,
                     ],
                 ]);
 
@@ -142,15 +142,33 @@ class GeminiAIService
 
             $result = $response->json();
             $textResponse = $result['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            $finishReason = $result['candidates'][0]['finishReason'] ?? 'STOP';
 
             Log::debug('GeminiAIService: extractReceiptData raw response', [
-                'text' => mb_substr($textResponse, 0, 800),
+                'text' => mb_substr($textResponse, 0, 1500),
+                'finish_reason' => $finishReason,
+                'text_length' => strlen($textResponse),
             ]);
+
+            // Warn if output was truncated
+            if ($finishReason === 'MAX_TOKENS') {
+                Log::warning('GeminiAIService: response truncated (MAX_TOKENS) — receipt may be too long', [
+                    'text_length' => strlen($textResponse),
+                ]);
+            }
 
             $parsed = json_decode($textResponse, true);
 
             if (! $parsed && preg_match('/\{.*\}/s', $textResponse, $matches)) {
                 $parsed = json_decode($matches[0], true);
+            }
+
+            // If JSON is truncated (usually from MAX_TOKENS), try to repair it
+            if (! $parsed && ! empty($textResponse)) {
+                $parsed = $this->repairTruncatedJson($textResponse);
+                if ($parsed) {
+                    Log::info('GeminiAIService: recovered data from truncated JSON response');
+                }
             }
 
             if ($parsed) {
@@ -295,6 +313,65 @@ PROMPT;
         }
 
         return null;
+    }
+
+    /**
+     * Attempt to repair a truncated JSON response from Gemini.
+     * Common when MAX_TOKENS is hit on long receipts — JSON gets cut mid-array.
+     *
+     * Strategy:
+     * 1. Extract the main JSON object
+     * 2. Close any open arrays/objects
+     * 3. Re-parse
+     */
+    protected function repairTruncatedJson(string $text): ?array
+    {
+        try {
+            // Extract from first { to end
+            $start = strpos($text, '{');
+            if ($start === false) {
+                return null;
+            }
+            $json = substr($text, $start);
+
+            // Remove any trailing markdown/text after the last meaningful char
+            $json = rtrim($json, "` \t\n\r");
+
+            // Count unmatched braces and brackets
+            $openBraces = substr_count($json, '{') - substr_count($json, '}');
+            $openBrackets = substr_count($json, '[') - substr_count($json, ']');
+
+            // If we're inside a string value, try to close it
+            // Simple heuristic: count unescaped quotes
+            $quoteCount = preg_match_all('/(?<!\\\\)"/', $json);
+            if ($quoteCount % 2 !== 0) {
+                $json .= '"';
+            }
+
+            // Remove any trailing comma before we close brackets/braces
+            $json = preg_replace('/,\s*$/', '', $json);
+
+            // Close open brackets and braces
+            $json .= str_repeat(']', max(0, $openBrackets));
+            $json .= str_repeat('}', max(0, $openBraces));
+
+            $parsed = json_decode($json, true);
+            if ($parsed && ! empty($parsed['total_amount'])) {
+                Log::info('GeminiAIService: truncated JSON repair succeeded', [
+                    'merchant' => $parsed['merchant_name'] ?? 'N/A',
+                    'total' => $parsed['total_amount'],
+                    'items_count' => count($parsed['items'] ?? []),
+                ]);
+
+                return $parsed;
+            }
+
+            return null;
+        } catch (\Throwable $e) {
+            Log::debug('GeminiAIService: JSON repair failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
     }
 
     /**
