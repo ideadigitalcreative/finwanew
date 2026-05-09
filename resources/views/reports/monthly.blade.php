@@ -4,33 +4,43 @@
     <meta charset="UTF-8">
     <title>Laporan Keuangan - {{ $month }}</title>
     <style>
+        :root {
+            --fw-primary: #0d9488;
+            --fw-primary-dark: #0f766e;
+            --fw-bg: #f5f7fa;
+            --fw-text: #151a1f;
+            --fw-muted: #6b7280;
+            --fw-border: #e5e8ec;
+            --fw-card: #ffffff;
+            --fw-soft: #f2f4f6;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #333; line-height: 1.4; }
-        .container { padding: 20px; }
-        .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #0f766e; }
-        .header h1 { font-size: 20px; color: #0f766e; margin-bottom: 5px; }
-        .header p { color: #666; font-size: 10px; }
+        body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: var(--fw-text); line-height: 1.4; background: var(--fw-bg); }
+        .container { padding: 20px; background: var(--fw-card); border: 1px solid var(--fw-border); border-radius: 10px; }
+        .header { text-align: center; margin-bottom: 18px; padding-bottom: 10px; border-bottom: 2px solid var(--fw-primary); }
+        .header h1 { font-size: 20px; color: var(--fw-primary); margin-bottom: 5px; }
+        .header p { color: var(--fw-muted); font-size: 10px; }
         
         .summary { margin-bottom: 20px; }
-        .summary-row { margin-bottom: 8px; padding: 10px; background: #f3f4f6; border-radius: 4px; }
-        .summary-row.income { border-left: 4px solid #10b981; }
+        .summary-row { margin-bottom: 8px; padding: 10px; background: var(--fw-soft); border: 1px solid var(--fw-border); border-radius: 8px; }
+        .summary-row.income { border-left: 4px solid #22c55e; }
         .summary-row.expense { border-left: 4px solid #ef4444; }
-        .summary-row.cashflow { border-left: 4px solid #3b82f6; }
-        .summary-label { font-size: 10px; color: #6b7280; text-transform: uppercase; }
+        .summary-row.cashflow { border-left: 4px solid var(--fw-primary); }
+        .summary-label { font-size: 10px; color: var(--fw-muted); text-transform: uppercase; }
         .summary-value { font-size: 16px; font-weight: bold; }
         
         .section { margin-bottom: 20px; }
-        .section-title { font-size: 12px; font-weight: bold; color: #0f766e; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
+        .section-title { font-size: 12px; font-weight: bold; color: var(--fw-primary); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--fw-border); }
         
         table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 10px; }
-        th { background: #f3f4f6; font-weight: 600; color: #6b7280; }
+        th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--fw-border); font-size: 10px; }
+        th { background: var(--fw-soft); font-weight: 600; color: var(--fw-muted); }
         .text-right { text-align: right; }
         
         .bar-container { margin-bottom: 6px; }
         .bar-label { display: inline-block; width: 100px; font-size: 10px; }
         .bar-amount { display: inline-block; width: 80px; font-size: 10px; text-align: right; }
-        .bar { display: inline-block; height: 12px; background: #0f766e; border-radius: 2px; }
+        .bar { display: inline-block; height: 12px; background: var(--fw-primary); border-radius: 2px; }
         
         .progress-bar { background: #e5e7eb; height: 6px; border-radius: 3px; overflow: hidden; }
         .progress-fill { height: 100%; border-radius: 3px; }
@@ -42,7 +52,7 @@
         .badge-income { background: #d1fae5; color: #059669; }
         .badge-expense { background: #fee2e2; color: #dc2626; }
         
-        .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #e5e7eb; text-align: center; color: #9ca3af; font-size: 9px; }
+        .footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid var(--fw-border); text-align: center; color: #9ca3af; font-size: 9px; }
     </style>
 </head>
 <body>
@@ -80,7 +90,7 @@
             
             @if(!empty($pieChartData))
             @php 
-                $chartColors = ['#0f766e', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
+                $chartColors = ['#0d9488', '#22c55e', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6', '#ec4899', '#14b8a6'];
             @endphp
             @foreach($pieChartData as $index => $segment)
             <div style="margin-bottom: 8px;">

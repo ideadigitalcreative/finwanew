@@ -164,13 +164,11 @@ class ReportCommandService
             // Fallback: send link instead
             $filename = basename($filePath);
             $storageUrl = url("storage/reports/{$this->message->tenant_id}/{$filename}");
-            $routeUrl = url("reports/{$this->message->tenant_id}/download/{$filename}");
 
             $this->sendReply(
                 "📄 *Laporan PDF Siap*\n\n".
                 "📎 {$filename}\n\n".
-                "Download:\n{$storageUrl}\n\n".
-                "Cadangan (jika link utama gagal):\n{$routeUrl}\n\n".
+                "Download di sini:\n{$storageUrl}\n\n".
                 '_Link berlaku 24 jam_'
             );
         }
