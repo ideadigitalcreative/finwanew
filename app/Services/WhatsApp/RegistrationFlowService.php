@@ -6,8 +6,13 @@ use App\Models\Channel;
 use App\Models\Message;
 use App\Models\User;
 use App\Models\UserWhatsAppNumber;
+use App\Models\UserLidMapping;
+use App\Models\UserTelegramMapping;
 use App\Helpers\WhatsAppRegistrationHelper as RegHelper;
+use App\Helpers\TelegramRegistrationHelper as TgReg;
+use App\Services\TelegramService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * RegistrationFlowService - Handles tenant routing, LID detection, and registration flow
@@ -32,6 +37,12 @@ class RegistrationFlowService
      */
     public function resolve(): array
     {
+        // TELEGRAM: gunakan resolusi khusus (via UserTelegramMapping), jangan
+        // pernah masuk ke alur registrasi WhatsApp yang berbasis nomor telepon.
+        if ($this->isTelegram()) {
+            return $this->resolveTelegram();
+        }
+
         $senderNumber = preg_replace('/[^0-9]/', '', $this->message->sender_id);
 
         if (empty($senderNumber)) {
@@ -60,7 +71,24 @@ class RegistrationFlowService
             }
         }
 
-        // 3. SECURITY & AUTO-LINKING
+        // 3. Check UserLidMapping
+        if (!$correctTenantId) {
+            $metadata = is_array($this->message->metadata) ? $this->message->metadata : json_decode($this->message->metadata ?? '{}', true);
+            $originalLid = $metadata['original_sender_id'] ?? $this->message->sender_id;
+            $cleanLid = preg_replace('/[^0-9]/', '', $originalLid); // strip non-numeric
+            $lidMapping = UserLidMapping::where('lid', $cleanLid)->first();
+            if ($lidMapping) {
+                $correctTenantId = $lidMapping->tenant_id;
+                Log::info('Found tenant from UserLidMapping in RegistrationFlowService', [
+                    'sender_number' => $senderNumber,
+                    'original_lid' => $originalLid,
+                    'clean_lid' => $cleanLid,
+                    'tenant_id' => $correctTenantId,
+                ]);
+            }
+        }
+
+        // 4. SECURITY & AUTO-LINKING
         if (!$correctTenantId) {
             $isLID = !preg_match('/^628[0-9]{8,13}$/', $senderNumber);
 
@@ -108,9 +136,193 @@ class RegistrationFlowService
         return ['handled' => false, 'shouldContinue' => true];
     }
 
+    /**
+     * Apakah pesan ini berasal dari channel Telegram?
+     */
+    protected function isTelegram(): bool
+    {
+        return $this->message->channel === 'telegram';
+    }
+
+    /**
+     * Resolusi user untuk pesan Telegram.
+     *
+     * sender_id pada pesan Telegram adalah chat/user id Telegram (bukan nomor telepon),
+     * sehingga pencarian by whatsapp_number tidak berlaku. Kita cari mapping via
+     * UserTelegramMapping lalu koreksi tenant_id agar pipeline transaksi berjalan
+     * atas nama tenant yang benar.
+     */
+    protected function resolveTelegram(): array
+    {
+        $chatId = $this->message->sender_id;
+
+        $mapping = UserTelegramMapping::where('telegram_chat_id', $chatId)
+            ->where('is_active', true)
+            ->first();
+
+        // Belum tertaut: jalankan alur pendaftaran akun baru via Telegram.
+        if (! $mapping) {
+            return $this->handleTelegramRegistration($chatId);
+        }
+
+        // Koreksi tenant bila berbeda, agar transaksi tercatat pada tenant yang benar.
+        if ($mapping->tenant_id && $mapping->tenant_id != $this->message->tenant_id) {
+            $this->message->tenant_id = $mapping->tenant_id;
+            $this->message->save();
+            $this->message->refresh();
+        }
+
+        return ['handled' => false, 'shouldContinue' => true];
+    }
+
+    /**
+     * Kirim balasan teks langsung ke chat Telegram.
+     */
+    protected function sendTelegramReply(string $text): void
+    {
+        try {
+            app(TelegramService::class)->sendMessage(
+                $this->message->sender_id,
+                $text,
+                ['parse_mode' => 'Markdown']
+            );
+        } catch (\Exception $e) {
+            Log::error('Gagal mengirim balasan Telegram: ' . $e->getMessage(), [
+                'chat_id' => $this->message->sender_id,
+            ]);
+        }
+    }
+
+    /**
+     * Alur pendaftaran akun baru via Telegram untuk chat yang belum tertaut.
+     */
+    protected function handleTelegramRegistration(int|string $chatId): array
+    {
+        $text = trim($this->message->content ?? '');
+
+        // 1. Sedang dalam alur pendaftaran → proses langkah berikutnya.
+        if (TgReg::isInRegistrationFlow($chatId)) {
+            $this->processTelegramRegistrationStep($chatId, $text);
+
+            return ['handled' => true, 'shouldContinue' => false];
+        }
+
+        // 2. Pemicu pendaftaran: /start, /start register, "daftar", atau konfirmasi.
+        $isTrigger = Str::startsWith($text, '/start')
+            || TgReg::isConfirmation($text)
+            || strtolower($text) === 'daftar';
+
+        if ($isTrigger) {
+            TgReg::startFlow($chatId);
+            $this->sendTelegramReply(TgReg::getAskNameMessage());
+
+            return ['handled' => true, 'shouldContinue' => false];
+        }
+
+        // 3. Pesan lain dari user yang belum terdaftar → sambutan + ajakan daftar.
+        $this->sendTelegramReply(
+            "👋 *Halo!* Anda belum terdaftar di FinWa.\n\n" .
+            "Ketik *daftar* untuk membuat akun gratis, atau tekan /start."
+        );
+
+        return ['handled' => true, 'shouldContinue' => false];
+    }
+
+    /**
+     * Proses satu langkah pendaftaran Telegram (nama → email → buat akun).
+     */
+    protected function processTelegramRegistrationStep(int|string $chatId, string $text): void
+    {
+        $step = TgReg::getCurrentStep($chatId);
+
+        // Abaikan pemicu /start berulang saat sudah di dalam alur.
+        if (Str::startsWith($text, '/start')) {
+            $this->sendTelegramReply(
+                $step === 'awaiting_email'
+                    ? 'Silakan kirim *alamat email* Anda:'
+                    : TgReg::getAskNameMessage()
+            );
+
+            return;
+        }
+
+        try {
+            switch ($step) {
+                case 'awaiting_name':
+                    $cleanName = trim(preg_replace('/[[:^print:]]/', '', $text) ?? $text);
+
+                    if (mb_strlen($cleanName) < 2) {
+                        $this->sendTelegramReply('Nama terlalu pendek. Silakan kirim *nama lengkap* Anda:');
+
+                        return;
+                    }
+
+                    TgReg::saveData($chatId, ['name' => $cleanName]);
+                    TgReg::setStep($chatId, 'awaiting_email');
+                    $this->sendTelegramReply(TgReg::getAskEmailMessage($cleanName));
+
+                    return;
+
+                case 'awaiting_email':
+                    $email = trim(preg_replace('/[[:^print:]]/', '', $text) ?? $text);
+
+                    if (! TgReg::isValidEmail($email)) {
+                        $this->sendTelegramReply(
+                            "❌ Email tidak valid.\n\nSilakan kirim email yang benar (contoh: nama@gmail.com):"
+                        );
+
+                        return;
+                    }
+
+                    if (User::where('email', $email)->exists()) {
+                        $this->sendTelegramReply(
+                            "❌ Email sudah terdaftar.\n\nGunakan email lain, atau login di https://finwa.web.id"
+                        );
+
+                        return;
+                    }
+
+                    TgReg::saveData($chatId, ['email' => $email]);
+                    $regData = TgReg::getRegistrationData($chatId);
+
+                    if (empty($regData['name'])) {
+                        TgReg::setStep($chatId, 'awaiting_name');
+                        $this->sendTelegramReply(TgReg::getAskNameMessage());
+
+                        return;
+                    }
+
+                    $raw = is_array($this->message->raw_data)
+                        ? $this->message->raw_data
+                        : json_decode($this->message->raw_data ?? '{}', true);
+                    $from = $raw['from'] ?? [];
+
+                    $result = TgReg::createAccount($regData, [
+                        'username' => $from['username'] ?? null,
+                        'first_name' => $from['first_name'] ?? null,
+                        'last_name' => $from['last_name'] ?? null,
+                    ]);
+
+                    $this->sendTelegramReply(TgReg::getSuccessMessage($result));
+                    TgReg::clearFlow($chatId);
+
+                    return;
+            }
+        } catch (\Exception $e) {
+            Log::error('Telegram Registration Error: ' . $e->getMessage(), ['chat_id' => $chatId]);
+            TgReg::clearFlow($chatId);
+            $this->sendTelegramReply('❌ Terjadi kesalahan saat mendaftar. Silakan coba lagi dengan ketik *daftar*.');
+        }
+    }
+
     protected function handleLidUser(string $senderNumber, string $originalLid): array
     {
         $text = trim($this->message->content ?? '');
+
+        // If it's a LINK command (either token or phone), don't handle here - let the dedicated LINK handler process it
+        if (preg_match('/^link\s+/i', $text)) {
+            return ['handled' => false, 'shouldContinue' => true];
+        }
 
         if (RegHelper::isConfirmation($text) || RegHelper::isInRegistrationFlow($senderNumber)) {
             if (RegHelper::isInRegistrationFlow($senderNumber)) {
@@ -194,7 +406,7 @@ class RegistrationFlowService
                 $sessId = $this->getSessionId();
                 app(\App\Services\WhatsAppService::class)->sendMessage(
                     $sessId, $this->message->sender_id,
-                    "👋 *Halo!*\n\nSepertinya Anda belum terdaftar di FinWa.\n\n*Pilihan:*\n1️⃣ Sudah punya akun? Kirim nomor HP Anda (contoh: 08123456789)\n2️⃣ Belum punya akun? Ketik *Daftar* untuk registrasi gratis",
+                    "👋 Halo! Anda belum terdaftar.\n\nKetik *DAFTAR* untuk buat akun gratis ✅",
                     'text', $originalLid
                 );
             } catch (\Exception $e) {

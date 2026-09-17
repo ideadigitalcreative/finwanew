@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Models\UserLidMapping;
+use App\Models\UserWhatsAppNumber;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -74,19 +75,26 @@ class WhatsAppUserMappingService
         $isLikelyLid = ! str_starts_with($cleanedNumber, '62') && strlen($cleanedNumber) > 10;
 
         if ($isLikelyLid) {
-            // Try to find from LID mapping first
-            $lidMapping = UserLidMapping::findByLid($cleanedNumber);
-            if ($lidMapping) {
-                $user = User::find($lidMapping->user_id);
-                if ($user) {
-                    Log::info('User found by LID mapping', [
-                        'user_id' => $user->id,
-                        'lid' => $cleanedNumber,
-                        'phone_number' => $lidMapping->phone_number,
-                        'tenant_id' => $lidMapping->tenant_id,
-                    ]);
+            // Try to find from LID mapping first.
+            // Also try the raw input (stripped of @lid/@c.us) because cleanPhoneNumber may
+            // incorrectly prepend '62' to LID values that are not phone numbers.
+            $rawLidCandidate = preg_replace('/[^0-9]/', '', str_replace(['@c.us', '@g.us', '@lid'], '', $phoneNumber));
+            $lidCandidates = array_unique(array_filter([$cleanedNumber, $rawLidCandidate]));
 
-                    return $user;
+            foreach ($lidCandidates as $lidCandidate) {
+                $lidMapping = UserLidMapping::findByLid($lidCandidate);
+                if ($lidMapping) {
+                    $user = User::find($lidMapping->user_id);
+                    if ($user) {
+                        Log::info('User found by LID mapping', [
+                            'user_id' => $user->id,
+                            'lid' => $lidCandidate,
+                            'phone_number' => $lidMapping->phone_number,
+                            'tenant_id' => $lidMapping->tenant_id,
+                        ]);
+
+                        return $user;
+                    }
                 }
             }
         }
@@ -193,6 +201,31 @@ class WhatsAppUserMappingService
     {
         $cleanedNumber = $this->cleanPhoneNumber($phoneNumber);
 
+        // Check if this looks like a LID (not a standard 62xxx phone number).
+        // Try LID lookup FIRST before querying user_whatsapp_numbers, because LIDs
+        // will never match phone number entries and would just waste a query.
+        $isLikelyLid = ! str_starts_with($cleanedNumber, '62') && strlen($cleanedNumber) > 10;
+        // Also check raw input in case cleanPhoneNumber wrongly prepended 62
+        $rawLidCandidate = preg_replace('/[^0-9]/', '', str_replace(['@c.us', '@g.us', '@lid'], '', $phoneNumber));
+        $isRawLikelyLid = ! str_starts_with($rawLidCandidate, '62') && strlen($rawLidCandidate) > 10;
+
+        if ($isLikelyLid || $isRawLikelyLid) {
+            $lidCandidates = array_unique(array_filter([$cleanedNumber, $rawLidCandidate]));
+            foreach ($lidCandidates as $lidCandidate) {
+                $lidMapping = \App\Models\UserLidMapping::findByLid($lidCandidate);
+                if ($lidMapping) {
+                    Log::info('Tenant found from LID mapping', [
+                        'phone_number' => $phoneNumber,
+                        'lid' => $lidCandidate,
+                        'tenant_id' => $lidMapping->tenant_id,
+                        'user_id' => $lidMapping->user_id,
+                    ]);
+
+                    return $lidMapping->tenant_id;
+                }
+            }
+        }
+
         // First, try to find from user_whatsapp_numbers table (new system)
         $userWhatsAppNumber = \App\Models\UserWhatsAppNumber::where('is_active', true)
             ->get()
@@ -248,6 +281,68 @@ class WhatsAppUserMappingService
         $channel = \App\Models\Channel::find($channelId);
 
         return $channel && $channel->is_shared_channel === true;
+    }
+
+    /**
+     * Resolve sender_id pesan (nomor telepon atau LID) menjadi ID record
+     * user_whatsapp_numbers milik tenant tertentu.
+     *
+     * Urutan resolusi:
+     * 1. Jika sender adalah LID → cari mapping LID, lalu gunakan phone_number-nya.
+     *    Jika mapping tidak punya phone_number, fallback ke nomor aktif milik user tersebut.
+     * 2. Cocokkan nomor yang sudah dibersihkan dengan user_whatsapp_numbers
+     *    (termasuk baris is_lid=true yang menyimpan LID di kolom whatsapp_number).
+     */
+    public function resolveUserWhatsAppNumberId(string $senderId, ?int $tenantId = null): ?int
+    {
+        $rawDigits = preg_replace('/[^0-9]/', '', str_replace(['@c.us', '@g.us', '@lid'], '', $senderId));
+        $cleanedNumber = $this->cleanPhoneNumber($senderId);
+
+        $looksLikeLid = function (string $value): bool {
+            return strlen($value) > 13 && ! str_starts_with($value, '62');
+        };
+
+        // 1. Resolusi LID ke nomor telepon sebenarnya
+        if ($looksLikeLid($cleanedNumber) || $looksLikeLid($rawDigits)) {
+            foreach (array_unique(array_filter([$rawDigits, $cleanedNumber])) as $lidCandidate) {
+                $lidMapping = UserLidMapping::findByLid($lidCandidate);
+
+                if (! $lidMapping) {
+                    continue;
+                }
+
+                if ($lidMapping->phone_number) {
+                    $cleanedNumber = $this->cleanPhoneNumber($lidMapping->phone_number);
+
+                    break;
+                }
+
+                // LID mapping tanpa nomor telepon → gunakan nomor aktif milik user-nya
+                $fallbackNumber = UserWhatsAppNumber::query()
+                    ->where('user_id', $lidMapping->user_id)
+                    ->where('is_active', true)
+                    ->when($tenantId ?? $lidMapping->tenant_id, fn ($query) => $query->where('tenant_id', $tenantId ?? $lidMapping->tenant_id))
+                    ->orderBy('is_primary', 'desc')
+                    ->orderBy('id')
+                    ->first();
+
+                if ($fallbackNumber) {
+                    return $fallbackNumber->id;
+                }
+            }
+        }
+
+        // 2. Cocokkan dengan user_whatsapp_numbers milik tenant
+        $candidates = UserWhatsAppNumber::query()
+            ->where('is_active', true)
+            ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
+            ->get();
+
+        $match = $candidates->first(function (UserWhatsAppNumber $number) use ($cleanedNumber) {
+            return $this->cleanPhoneNumber($number->whatsapp_number) === $cleanedNumber;
+        });
+
+        return $match?->id;
     }
 
     /**

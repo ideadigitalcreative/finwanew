@@ -395,6 +395,8 @@ class SpendingInsightService
             return null;
         }
 
+        Budget::loadBulkSpending($budgets);
+
         $now = Carbon::now();
         $daysInMonth = $now->daysInMonth;
         $currentDay = $now->day;

@@ -24,6 +24,18 @@ class SendWeeklyDigest extends Command
 
     public function handle(): int
     {
+        // Guard gabungan: reminder blast off + weekly digest off
+        if (! config('services.reminder_blasts.enabled', false)) {
+            $this->info('Reminder blasts dinonaktifkan (FINWA_REMINDER_BLASTS_ENABLED=false). Lewati.');
+
+            return Command::SUCCESS;
+        }
+        if (! config('services.weekly_digest.enabled', false)) {
+            $this->info('Weekly digest disabled system-wide (FINWA_WEEKLY_DIGEST_ENABLED=false).');
+
+            return Command::SUCCESS;
+        }
+
         $this->info('Starting Weekly Digest...');
 
         $useLastWeek = ! $this->option('recent');
@@ -411,7 +423,7 @@ class SendWeeklyDigest extends Command
 
             $formattedNumber = $this->formatPhoneNumber($phoneNumber);
 
-            $result = $whatsAppService->sendMessage($sessionId, $formattedNumber, $message);
+            $result = $whatsAppService->sendMessage($sessionId, $formattedNumber, $message, 'text', null, false);
 
             if (! ($result['success'] ?? false)) {
                 throw new \Exception($result['error'] ?? 'Failed to send message');

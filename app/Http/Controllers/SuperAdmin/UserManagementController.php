@@ -76,6 +76,12 @@ class UserManagementController extends Controller
      */
     public function store(Request $request)
     {
+        // Convert empty strings to null so nullable rules work correctly
+        $request->merge([
+            'tenant_id' => $request->input('tenant_id') ?: null,
+            'whatsapp_number' => $request->input('whatsapp_number') ?: null,
+        ]);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
@@ -127,6 +133,12 @@ class UserManagementController extends Controller
      */
     public function update(Request $request, User $user)
     {
+        // Convert empty strings to null so nullable rules work correctly
+        $request->merge([
+            'tenant_id' => $request->input('tenant_id') ?: null,
+            'password' => $request->input('password') ?: null,
+        ]);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],

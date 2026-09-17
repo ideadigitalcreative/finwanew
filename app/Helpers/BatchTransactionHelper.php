@@ -92,12 +92,12 @@ class BatchTransactionHelper
         }
 
         // Pattern 0b: Rp-prefixed amounts with suffix (e.g., "Rp 50rb", "Rp 1,5jt")
-        if (empty($amounts) && preg_match_all('/rp\.?\s*(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)/i', $textLower, $rpSufMatches, PREG_SET_ORDER)) {
+        if (empty($amounts) && preg_match_all('/rp\.?\s*(\d+(?:[.,]\d+)?)\s*(rb|ribu|rebu|k|jt|juta)/i', $textLower, $rpSufMatches, PREG_SET_ORDER)) {
             foreach ($rpSufMatches as $match) {
                 $num = floatval(str_replace(',', '.', $match[1]));
                 $suffix = strtolower($match[2]);
                 $multipliers = [
-                    'rb' => 1000, 'ribu' => 1000, 'k' => 1000,
+                    'rb' => 1000, 'ribu' => 1000, 'rebu' => 1000, 'k' => 1000,
                     'jt' => 1000000, 'juta' => 1000000,
                 ];
                 $val = (int) ($num * ($multipliers[$suffix] ?? 1));
@@ -113,13 +113,13 @@ class BatchTransactionHelper
         }
 
         // Pattern 1: Numbers with suffix (10k, 5rb, 2jt)
-        if (preg_match_all('/\b(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)\b/i', $textLower, $matches, PREG_SET_ORDER)) {
+        if (preg_match_all('/\b(\d+(?:[.,]\d+)?)\s*(rb|ribu|rebu|k|jt|juta)\b/i', $textLower, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $num = floatval(str_replace(',', '.', $match[1]));
                 $suffix = strtolower($match[2]);
 
                 $multipliers = [
-                    'rb' => 1000, 'ribu' => 1000, 'k' => 1000,
+                    'rb' => 1000, 'ribu' => 1000, 'rebu' => 1000, 'k' => 1000,
                     'jt' => 1000000, 'juta' => 1000000,
                 ];
 
@@ -188,11 +188,11 @@ class BatchTransactionHelper
         if (preg_match('/rp\.?\s*(\d{1,3}(?:\.\d{3})+)/i', $text, $rpMatch)) {
             return (int) str_replace('.', '', $rpMatch[1]);
         }
-        if (preg_match('/rp\.?\s*(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)/i', $textLower, $rpMatch)) {
+        if (preg_match('/rp\.?\s*(\d+(?:[.,]\d+)?)\s*(rb|ribu|rebu|k|jt|juta)/i', $textLower, $rpMatch)) {
             $num = floatval(str_replace(',', '.', $rpMatch[1]));
             $suffix = strtolower($rpMatch[2]);
             $multipliers = [
-                'rb' => 1000, 'ribu' => 1000, 'k' => 1000,
+                'rb' => 1000, 'ribu' => 1000, 'rebu' => 1000, 'k' => 1000,
                 'jt' => 1000000, 'juta' => 1000000,
             ];
 
@@ -207,13 +207,13 @@ class BatchTransactionHelper
 
         // Pattern 0: Multiplication patterns (33000 dikali 3, 50rb x 2)
         // Only match when NOT followed by an Rp amount (already handled above)
-        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)?\s*(?:dikali|kali|x|\*)\s*(\d+)/i', $textLower, $matches)) {
+        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(rb|ribu|rebu|k|jt|juta)?\s*(?:dikali|kali|x|\*)\s*(\d+)/i', $textLower, $matches)) {
             $base = floatval(str_replace(',', '.', $matches[1]));
             $suffix = strtolower($matches[2] ?? '');
             $multiplier = (int) $matches[3];
 
             $suffixMultipliers = [
-                'rb' => 1000, 'ribu' => 1000, 'k' => 1000,
+                'rb' => 1000, 'ribu' => 1000, 'rebu' => 1000, 'k' => 1000,
                 'jt' => 1000000, 'juta' => 1000000,
             ];
 
@@ -239,12 +239,12 @@ class BatchTransactionHelper
         }
 
         // Pattern 1: Number with suffix (60rb, 5jt, 25k)
-        if (preg_match('/\b(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta)\b/i', $textLower, $matches)) {
+        if (preg_match('/\b(\d+(?:[.,]\d+)?)\s*(rb|ribu|rebu|k|jt|juta)\b/i', $textLower, $matches)) {
             $num = floatval(str_replace(',', '.', $matches[1]));
             $suffix = strtolower($matches[2]);
 
             $multipliers = [
-                'rb' => 1000, 'ribu' => 1000, 'k' => 1000,
+                'rb' => 1000, 'ribu' => 1000, 'rebu' => 1000, 'k' => 1000,
                 'jt' => 1000000, 'juta' => 1000000,
             ];
 

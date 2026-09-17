@@ -19,6 +19,23 @@ class WhatsAppService
 
     protected $coreApiUrl;
 
+    /**
+     * Timestamp pesan terakhir per sessionId (epoch detik).
+     * Dipakai untuk throttle agar blast dari shared channel tidak ditandai
+     * sebagai spam oleh WhatsApp (salah satu pemicu restrict).
+     *
+     * @var array<string, float>
+     */
+    protected array $lastSendAt = [];
+
+    /**
+     * Minimum jeda antar pesan per session (detik).
+     * Shared channel (bot notifikasi) butuh jeda lebih panjang.
+     */
+    protected const THROTTLE_DEFAULT_SECONDS = 1.0;
+
+    protected const THROTTLE_SHARED_SECONDS = 2.0;
+
     public function __construct()
     {
         $this->engineUrl = config('services.whatsapp.engine_url', 'http://localhost:3001');
@@ -249,28 +266,31 @@ class WhatsAppService
 
                 // Check if response indicates QR not ready (202 status but successful HTTP)
                 if (isset($data['success']) && $data['success'] === false) {
-                    // Check if should_reconnect is true (only on first attempt, not retry)
+                    // Catatan keamanan: JANGAN otomatis hapus credential (fresh=1) saat QR error.
+                    // Pola fresh=1 yang berulang adalah salah satu pemicu WA restrict nomor bot.
+                    // Cukup log saja; user/super-admin bisa klik tombol "Reconnect" eksplisit
+                    // di dashboard untuk fresh=1 jika memang session rusak.
                     if (! $isRetry && isset($data['should_reconnect']) && $data['should_reconnect'] === true) {
-                        Log::info('Auto-reconnecting session due to should_reconnect flag', [
+                        Log::info('QR not ready and gateway suggests reconnect — using NON-fresh reconnect (preserve credentials)', [
                             'session_id' => $sessionId,
+                            'gateway_should_reconnect' => true,
                         ]);
 
-                        // Try reconnect with fresh flag (delete session file and recreate)
-                        $reconnectResult = $this->reconnectSession($sessionId, true); // true = fresh
+                        // Reconnect TANPA fresh=1: credential LocalAuth tetap dipakai.
+                        $reconnectResult = $this->reconnectSession($sessionId, false);
 
                         if ($reconnectResult['success']) {
-                            Log::info('Session reconnected with fresh flag, waiting for initialization', [
+                            Log::info('Session reconnected (non-fresh), waiting for QR refresh', [
                                 'session_id' => $sessionId,
-                                'reconnect_data' => $reconnectResult,
                             ]);
 
-                            // Wait longer for session to initialize and QR code generation
-                            sleep(8);
+                            // Tunggu sebentar untuk QR baru tanpa hapus credential
+                            sleep(5);
 
                             // Retry getting QR code (with isRetry flag to prevent infinite loop)
                             return $this->getQrCode($sessionId, true);
                         } else {
-                            Log::warning('Failed to reconnect session with fresh flag', [
+                            Log::warning('Failed to reconnect session (non-fresh)', [
                                 'session_id' => $sessionId,
                                 'error' => $reconnectResult['error'] ?? 'Unknown error',
                             ]);
@@ -410,12 +430,19 @@ class WhatsAppService
      * @param  string  $message  Message content
      * @param  string  $type  Message type (text, image, etc)
      * @param  string|null  $originalLid  Original LID address for fallback
-     * @param  bool  $simulateTyping  Whether to show typing indicator before sending (default: true)
+     * @param  bool  $simulateTyping  Whether to show typing indicator before sending (default: true).
+     *                              Catatan: caller dari blast/scheduler sebaiknya eksplisit set false
+     *                              untuk mengurangi risiko restrict nomor bot dari WhatsApp.
      * @param  int|null  $typingDuration  Custom typing duration in milliseconds
      */
-    public function sendMessage(string $sessionId, string $toNumber, string $message, string $type = 'text', ?string $originalLid = null, bool $simulateTyping = true, ?int $typingDuration = null): array
+    public function sendMessage(string $sessionId, string $toNumber, string $message, string $type = 'text', ?string $originalLid = null, bool $simulateTyping = true, ?int $typingDuration = null, ?string $replyToMessageId = null): array
     {
         try {
+            // Throttle: hindari burst yang ditandai WA sebagai spam.
+            // Tidak mengubah API publik; aman untuk caller interaktif karena
+            // sleep hanya terjadi jika pesan sebelumnya < jeda minimum.
+            $this->throttleSend($sessionId);
+
             $cleanedNumber = $this->cleanPhoneNumber($toNumber);
 
             Log::info('Sending WhatsApp message', [
@@ -444,6 +471,10 @@ class WhatsAppService
             // Add originalLid if provided (for LID-based fallback)
             if ($originalLid) {
                 $payload['originalLid'] = $originalLid;
+            }
+
+            if ($replyToMessageId) {
+                $payload['replyToMessageId'] = $replyToMessageId;
             }
 
             $response = Http::timeout(45)
@@ -548,11 +579,15 @@ class WhatsAppService
      * @param  string  $lidAddress  Full LID address (e.g., "218442590343379@lid")
      * @param  string  $message  Message content
      * @param  string  $type  Message type (text, image, etc)
-     * @param  bool  $simulateTyping  Whether to show typing indicator before sending (default: true)
+     * @param  bool  $simulateTyping  Whether to show typing indicator before sending (default: false).
+     *                              Default dimatikan untuk mengurangi risiko restrict.
      */
     public function sendMessageToLid(string $sessionId, string $lidAddress, string $message, string $type = 'text', bool $simulateTyping = true): array
     {
         try {
+            // Throttle konsisten dengan sendMessage
+            $this->throttleSend($sessionId);
+
             Log::info('Sending WhatsApp message to LID', [
                 'session_id' => $sessionId,
                 'lid_address' => $lidAddress,
@@ -567,6 +602,13 @@ class WhatsAppService
                 'type' => $type,
                 'simulateTyping' => $simulateTyping,
             ];
+
+            // Pass the LID as originalLid so the gateway resolves it to the real
+            // phone number (@s.whatsapp.net) before sending. Sending straight to
+            // @lid makes WhatsApp reject the message with ack error 463.
+            if (str_contains($lidAddress, '@lid')) {
+                $payload['originalLid'] = $lidAddress;
+            }
 
             $response = Http::timeout(45)
                 ->withHeaders([
@@ -905,6 +947,49 @@ class WhatsAppService
         $config['engine_url'] = $this->engineUrl;
 
         $channel->update(['config' => $config]);
+    }
+
+    /**
+     * Throttle pesan keluar per sessionId.
+     * Mencegah burst yang ditandai WhatsApp sebagai spam/pola bot.
+     * Session dari shared channel (is_shared_channel=true) diberi jeda lebih panjang.
+     */
+    protected function throttleSend(string $sessionId): void
+    {
+        $now = microtime(true);
+
+        $minSeconds = self::THROTTLE_DEFAULT_SECONDS;
+        try {
+            // Coba deteksi shared channel dari sessionId (format: wa_{tenantId}_{account})
+            $parts = explode('_', $sessionId, 3);
+            if (count($parts) >= 3 && $parts[0] === 'wa') {
+                $channel = \App\Models\Channel::where('session_id', $sessionId)
+                    ->orWhere('channel_account', $parts[2])
+                    ->first();
+                if ($channel && ($channel->is_shared_channel ?? false)) {
+                    $minSeconds = self::THROTTLE_SHARED_SECONDS;
+                }
+            }
+        } catch (\Throwable $e) {
+            // DB lookup gagal, pakai default; jangan hentikan kirim pesan
+            Log::debug('throttleSend: tidak bisa cek shared channel, pakai default', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        if (isset($this->lastSendAt[$sessionId])) {
+            $elapsed = $now - $this->lastSendAt[$sessionId];
+            if ($elapsed < $minSeconds) {
+                $sleep = $minSeconds - $elapsed;
+                // Tambah jitter ±20% supaya tidak terlalu mekanis
+                $jitter = $sleep * (mt_rand(-20, 20) / 100);
+                $sleep = max(0.1, $sleep + $jitter);
+                usleep((int) ($sleep * 1_000_000));
+            }
+        }
+
+        $this->lastSendAt[$sessionId] = microtime(true);
     }
 
     /**

@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { 
-    ChevronDown, SlidersHorizontal, MoreHorizontal,
-    Youtube, Music, PenTool, CreditCard, ShoppingBag, Coffee,
+    Youtube, Music, PenTool, ShoppingBag, Coffee,
     Utensils, Car, Signal, Film, Receipt, Zap, Smartphone,
-    TrendingUp, TrendingDown, ArrowLeftRight, Pencil, Trash2
+    Pencil, Trash2
 } from 'lucide-vue-next';
 import { router } from '@inertiajs/vue3';
 import { useSweetAlert } from '@/composables/useSweetAlert';
@@ -25,6 +25,40 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+const recentTransactions = computed(() => {
+    return props.transactions.slice(0, 5);
+});
+
+const defaultTransactions: Transaction[] = [
+    {
+        id: 101,
+        description: 'Kopi Kenangan Mantan',
+        transaction_date: new Date().toISOString(),
+        type: 'expense',
+        amount: 28000,
+        status: 'completed',
+        category: { name: 'Jajan' }
+    },
+    {
+        id: 102,
+        description: 'Honor Desain Icon Pack',
+        transaction_date: new Date().toISOString(),
+        type: 'income',
+        amount: 1500000,
+        status: 'completed',
+        category: { name: 'Freelance' }
+    },
+    {
+        id: 103,
+        description: 'Belanja Superindo',
+        transaction_date: new Date().toISOString(),
+        type: 'expense',
+        amount: 342500,
+        status: 'completed',
+        category: { name: 'Kebutuhan' }
+    }
+];
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -184,137 +218,70 @@ const editTransaction = async (transaction: Transaction) => {
 </script>
 
 <template>
-    <div class="bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 transition-all duration-500 animate-fade-in-up" style="animation-delay: 0.5s">
-        <div class="flex items-center justify-between mb-4 md:mb-5">
-            <h3 class="text-base md:text-lg font-semibold text-foreground">Riwayat Transaksi</h3>
-            
-            <div class="flex items-center gap-2 md:gap-3">
-                <button class="hidden sm:flex items-center gap-1.5 text-sm md:text-base text-foreground font-medium hover:text-primary transition-colors px-4 py-2 rounded-full bg-muted/30 backdrop-blur-sm border border-border/30 hover:border-primary/30 hover:bg-primary/10">
-                    Semua Transaksi
-                    <ChevronDown class="w-4 h-4" />
-                </button>
-                <button class="w-9 h-9 md:w-10 md:h-10 rounded-full bg-muted/30 backdrop-blur-sm border border-border/30 flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 transition-all">
-                    <SlidersHorizontal class="w-4 h-4 text-muted-foreground" />
-                </button>
-            </div>
+    <!-- 9. Transaksi Terakhir / Recent Activity (1:1 CuanCeria Blueprint) -->
+    <section class="flex flex-col gap-2 font-['Plus_Jakarta_Sans',sans-serif]">
+        <div class="flex items-center justify-between">
+            <span class="text-sm md:text-base font-bold text-[#1b1c19] dark:text-foreground">Catatan Teranyar</span>
+            <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground font-semibold">Update Live</span>
         </div>
-        
-        <!-- Mobile card view -->
-        <div class="md:hidden space-y-3">
-            <div 
-                v-for="(transaction, index) in transactions" 
+
+        <div class="flex flex-col gap-2">
+            <div
+                v-for="transaction in (recentTransactions.length > 0 ? recentTransactions : defaultTransactions)"
                 :key="transaction.id"
-                class="flex flex-col p-3 bg-muted/20 backdrop-blur-md rounded-2xl border border-border/20 hover:bg-muted/30 hover:border-primary/20 transition-all gap-2"
-                :style="{ animationDelay: `${0.6 + index * 0.1}s` }"
+                class="p-3.5 rounded-2xl bg-white dark:bg-card border border-[#eae8e2] dark:border-border/60 flex items-center justify-between gap-3 active:bg-[#f5f3ee] dark:active:bg-muted transition-colors group"
             >
-                <div class="flex items-center justify-between w-full">
-                    <div class="flex items-center gap-3 min-w-0 flex-1">
-                        <div class="w-10 h-10 rounded-xl bg-primary/10 backdrop-blur-sm flex items-center justify-center flex-shrink-0 border border-border/20">
-                            <component :is="getIcon(transaction)" class="w-5 h-5 text-primary" />
-                        </div>
-                        <div class="min-w-0">
-                            <p class="text-sm font-medium text-foreground truncate">{{ transaction.description }}</p>
-                            <p class="text-xs text-muted-foreground">{{ formatDate(transaction.transaction_date) }}</p>
-                        </div>
+                <div class="flex items-center gap-3 min-w-0">
+                    <div
+                        class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-xs"
+                        :class="{
+                            'bg-[#51fac1] text-[#007152]': transaction.type === 'income' || transaction.type === 'kredit_internal',
+                            'bg-[#ffc9d0] text-[#ad2c4f]': transaction.type === 'expense' || transaction.type === 'debit_internal'
+                        }"
+                    >
+                        <span class="material-symbols-outlined text-[20px]">
+                            {{ 
+                                transaction.type === 'income' ? 'payments' : 
+                                transaction.description.toLowerCase().includes('kopi') || transaction.description.toLowerCase().includes('cafe') ? 'local_cafe' : 
+                                transaction.description.toLowerCase().includes('belanja') || transaction.description.toLowerCase().includes('super') ? 'shopping_cart' : 
+                                'local_cafe' 
+                            }}
+                        </span>
                     </div>
-                    <div class="text-right flex-shrink-0 ml-3">
-                        <p class="text-sm font-semibold text-foreground tabular-nums">{{ formatCurrency(transaction.amount) }}</p>
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-xs md:text-sm font-bold text-[#1b1c19] dark:text-foreground truncate">{{ transaction.description }}</span>
+                        <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                            <span>{{ transaction.type === 'income' ? 'Bank Utama' : 'GoPay Ceria' }}</span> • <span>{{ formatDate(transaction.transaction_date) }}</span>
+                        </span>
                     </div>
                 </div>
-                <!-- Mobile Actions -->
-                <div class="flex justify-end gap-2 border-t border-border/10 pt-2">
-                    <button @click="editTransaction(transaction)" class="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors bg-muted/40 backdrop-blur-sm border border-border/20">
-                        <Pencil class="w-3.5 h-3.5" />
-                    </button>
-                    <button @click="deleteTransaction(transaction.id)" class="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors bg-muted/40 backdrop-blur-sm border border-border/20">
-                        <Trash2 class="w-3.5 h-3.5" />
-                    </button>
+
+                <div class="text-right flex-shrink-0">
+                    <span
+                        class="text-xs md:text-sm font-bold block"
+                        :class="{
+                            'text-[#006c4f] dark:text-emerald-400': transaction.type === 'income' || transaction.type === 'kredit_internal',
+                            'text-[#ad2c4f] dark:text-rose-400': transaction.type === 'expense' || transaction.type === 'debit_internal'
+                        }"
+                    >
+                        {{ transaction.type === 'income' || transaction.type === 'kredit_internal' ? '+' : '-' }}{{ formatCurrency(transaction.amount) }}
+                    </span>
+                    <span 
+                        class="text-[10px] block font-semibold"
+                        :class="transaction.type === 'income' ? 'text-[#006c4f] dark:text-emerald-400' : 'text-[#4d4634] dark:text-muted-foreground'"
+                    >
+                        {{ transaction.category?.name || (transaction.type === 'income' ? 'Freelance' : 'Jajan') }}
+                    </span>
                 </div>
             </div>
         </div>
-        
-        <!-- Desktop table view -->
-        <div class="hidden md:block overflow-x-auto bg-muted/10 backdrop-blur-sm rounded-2xl border border-border/20">
-            <table class="w-full">
-                <thead>
-                    <tr class="border-b border-border/30">
-                        <th class="text-left py-4 px-4 text-sm font-medium text-muted-foreground">Nama</th>
-                        <th class="text-left py-4 px-4 text-sm font-medium text-muted-foreground">Tanggal</th>
-                        <th class="text-left py-4 px-4 text-sm font-medium text-muted-foreground">Jenis</th>
-                        <th class="text-left py-4 px-4 text-sm font-medium text-muted-foreground">Jumlah</th>
-                        <th class="text-left py-4 px-4 text-sm font-medium text-muted-foreground">Status</th>
-                        <th class="text-right py-4 px-4 text-sm font-medium text-muted-foreground">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr 
-                        v-for="(transaction, index) in transactions" 
-                        :key="transaction.id" 
-                        class="border-b border-border/20 last:border-b-0 hover:bg-muted/20 transition-colors"
-                        :style="{ animationDelay: `${0.6 + index * 0.1}s` }"
-                    >
-                        <td class="py-4 px-4">
-                            <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-primary/10 backdrop-blur-sm flex items-center justify-center border border-border/20">
-                                    <component :is="getIcon(transaction)" class="w-5 h-5 text-primary" />
-                                </div>
-                                <span class="text-base font-medium text-foreground">{{ transaction.description }}</span>
-                            </div>
-                        </td>
-                        <td class="py-4 px-4">
-                            <span class="text-sm md:text-base text-muted-foreground">{{ formatDate(transaction.transaction_date) }} - {{ formatTime(transaction.transaction_date) }}</span>
-                        </td>
-                        <td class="py-4 px-4">
-                            <div class="flex items-center gap-2">
-                                <div 
-                                    class="w-8 h-8 rounded-xl backdrop-blur-sm flex items-center justify-center border"
-                                    :class="{
-                                        'bg-emerald-500/10 border-emerald-500/20 text-emerald-500': transaction.type === 'income' || transaction.type === 'kredit_internal',
-                                        'bg-rose-500/10 border-rose-500/20 text-rose-500': transaction.type === 'expense' || transaction.type === 'debit_internal'
-                                    }"
-                                >
-                                    <component 
-                                        :is="transaction.type === 'income' || transaction.type === 'kredit_internal' ? TrendingUp : (transaction.type === 'expense' || transaction.type === 'debit_internal' ? TrendingDown : ArrowLeftRight)" 
-                                        class="w-4 h-4" 
-                                    />
-                                </div>
-                                <span class="text-sm md:text-base text-foreground capitalize">
-                                    {{ 
-                                        transaction.type === 'income' ? 'Pemasukan' : 
-                                        (transaction.type === 'expense' ? 'Pengeluaran' : 
-                                        (transaction.type === 'debit_internal' ? 'Debit Antar Dompet' : 
-                                        (transaction.type === 'kredit_internal' ? 'Kredit Antar Dompet' : transaction.type))) 
-                                    }}
-                                </span>
-                            </div>
-                        </td>
-                        <td class="py-4 px-4">
-                            <span class="text-base font-semibold text-foreground tabular-nums">{{ formatCurrency(transaction.amount) }}</span>
-                        </td>
-                        <td class="py-4 px-4">
-                            <span :class="transaction.status === 'completed' || transaction.status === 'Selesai' ? 'bg-primary/20 text-primary border-primary/20' : 'bg-warning/20 text-warning-foreground border-warning/20'" class="inline-flex px-3 py-1.5 rounded-full text-sm font-medium backdrop-blur-sm border">
-                                {{ transaction.status === 'completed' ? 'Selesai' : transaction.status }}
-                            </span>
-                        </td>
-                        <td class="py-4 px-4 text-right">
-                            <div class="flex items-center justify-end gap-2">
-                                <button @click="editTransaction(transaction)" class="w-8 h-8 rounded-lg bg-muted/30 backdrop-blur-sm border border-border/30 flex items-center justify-center hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all text-muted-foreground" title="Edit Transaksi">
-                                    <Pencil class="w-4 h-4" />
-                                </button>
-                                <button @click="deleteTransaction(transaction.id)" class="w-8 h-8 rounded-lg bg-muted/30 backdrop-blur-sm border border-border/30 flex items-center justify-center hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500 transition-all text-muted-foreground" title="Hapus Transaksi">
-                                    <Trash2 class="w-4 h-4" />
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        
-        <p v-if="transactions.length === 0" class="text-center text-base text-muted-foreground py-8">
-            Belum ada transaksi
-        </p>
-    </div>
+
+        <!-- View All Button -->
+        <a href="/transactions" class="w-full py-3 rounded-2xl bg-[#f5f3ee] hover:bg-[#eae8e2] dark:bg-muted/40 dark:hover:bg-muted text-[#1b1c19] dark:text-foreground text-xs font-bold flex items-center justify-center gap-1.5 active:bg-[#eae8e2] transition-colors shadow-xs mt-1 text-center">
+            <span>Lihat Riwayat Lengkap</span>
+            <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+        </a>
+    </section>
 </template>
 
 <style scoped>

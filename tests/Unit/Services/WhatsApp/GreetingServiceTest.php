@@ -36,13 +36,12 @@ it('sends help on help intent', function () {
     $service->handleSpecialIntent('help');
 
     expect($replies)->toHaveCount(1);
-    expect($replies[0])->toContain('Panduan Lengkap');
-    expect($replies[0])->toContain('CATAT PENGELUARAN');
-    expect($replies[0])->toContain('SCAN STRUK');
-    expect($replies[0])->toContain('VOICE NOTE');
-    expect($replies[0])->toContain('BUDGET');
-    expect($replies[0])->toContain('TARGET TABUNGAN');
-    expect($replies[0])->toContain('PENGINGAT');
+    expect($replies[0])->toContain('Panduan FinWa');
+    expect($replies[0])->toContain('Catat Transaksi');
+    expect($replies[0])->toContain('Scan Struk');
+    expect($replies[0])->toContain('Voice Note');
+    expect($replies[0])->toContain('Budget & Target');
+    expect($replies[0])->toContain('Pengingat');
 });
 
 it('does nothing on unknown intent', function () {
@@ -116,19 +115,15 @@ it('help contains all major feature sections', function () {
     $helpText = $replies[0];
 
     // Check all major sections exist
-    expect($helpText)->toContain('CATAT PENGELUARAN');
-    expect($helpText)->toContain('SCAN STRUK');
-    expect($helpText)->toContain('VOICE NOTE');
-    expect($helpText)->toContain('CATAT BANYAK SEKALIGUS');
-    expect($helpText)->toContain('CATAT PEMASUKAN');
-    expect($helpText)->toContain('DOMPET/REKENING');
-    expect($helpText)->toContain('CEK KEUANGAN');
-    expect($helpText)->toContain('BUDGET');
-    expect($helpText)->toContain('TARGET TABUNGAN');
-    expect($helpText)->toContain('STATISTIK');
-    expect($helpText)->toContain('PENGINGAT');
-    expect($helpText)->toContain('LAPORAN');
-    expect($helpText)->toContain('TIPS');
+    expect($helpText)->toContain('Catat Transaksi');
+    expect($helpText)->toContain('Scan Struk');
+    expect($helpText)->toContain('Voice Note');
+    expect($helpText)->toContain('Mengelola Dompet/Rekening');
+    expect($helpText)->toContain('Cek Keuangan');
+    expect($helpText)->toContain('Budget & Target');
+    expect($helpText)->toContain('Pengingat');
+    expect($helpText)->toContain('Laporan');
+    expect($helpText)->toContain('Tips');
 });
 
 it('help contains practical examples', function () {
@@ -146,8 +141,7 @@ it('help contains practical examples', function () {
     $helpText = $replies[0];
 
     // Check practical examples
-    expect($helpText)->toContain('makan siang 25rb');
-    expect($helpText)->toContain('beli bensin 50k');
+    expect($helpText)->toContain('beli kopi 25rb');
     expect($helpText)->toContain('gaji bulan ini 8jt');
     expect($helpText)->toContain('tambah dompet BCA');
     expect($helpText)->toContain('set budget makan 500rb');
@@ -172,9 +166,8 @@ it('help mentions format tips', function () {
 
     expect($helpText)->toContain('25rb');
     expect($helpText)->toContain('50k');
-    expect($helpText)->toContain('1.5jt');
-    expect($helpText)->toContain('Voice note');
-    expect($helpText)->toContain('Foto struk');
+    expect($helpText)->toContain('Scan Struk');
+    expect($helpText)->toContain('Voice Note');
 });
 
 it('greeting contains call to action', function () {

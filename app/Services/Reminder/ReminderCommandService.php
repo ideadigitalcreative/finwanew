@@ -589,11 +589,22 @@ class ReminderCommandService
         }
     }
 
+    protected function isWeeklyDigestEnabledSystemWide(): bool
+    {
+        return (bool) config('services.weekly_digest.enabled', false);
+    }
+
     /**
      * Handle enable weekly digest
      */
     public function handleEnableWeeklyDigest(): void
     {
+        if (! $this->isWeeklyDigestEnabledSystemWide()) {
+            $this->sendReply('ℹ️ Fitur ringkasan mingguan otomatis sedang tidak tersedia.');
+
+            return;
+        }
+
         try {
             $tenant = Tenant::find($this->message->tenant_id);
 
@@ -640,6 +651,12 @@ class ReminderCommandService
      */
     public function handleDisableWeeklyDigest(): void
     {
+        if (! $this->isWeeklyDigestEnabledSystemWide()) {
+            $this->sendReply('ℹ️ Fitur ringkasan mingguan otomatis sudah dinonaktifkan di sistem.');
+
+            return;
+        }
+
         try {
             $tenant = Tenant::find($this->message->tenant_id);
 
@@ -679,6 +696,12 @@ class ReminderCommandService
      */
     public function handleOnDemandWeeklyDigest(): void
     {
+        if (! $this->isWeeklyDigestEnabledSystemWide()) {
+            $this->sendReply('ℹ️ Fitur ringkasan mingguan sedang tidak tersedia.');
+
+            return;
+        }
+
         try {
             $tenant = Tenant::find($this->message->tenant_id);
 

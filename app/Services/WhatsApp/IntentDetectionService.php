@@ -58,6 +58,14 @@ class IntentDetectionService
         if (! empty($queryKeywords)) {
             $queryPattern = '/('.implode('|', array_map(fn ($k) => preg_quote($k, '/'), $queryKeywords)).')/iu';
             $hasQueryKeyword = (bool) preg_match($queryPattern, $textLower);
+            
+            // Exception: if message has amount and it's an explicit "uang masuk X" or "uang keluar X" → NOT a query
+            if ($hasAmount && $hasQueryKeyword) {
+                $explicitTransactionPattern = '/\b(uang\s+masuk|masuk\s+uang|duit\s+masuk|masuk\s+duit|uang\s+keluar|keluar\s+uang|duit\s+keluar|keluar\s+duit)\b/i';
+                if (preg_match($explicitTransactionPattern, $textLower)) {
+                    $hasQueryKeyword = false;
+                }
+            }
         }
 
         // 2. Check Period Keywords
@@ -188,7 +196,7 @@ class IntentDetectionService
      */
     public function isBalanceCheck(string $messageText): bool
     {
-        return (bool) preg_match('/^(cek\s+)?saldo\??$/i', trim($messageText));
+        return (bool) preg_match('/^(cek\s+)?(saldo|cashflow|cash\s*flow|arus\s+kas)\??$/i', trim($messageText));
     }
 
     /**

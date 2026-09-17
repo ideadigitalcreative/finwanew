@@ -1,13 +1,24 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Head, router, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { MessageSquare, QrCode, RefreshCw, Trash2, Plus, CheckCircle2, XCircle, Clock, AlertCircle, Phone, Edit, Star } from 'lucide-vue-next';
 import { useSweetAlert } from '@/composables/useSweetAlert';
+import { type BreadcrumbItem } from '@/types';
+
+const breadcrumbs: BreadcrumbItem[] = [
+    {
+        title: 'Dashboard',
+        href: '/dashboard',
+    },
+    {
+        title: 'WhatsApp',
+        href: '/whatsapp',
+    },
+];
 
 interface Message {
     id: number;
@@ -133,6 +144,9 @@ const numberForm = useForm({
     name: '',
     is_primary: false,
 });
+
+// Preset nama alias untuk memudahkan pengguna menamai nomor (Suami, Istri, dll.)
+const namePresets = ['Suami', 'Istri', 'Anak', 'Orang Tua', 'Usaha', 'Pribadi'];
 
 // Function to wait for session_id to be available
 const waitForSessionId = async (channel: Channel, attempt = 1, maxAttempts = 10) => {
@@ -610,30 +624,30 @@ const refreshStatus = async (channel: Channel) => {
 const getStatusIcon = (status: string | null) => {
     switch (status) {
         case 'connected':
-            return CheckCircle2;
+            return 'check_circle';
         case 'connecting':
-            return Clock;
+            return 'sync';
         case 'disconnected':
-            return XCircle;
+            return 'cancel';
         case 'error':
-            return AlertCircle;
+            return 'error';
         default:
-            return Clock;
+            return 'sync';
     }
 };
 
 const getStatusColor = (status: string | null) => {
     switch (status) {
         case 'connected':
-            return 'text-green-600';
+            return 'text-[#006c4f]';
         case 'connecting':
-            return 'text-yellow-600';
+            return 'text-[#745c00]';
         case 'disconnected':
-            return 'text-red-600';
+            return 'text-[#ad2c4f]';
         case 'error':
-            return 'text-red-600';
+            return 'text-[#ad2c4f]';
         default:
-            return 'text-gray-600';
+            return 'text-[#7f7661]';
     }
 };
 
@@ -785,43 +799,45 @@ onUnmounted(() => {
 <template>
     <Head title="WhatsApp Channels" />
 
-    <AppLayout>
-        <div class="flex h-full flex-1 flex-col gap-8 overflow-x-auto p-6 bg-gray-50/50 dark:bg-black/10">
+    <AppLayout :breadcrumbs="breadcrumbs">
+        <div class="bg-white dark:bg-[#23231f] flex h-full flex-1 flex-col gap-4 md:gap-6 overflow-x-auto p-4 md:p-6 font-['Plus_Jakarta_Sans',sans-serif]">
             <!-- Header -->
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">WhatsApp Channels</h2>
-                    <p class="text-sm text-gray-500 mt-1">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex-1">
+                    <h2 class="text-xl md:text-2xl font-bold text-[#1b1c19] dark:text-white flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#ffd23f] text-2xl md:text-3xl">forum</span>
+                        WhatsApp Channels
+                    </h2>
+                    <p class="text-xs md:text-sm text-[#4d4634]/60 dark:text-white/50 mt-1">
                         Kelola koneksi WhatsApp untuk chatbot
                     </p>
                 </div>
-                
-                <div class="flex flex-col sm:flex-row gap-2">
-                    <Button
-                        as="a"
-                        :href="'https://wa.me/6285762000079'"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="w-full sm:w-auto text-white hover:opacity-90 transition-opacity rounded-xl shadow-sm"
-                        style="background-color: oklch(0.65 0.19 137.46);"
-                    >
-                        <MessageSquare class="mr-2 h-4 w-4" />
-                        Chat Finwa Bot
-                    </Button>
-                </div>
+
+                <a
+                    href="https://wa.me/6285159205506"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#725a00] bg-[#ffd23f] hover:bg-[#ffe089] transition-all w-full md:w-auto"
+                >
+                    <span class="material-symbols-outlined text-lg">chat</span>
+                    Chat Finwa Bot
+                </a>
             </div>
 
             <!-- User WhatsApp Numbers Section -->
-            <div class="rounded-2xl bg-white p-8 border border-gray-200/50 dark:bg-gray-800 dark:border-gray-700/30">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div class="rounded-2xl bg-white dark:bg-[#23231f] p-5 md:p-6 border border-[#eae8e2] dark:border-white/10">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
                     <div>
-                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">Nomor WhatsApp Saya</h3>
-                        <p class="text-sm text-gray-500 mt-1">
+                        <h3 class="text-lg font-bold text-[#1b1c19] dark:text-white flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[#006c4f] text-xl">contact_phone</span>
+                            Nomor WhatsApp Saya
+                        </h3>
+                        <p class="text-xs md:text-sm text-[#4d4634]/60 dark:text-white/50 mt-1">
                             Daftarkan nomor WhatsApp Anda untuk routing pesan
                         </p>
                     </div>
-                    <div v-if="props.limitInfo" class="text-sm text-gray-500">
-                        <span class="font-bold text-gray-900 dark:text-white">{{ props.limitInfo.current }}</span> / 
+                    <div v-if="props.limitInfo" class="text-sm text-[#4d4634]/60 dark:text-white/50">
+                        <span class="font-bold text-[#1b1c19] dark:text-white">{{ props.limitInfo.current }}</span> /
                         <span v-if="props.limitInfo.is_unlimited">∞</span>
                         <span v-else>{{ props.limitInfo.limit }}</span>
                         <span class="ml-1">(Paket {{ props.limitInfo.plan_name }})</span>
@@ -829,57 +845,60 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Numbers List -->
-                <div v-if="props.userWhatsAppNumbers && props.userWhatsAppNumbers.length > 0" class="space-y-3 mb-6">
-                    <div 
-                        v-for="number in props.userWhatsAppNumbers" 
+                <div v-if="props.userWhatsAppNumbers && props.userWhatsAppNumbers.length > 0" class="space-y-3 mb-5">
+                    <div
+                        v-for="number in props.userWhatsAppNumbers"
                         :key="number.id"
-                        class="flex items-center justify-between p-4 rounded-xl border border-gray-100 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-900/50"
+                        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee]/50 dark:bg-white/5"
                     >
-                        <div class="flex-1">
-                            <div class="flex items-center gap-3">
-                                <span class="font-bold text-gray-900 dark:text-white">{{ number.whatsapp_number }}</span>
-                                <span v-if="number.is_primary" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                        <div class="flex-1 min-w-0 pr-2">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <Link
+                                    :href="`/whatsapp-numbers/${number.id}/transactions`"
+                                    class="font-bold text-sm sm:text-base text-[#1b1c19] dark:text-white hover:text-[#006c4f] dark:hover:text-[#51fac1] transition-colors inline-flex items-center gap-1.5"
+                                    title="Lihat riwayat transaksi nomor ini"
+                                >
+                                    <span>{{ number.whatsapp_number }}</span>
+                                    <span class="material-symbols-outlined text-[16px] text-[#4d4634]/40 shrink-0">arrow_forward</span>
+                                </Link>
+                                <span v-if="number.is_primary" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#51fac1] text-[#007152] shrink-0 whitespace-nowrap">
+                                    <span class="material-symbols-outlined text-[13px]">star</span>
                                     Utama
                                 </span>
                             </div>
-                            <p v-if="number.name" class="text-sm text-gray-500 mt-1">{{ number.name }}</p>
+                            <p v-if="number.name" class="text-xs sm:text-sm text-[#4d4634]/60 dark:text-white/50 mt-1 truncate">{{ number.name }}</p>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <Button
+                        <div class="flex items-center gap-1 shrink-0 self-end sm:self-center border-t sm:border-t-0 pt-2 sm:pt-0 border-[#eae8e2] dark:border-white/10 w-full sm:w-auto justify-end">
+                            <button
                                 v-if="!number.is_primary"
-                                variant="ghost"
-                                size="icon"
                                 @click="setPrimaryNumber(number.id)"
-                                class="h-8 w-8 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                class="p-2 rounded-lg text-[#4d4634]/50 hover:text-[#006c4f] hover:bg-[#51fac1]/20 transition-colors"
                                 title="Set Utama"
                             >
-                                <Star class="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
+                                <span class="material-symbols-outlined text-lg">star</span>
+                            </button>
+                            <button
                                 @click="editNumber(number)"
-                                class="h-8 w-8 text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                class="p-2 rounded-lg text-[#4d4634]/50 hover:text-[#725a00] hover:bg-[#f5f3ee] dark:hover:bg-white/10 transition-colors"
                                 title="Edit"
                             >
-                                <Edit class="h-4 w-4" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
+                                <span class="material-symbols-outlined text-lg">edit</span>
+                            </button>
+                            <button
                                 @click="deleteNumber(number.id)"
                                 :disabled="props.userWhatsAppNumbers.length <= 1"
-                                class="h-8 w-8 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                class="p-2 rounded-lg text-[#4d4634]/50 hover:text-[#ad2c4f] hover:bg-[#ffc9d0]/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                                 title="Hapus"
                             >
-                                <Trash2 class="h-4 w-4" />
-                            </Button>
+                                <span class="material-symbols-outlined text-lg">delete</span>
+                            </button>
                         </div>
                     </div>
                 </div>
 
                 <!-- Empty State -->
-                <div v-else class="text-center py-8 text-gray-500 text-sm">
+                <div v-else class="text-center py-8 text-[#4d4634]/40 dark:text-white/30 text-sm">
+                    <span class="material-symbols-outlined text-3xl mb-2 block">phone_disabled</span>
                     Belum ada nomor WhatsApp terdaftar
                 </div>
 
@@ -887,26 +906,25 @@ onUnmounted(() => {
                 <div class="flex justify-end">
                     <Dialog v-model:open="showAddNumberDialog">
                         <DialogTrigger as-child>
-                            <Button 
+                            <button
                                 :disabled="!props.limitInfo?.can_add"
-                                class="rounded-xl text-white shadow-sm hover:opacity-90"
-                                style="background-color: oklch(0.65 0.19 137.46);"
+                                class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#725a00] bg-[#ffd23f] hover:bg-[#ffe089] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                             >
-                                <Plus class="mr-2 h-4 w-4" />
+                                <span class="material-symbols-outlined text-lg">person_add</span>
                                 Tambah Nomor
-                            </Button>
+                            </button>
                         </DialogTrigger>
-                        <DialogContent class="!max-w-[95vw] sm:!max-w-md rounded-2xl p-0 overflow-hidden bg-white dark:bg-gray-800">
+                        <DialogContent class="!max-w-[95vw] sm:!max-w-md rounded-2xl p-0 overflow-hidden bg-white dark:bg-[#23231f] border border-[#eae8e2] dark:border-white/10">
                             <DialogHeader class="p-6 pb-0">
-                                <DialogTitle class="text-xl font-bold text-gray-900 dark:text-white">{{ editingNumber ? 'Edit Nomor WhatsApp' : 'Tambah Nomor WhatsApp' }}</DialogTitle>
-                                <DialogDescription class="text-sm text-gray-500">
+                                <DialogTitle class="text-xl font-bold text-[#1b1c19] dark:text-white">{{ editingNumber ? 'Edit Nomor WhatsApp' : 'Tambah Nomor WhatsApp' }}</DialogTitle>
+                                <DialogDescription class="text-sm text-[#4d4634]/60 dark:text-white/50">
                                     {{ editingNumber ? 'Ubah informasi nomor WhatsApp' : 'Daftarkan nomor WhatsApp baru untuk routing pesan' }}
                                 </DialogDescription>
                             </DialogHeader>
                             <div class="p-6">
                                 <form @submit.prevent="saveNumber" class="space-y-4">
                                     <div>
-                                        <Label for="whatsapp_number" class="text-sm font-medium text-gray-700 dark:text-gray-300">Nomor WhatsApp</Label>
+                                        <Label for="whatsapp_number" class="text-sm font-medium text-[#4d4634] dark:text-white/70">Nomor WhatsApp</Label>
                                         <Input
                                             id="whatsapp_number"
                                             v-model="numberForm.whatsapp_number"
@@ -914,35 +932,54 @@ onUnmounted(() => {
                                             placeholder="6281234567890"
                                             required
                                             @input="numberForm.whatsapp_number = numberForm.whatsapp_number.replace(/\D/g, '')"
-                                            class="mt-1.5 rounded-xl border-gray-200 bg-white px-3 py-2 text-sm focus:border-green-500 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900"
+                                            class="mt-1.5 rounded-xl border-[#eae8e2] dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2 text-sm focus:border-[#ffd23f] focus:ring-[#ffd23f] text-[#1b1c19] dark:text-white"
                                         />
-                                        <p class="mt-1 text-xs text-gray-500">
+                                        <p class="mt-1 text-xs text-[#4d4634]/50">
                                             Format: 6281234567890 (dengan kode negara 62)
                                         </p>
                                     </div>
                                     <div>
-                                        <Label for="number_name" class="text-sm font-medium text-gray-700 dark:text-gray-300">Nama/Alias (Opsional)</Label>
+                                        <Label for="number_name" class="text-sm font-medium text-[#4d4634] dark:text-white/70">Nama/Alias (Opsional)</Label>
                                         <Input
                                             id="number_name"
                                             v-model="numberForm.name"
                                             type="text"
                                             placeholder="Nomor Pribadi"
-                                            class="mt-1.5 rounded-xl border-gray-200 bg-white px-3 py-2 text-sm focus:border-green-500 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900"
+                                            class="mt-1.5 rounded-xl border-[#eae8e2] dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2 text-sm focus:border-[#ffd23f] focus:ring-[#ffd23f] text-[#1b1c19] dark:text-white"
                                         />
+                                        <div class="mt-2 flex flex-wrap gap-1.5">
+                                            <button
+                                                v-for="preset in namePresets"
+                                                :key="preset"
+                                                type="button"
+                                                @click="numberForm.name = preset"
+                                                :class="[
+                                                    'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                                                    numberForm.name === preset
+                                                        ? 'border-[#ffd23f] bg-[#ffd23f] text-[#574500]'
+                                                        : 'border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee] dark:bg-white/5 text-[#4d4634]/60 dark:text-white/50 hover:bg-[#eae8e2] dark:hover:bg-white/10'
+                                                ]"
+                                            >
+                                                {{ preset }}
+                                            </button>
+                                        </div>
+                                        <p class="mt-1 text-xs text-[#4d4634]/50">
+                                            Pilih preset atau ketik nama sendiri. Nama ini dipakai untuk filter "Oleh" di transaksi.
+                                        </p>
                                     </div>
                                     <div class="flex items-center space-x-2 pt-2">
                                         <input
                                             id="is_primary"
                                             v-model="numberForm.is_primary"
                                             type="checkbox"
-                                            class="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                            class="h-4 w-4 rounded border-[#eae8e2] text-[#ffd23f] focus:ring-[#ffd23f]"
                                         />
-                                        <Label for="is_primary" class="text-sm font-normal cursor-pointer text-gray-700 dark:text-gray-300">
+                                        <Label for="is_primary" class="text-sm font-normal cursor-pointer text-[#4d4634] dark:text-white/70">
                                             Set sebagai nomor utama
                                         </Label>
                                     </div>
-                                    <div v-if="props.limitInfo && !props.limitInfo.can_add" class="rounded-xl border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-900/30 dark:bg-yellow-900/20">
-                                        <p class="text-xs text-yellow-800 dark:text-yellow-200">
+                                    <div v-if="props.limitInfo && !props.limitInfo.can_add" class="rounded-xl border border-[#ffd9dd] bg-[#ffc9d0]/30 p-3 dark:bg-[#ffc9d0]/10">
+                                        <p class="text-xs text-[#ad2c4f]">
                                             Limit nomor WhatsApp sudah tercapai. Paket {{ props.limitInfo.plan_name }} hanya dapat menambahkan maksimal {{ props.limitInfo.limit }} nomor.
                                         </p>
                                     </div>
@@ -951,18 +988,17 @@ onUnmounted(() => {
                                             type="button"
                                             variant="outline"
                                             @click="showAddNumberDialog = false; resetNumberForm()"
-                                            class="rounded-xl"
+                                            class="rounded-xl border-[#eae8e2] dark:border-white/10"
                                         >
                                             Batal
                                         </Button>
-                                        <Button 
-                                            type="submit" 
+                                        <button
+                                            type="submit"
                                             :disabled="numberForm.processing || !props.limitInfo?.can_add"
-                                            class="rounded-xl text-white shadow-sm hover:opacity-90"
-                                            style="background-color: oklch(0.65 0.19 137.46);"
+                                            class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-[#725a00] bg-[#ffd23f] hover:bg-[#ffe089] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
                                             {{ editingNumber ? 'Update' : 'Simpan' }}
-                                        </Button>
+                                        </button>
                                     </div>
                                 </form>
                             </div>
@@ -972,18 +1008,18 @@ onUnmounted(() => {
             </div>
 
             <!-- Account Status Warning -->
-            <div v-if="!props.tenantIsActive" class="rounded-2xl border border-yellow-200 bg-yellow-50 p-6 dark:border-yellow-900/30 dark:bg-yellow-900/20">
+            <div v-if="!props.tenantIsActive" class="rounded-2xl border border-[#ffd9dd] bg-[#ffc9d0]/30 p-5 dark:bg-[#ffc9d0]/10">
                 <div class="flex items-start gap-4">
                     <div class="flex-shrink-0 mt-0.5">
-                        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/50">
-                            <AlertCircle class="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ffc9d0] text-[#ad2c4f]">
+                            <span class="material-symbols-outlined text-xl">warning</span>
                         </div>
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h3 class="text-lg font-bold text-yellow-900 dark:text-yellow-100 mb-1">
+                        <h3 class="text-lg font-bold text-[#ad2c4f] mb-1">
                             Akun Belum Aktif
                         </h3>
-                        <p class="text-sm text-yellow-800 dark:text-yellow-200 leading-relaxed">
+                        <p class="text-sm text-[#ad2c4f]/80 leading-relaxed">
                             Akun belum aktif. Silakan lakukan pembayaran atau hubungi admin.
                             Fitur WhatsApp akan tersedia setelah akun Anda diaktifkan oleh admin.
                         </p>
@@ -992,23 +1028,23 @@ onUnmounted(() => {
             </div>
 
             <!-- Channels List -->
-            <div class="space-y-6">
+            <div class="space-y-4 md:space-y-6">
                 <!-- Disabled Overlay if Account Not Active -->
                 <div
                     v-if="!props.tenantIsActive && props.channels.length > 0"
-                    class="rounded-2xl border border-yellow-200 bg-yellow-50 p-6 dark:border-yellow-900/30 dark:bg-yellow-900/20"
+                    class="rounded-2xl border border-[#ffd9dd] bg-[#ffc9d0]/30 p-5 dark:bg-[#ffc9d0]/10"
                 >
                     <div class="flex items-start gap-4">
                         <div class="flex-shrink-0 mt-0.5">
-                            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/50">
-                                <AlertCircle class="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ffc9d0] text-[#ad2c4f]">
+                                <span class="material-symbols-outlined text-xl">block</span>
                             </div>
                         </div>
                         <div class="flex-1 min-w-0">
-                            <h3 class="text-lg font-bold text-yellow-900 dark:text-yellow-100 mb-1">
+                            <h3 class="text-lg font-bold text-[#ad2c4f] mb-1">
                                 Fitur WhatsApp Nonaktif
                             </h3>
-                            <p class="text-sm text-yellow-800 dark:text-yellow-200 leading-relaxed">
+                            <p class="text-sm text-[#ad2c4f]/80 leading-relaxed">
                                 Akun belum aktif. Silakan lakukan pembayaran atau hubungi admin untuk mengaktifkan akun Anda.
                             </p>
                         </div>
@@ -1018,71 +1054,70 @@ onUnmounted(() => {
                 <div
                     v-for="channel in props.channels"
                     :key="channel.id"
-                    class="rounded-2xl bg-white p-8 border border-gray-200/50 dark:bg-gray-800 dark:border-gray-700/30"
+                    class="rounded-2xl bg-white dark:bg-[#23231f] p-5 md:p-6 border border-[#eae8e2] dark:border-white/10"
                     :class="{ 'opacity-50 pointer-events-none': !props.tenantIsActive }"
                 >
-                    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+                    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 md:gap-6">
                         <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-4 mb-6">
-                                <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-green-50 dark:bg-green-900/20">
-                                    <MessageSquare class="h-6 w-6 text-green-600 dark:text-green-400" />
+                            <div class="flex items-center gap-4 mb-5">
+                                <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-[#51fac1]/30 text-[#006c4f]">
+                                    <span class="material-symbols-outlined text-2xl">forum</span>
                                 </div>
                                 <div class="flex-1 min-w-0">
-                                    <h3 class="text-lg font-bold text-gray-900 dark:text-white truncate">{{ channel.name }}</h3>
-                                    <p class="text-sm text-gray-500 break-words">
+                                    <h3 class="text-lg font-bold text-[#1b1c19] dark:text-white truncate">{{ channel.name }}</h3>
+                                    <p class="text-sm text-[#4d4634]/60 dark:text-white/50 break-words">
                                         {{ channel.channel_account }}
                                     </p>
                                 </div>
                             </div>
 
-                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
                                 <div>
-                                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Status</p>
+                                    <p class="text-[10px] font-bold uppercase tracking-wider text-[#4d4634]/50 dark:text-white/40 mb-2">Status</p>
                                     <div class="flex items-center gap-2">
-                                        <RefreshCw 
-                                            v-if="loadingChannels.has(channel.id) || loadingQr.has(channel.id)" 
-                                            class="h-4 w-4 animate-spin text-green-600" 
-                                        />
-                                        <component
+                                        <span
+                                            v-if="loadingChannels.has(channel.id) || loadingQr.has(channel.id)"
+                                            class="material-symbols-outlined text-lg animate-spin text-[#745c00]"
+                                        >sync</span>
+                                        <span
                                             v-else
-                                            :is="getStatusIcon(channel.session_status)"
+                                            class="material-symbols-outlined text-lg"
                                             :class="getStatusColor(channel.session_status)"
-                                            class="h-4 w-4"
-                                        />
-                                        <span 
+                                        >{{ getStatusIcon(channel.session_status) }}</span>
+                                        <span
                                             class="text-sm font-medium"
-                                            :class="channel.session_status === 'connected' ? 'text-green-600 font-bold' : 'text-gray-700 dark:text-gray-300'"
+                                            :class="channel.session_status === 'connected' ? 'text-[#006c4f] font-bold' : 'text-[#4d4634] dark:text-white/70'"
                                         >
                                             {{ loadingChannels.has(channel.id) ? 'Memuat session...' : loadingQr.has(channel.id) ? 'Memuat QR...' : getStatusLabel(channel.session_status) }}
                                         </span>
                                     </div>
-                                    <div 
+                                    <div
                                         v-if="channel.session_status === 'connected'"
                                         class="mt-1"
                                     >
-                                        <p class="text-xs text-green-600 dark:text-green-400">
+                                        <p class="text-xs text-[#006c4f]">
                                             WhatsApp siap menerima pesan
                                         </p>
                                     </div>
                                 </div>
                                 <div>
-                                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Pesan</p>
-                                    <p class="text-sm font-bold text-gray-900 dark:text-white">
+                                    <p class="text-[10px] font-bold uppercase tracking-wider text-[#4d4634]/50 dark:text-white/40 mb-2">Pesan</p>
+                                    <p class="text-sm font-bold text-[#1b1c19] dark:text-white">
                                         {{ channel.messages_count }} pesan
                                     </p>
-                                    <p v-if="channel.recent_messages && channel.recent_messages.length > 0" class="mt-1 text-xs text-gray-500">
+                                    <p v-if="channel.recent_messages && channel.recent_messages.length > 0" class="mt-1 text-xs text-[#4d4634]/50">
                                         Terbaru: {{ channel.recent_messages[0].created_at_human }}
                                     </p>
                                 </div>
                                 <div>
-                                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Aktivitas Terakhir</p>
-                                    <p class="text-sm font-bold text-gray-900 dark:text-white">
+                                    <p class="text-[10px] font-bold uppercase tracking-wider text-[#4d4634]/50 dark:text-white/40 mb-2">Aktivitas Terakhir</p>
+                                    <p class="text-sm font-bold text-[#1b1c19] dark:text-white">
                                         {{ channel.last_activity_at || '-' }}
                                     </p>
                                 </div>
                                 <div>
-                                    <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Dibuat</p>
-                                    <p class="text-sm font-bold text-gray-900 dark:text-white">
+                                    <p class="text-[10px] font-bold uppercase tracking-wider text-[#4d4634]/50 dark:text-white/40 mb-2">Dibuat</p>
+                                    <p class="text-sm font-bold text-[#1b1c19] dark:text-white">
                                         {{ new Date(channel.created_at).toLocaleDateString('id-ID') }}
                                     </p>
                                 </div>
@@ -1092,56 +1127,48 @@ onUnmounted(() => {
                         <div class="flex flex-wrap gap-2 sm:ml-4 sm:flex-nowrap sm:flex-shrink-0">
                             <!-- Loading indicator for channel -->
                             <div v-if="loadingChannels.has(channel.id)" class="flex items-center gap-2 px-3 py-2 w-full sm:w-auto">
-                                <RefreshCw class="h-4 w-4 animate-spin text-green-600" />
-                                <span class="text-xs text-gray-500">Memuat session...</span>
+                                <span class="material-symbols-outlined text-lg animate-spin text-[#745c00]">sync</span>
+                                <span class="text-xs text-[#4d4634]/60">Memuat session...</span>
                             </div>
-                            
-                            <Button
+
+                            <button
                                 v-if="channel.session_id && !loadingChannels.has(channel.id)"
-                                variant="outline"
-                                size="sm"
                                 @click="loadQrCode(channel)"
                                 :disabled="channel.session_status === 'connected' || loadingQr.has(channel.id)"
-                                class="flex-1 sm:flex-initial rounded-xl"
+                                class="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium border border-[#eae8e2] dark:border-white/10 text-[#4d4634] dark:text-white/70 hover:bg-[#f5f3ee] dark:hover:bg-white/5 transition-colors flex-1 sm:flex-initial disabled:opacity-40 disabled:cursor-not-allowed"
                                 title="QR Code"
                             >
-                                <RefreshCw v-if="loadingQr.has(channel.id)" class="h-4 w-4 animate-spin" />
-                                <QrCode v-else class="h-4 w-4" />
-                                <span class="ml-2 sm:hidden text-xs">QR</span>
-                            </Button>
-                            <Button
+                                <span v-if="loadingQr.has(channel.id)" class="material-symbols-outlined text-lg animate-spin">sync</span>
+                                <span v-else class="material-symbols-outlined text-lg">qr_code</span>
+                                <span class="sm:hidden text-xs">QR</span>
+                            </button>
+                            <button
                                 v-if="channel.session_id && !loadingChannels.has(channel.id)"
-                                variant="outline"
-                                size="sm"
                                 @click="refreshStatus(channel)"
-                                class="flex-1 sm:flex-initial rounded-xl"
+                                class="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium border border-[#eae8e2] dark:border-white/10 text-[#4d4634] dark:text-white/70 hover:bg-[#f5f3ee] dark:hover:bg-white/5 transition-colors flex-1 sm:flex-initial"
                                 title="Refresh Status"
                             >
-                                <RefreshCw class="h-4 w-4" />
-                                <span class="ml-2 sm:hidden text-xs">Refresh</span>
-                            </Button>
-                            <Button
+                                <span class="material-symbols-outlined text-lg">refresh</span>
+                                <span class="sm:hidden text-xs">Refresh</span>
+                            </button>
+                            <button
                                 v-if="channel.session_id && channel.session_status !== 'connected' && !loadingChannels.has(channel.id)"
-                                variant="outline"
-                                size="sm"
                                 @click="reconnectSession(channel.id)"
-                                class="flex-1 sm:flex-initial rounded-xl"
+                                class="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium border border-[#eae8e2] dark:border-white/10 text-[#4d4634] dark:text-white/70 hover:bg-[#f5f3ee] dark:hover:bg-white/5 transition-colors flex-1 sm:flex-initial"
                                 title="Reconnect"
                             >
-                                <RefreshCw class="h-4 w-4" />
-                                <span class="ml-2 sm:hidden text-xs">Reconnect</span>
-                            </Button>
-                            <Button
+                                <span class="material-symbols-outlined text-lg">cached</span>
+                                <span class="sm:hidden text-xs">Reconnect</span>
+                            </button>
+                            <button
                                 v-if="!loadingChannels.has(channel.id)"
-                                variant="outline"
-                                size="sm"
                                 @click="deleteChannel(channel.id)"
-                                class="flex-1 sm:flex-initial rounded-xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                class="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium border border-[#ffc9d0] text-[#ad2c4f] hover:bg-[#ffc9d0]/30 transition-colors flex-1 sm:flex-initial"
                                 title="Hapus"
                             >
-                                <Trash2 class="h-4 w-4" />
-                                <span class="ml-2 sm:hidden text-xs">Hapus</span>
-                            </Button>
+                                <span class="material-symbols-outlined text-lg">delete</span>
+                                <span class="sm:hidden text-xs">Hapus</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1149,53 +1176,55 @@ onUnmounted(() => {
 
             <!-- QR Code Dialog -->
             <Dialog v-model:open="showQrDialog" @update:open="(open) => { if (!open) { stopQrStatusCheck(); qrCodeUrl = null; } }">
-                <DialogContent class="!max-w-[95vw] sm:!max-w-xs !max-h-[90vh] overflow-y-auto rounded-2xl p-0 overflow-hidden bg-white dark:bg-gray-800">
+                <DialogContent class="!max-w-[95vw] sm:!max-w-xs !max-h-[90vh] overflow-y-auto rounded-2xl p-0 overflow-hidden bg-white dark:bg-[#23231f] border border-[#eae8e2] dark:border-white/10">
                     <DialogHeader class="p-6 pb-2">
-                        <DialogTitle class="text-lg font-bold text-gray-900 dark:text-white text-center">Scan QR Code</DialogTitle>
-                        <DialogDescription class="text-sm text-gray-500 text-center">
+                        <DialogTitle class="text-lg font-bold text-[#1b1c19] dark:text-white text-center">Scan QR Code</DialogTitle>
+                        <DialogDescription class="text-sm text-[#4d4634]/60 dark:text-white/50 text-center">
                             Scan QR code ini dengan WhatsApp di ponsel Anda
                         </DialogDescription>
                     </DialogHeader>
                     <div class="p-6 pt-2 space-y-4">
                         <div class="flex justify-center">
-                            <div v-if="qrCodeUrl" class="rounded-xl border-2 border-green-500 p-2 bg-white shadow-lg">
-                                <img 
+                            <div v-if="qrCodeUrl" class="rounded-xl border-2 border-[#ffd23f] p-2 bg-white shadow-lg">
+                                <img
                                     v-if="qrCodeUrl.startsWith('data:image') || qrCodeUrl.startsWith('http')"
-                                    :src="qrCodeUrl" 
+                                    :src="qrCodeUrl"
                                     alt="QR Code"
                                     class="w-48 h-48 object-contain"
                                 />
-                                <div 
-                                    v-else 
+                                <div
+                                    v-else
                                     class="qr-code-container"
                                     v-html="qrCodeUrl"
                                 />
                             </div>
                             <div v-else class="text-center py-8">
-                                <p class="text-sm text-gray-500 mb-3">
+                                <p class="text-sm text-[#4d4634]/60 dark:text-white/50 mb-3">
                                     Memuat QR code...
                                 </p>
-                                <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                                <span class="material-symbols-outlined text-3xl animate-spin text-[#ffd23f]">progress_activity</span>
                             </div>
                         </div>
-                        <div class="rounded-xl bg-blue-50 p-3 dark:bg-blue-900/20">
-                            <p class="text-center text-xs font-medium text-blue-900 dark:text-blue-300">
-                                📱 Buka WhatsApp di ponsel Anda
+                        <div class="rounded-xl bg-[#51fac1]/20 p-3 dark:bg-[#51fac1]/10">
+                            <p class="text-center text-xs font-medium text-[#006c4f] flex items-center justify-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">phone_iphone</span>
+                                Buka WhatsApp di ponsel Anda
                             </p>
-                            <p class="text-center text-xs text-blue-700 dark:text-blue-400 mt-1">
+                            <p class="text-center text-xs text-[#006c4f]/80 mt-1">
                                 Lalu scan QR code ini untuk menghubungkan
                             </p>
-                            <p class="text-center text-xs text-blue-600 dark:text-blue-400 mt-2 font-bold">
-                                ⏳ Dialog akan tertutup otomatis setelah terhubung
+                            <p class="text-center text-xs text-[#006c4f] mt-2 font-bold flex items-center justify-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">timer</span>
+                                Dialog akan tertutup otomatis setelah terhubung
                             </p>
                         </div>
-                        <div v-if="selectedChannel" class="text-center text-xs text-gray-400">
+                        <div v-if="selectedChannel" class="text-center text-xs text-[#4d4634]/40 dark:text-white/30">
                             {{ selectedChannel.name }} ({{ selectedChannel.channel_account }})
                         </div>
                         <div class="flex justify-center">
-                            <Button variant="outline" size="sm" @click="showQrDialog = false; stopQrStatusCheck(); qrCodeUrl = null;" class="rounded-xl w-full">
+                            <button @click="showQrDialog = false; stopQrStatusCheck(); qrCodeUrl = null;" class="inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium border border-[#eae8e2] dark:border-white/10 text-[#4d4634] dark:text-white/70 hover:bg-[#f5f3ee] dark:hover:bg-white/5 transition-colors w-full">
                                 Tutup
-                            </Button>
+                            </button>
                         </div>
                     </div>
                 </DialogContent>

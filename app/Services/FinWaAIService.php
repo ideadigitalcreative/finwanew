@@ -415,10 +415,10 @@ class FinWaAIService
             'sapa' => 'greeting',
             'help' => 'help',
             'tanya_finwa' => 'faq',  // Questions about FinWa app
-            'unknown' => 'query',
+            'unknown' => 'unknown',
         ];
 
-        return $mapping[$finwaIntent] ?? 'query';
+        return $mapping[$finwaIntent] ?? 'unknown';
     }
 
     /**

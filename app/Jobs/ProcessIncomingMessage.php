@@ -233,10 +233,10 @@ class ProcessIncomingMessage implements ShouldQueue
                     $limitService = app(\App\Services\SubscriptionLimitService::class);
                     if (! $limitService->canTenantUseOcr($this->message->tenant_id)) {
                         $this->replyService->sendReply(
-                            "âš ï¸ *Fitur Scan Struk Tidak Tersedia*\n\n".
+                            "⚠️ *Fitur Scan Struk Tidak Tersedia*\n\n".
                             "Maaf, fitur membaca struk belanja otomatis (OCR) hanya tersedia untuk paket Premium (Grow/Pro).\n\n".
-                            "ðŸš€ *Upgrade Paket Anda* untuk menikmati kemudahan catat otomatis lewat foto struk!\n".
-                            "ðŸ‘‰ " . config('app.url') . "/subscriptions"
+                            "🚀 *Upgrade Paket Anda* untuk menikmati kemudahan catat otomatis lewat foto struk!\n".
+                            "👉 " . config('app.url') . "/subscriptions"
                         );
                         break;
                     }
@@ -245,7 +245,7 @@ class ProcessIncomingMessage implements ShouldQueue
                     if ($ocrJob) {
                         $this->ocrProcessor->dispatchToOcrWorker($ocrJob);
                     } else {
-                        $this->replyService->sendReply("âš ï¸ Gagal memproses gambar. Pastikan gambar valid.");
+                        $this->replyService->sendReply("⚠️ Gagal memproses gambar. Pastikan gambar valid.");
                     }
                     break;
                 
@@ -259,7 +259,7 @@ class ProcessIncomingMessage implements ShouldQueue
                         }
                     } else {
                         $this->replyService->sendReply(
-                            "âš ï¸ *Gagal memproses pesan suara*\n\n" .
+                            "⚠️ *Gagal memproses pesan suara*\n\n" .
                             "Pastikan voice note valid.\n" .
                             "Atau ketik pesan Anda secara manual."
                         );
@@ -388,7 +388,7 @@ class ProcessIncomingMessage implements ShouldQueue
                 // Cleanup token
                 $linkToken->delete();
 
-                $successMessage = "âœ… *Perangkat Terhubung!*\n\n".
+                $successMessage = "✅ *Perangkat Terhubung!*\n\n".
                     "Halo {$existingUser->name},\n".
                     "Perangkat ini berhasil dihubungkan via kode verifikasi.\n\n".
                     "Silakan kirim ulang transaksi Anda.";
@@ -397,7 +397,7 @@ class ProcessIncomingMessage implements ShouldQueue
 
                 return;
             } else {
-                $this->replyService->sendReply("âŒ *Kode Tidak Valid*\n\nKode verifikasi salah atau sudah kedaluwarsa. Silakan ambil kode baru di Dashboard Web.");
+                $this->replyService->sendReply("❌ *Kode Tidak Valid*\n\nKode verifikasi salah atau sudah kedaluwarsa. Silakan ambil kode baru di Dashboard Web.");
                 return;
             }
         }
@@ -437,13 +437,13 @@ class ProcessIncomingMessage implements ShouldQueue
                 }
 
                 if (!$subscriptionValid) {
-                    $expiredMessage = "âš ï¸ *Langganan Tidak Aktif*\n\n".
+                    $expiredMessage = "⚠️ *Langganan Tidak Aktif*\n\n".
                         "Akun untuk nomor *$cleanPhone* memiliki langganan yang sudah tidak aktif.\n\n".
                         "Anda tidak dapat menghubungkan perangkat baru hingga langganan diperpanjang.\n\n".
-                        "ðŸ”“ *Untuk mengaktifkan kembali:*\n".
+                        "🔒 *Untuk mengaktifkan kembali:*\n".
                         "1ï¸âƒ£ Perpanjang di: ".config('app.url')."/subscriptions\n".
                         "2ï¸âƒ£ Hubungi Admin: 6285242766676\n\n".
-                        "_Terima kasih telah menggunakan FinWa!_ ðŸ’™";
+                        "_Terima kasih telah menggunakan FinWa!_ 💙";
 
                     $this->replyService->sendReply($expiredMessage);
                     return;
@@ -473,7 +473,7 @@ class ProcessIncomingMessage implements ShouldQueue
                     ]
                 );
 
-                $successMessage = "âœ… *Perangkat Terhubung!*\n\n".
+                $successMessage = "✅ *Perangkat Terhubung!*\n\n".
                     "Halo {$existingUser->name},\n".
                     "Perangkat ini berhasil dihubungkan ke akun Anda ({$cleanPhone}).\n\n".
                     "Silakan kirim ulang transaksi Anda.";
@@ -481,7 +481,7 @@ class ProcessIncomingMessage implements ShouldQueue
                 $this->replyService->sendReply($successMessage);
                 return;
             } else {
-                $errorMessage = "âŒ *Nomor Tidak Ditemukan*\n\n".
+                $errorMessage = "❌ *Nomor Tidak Ditemukan*\n\n".
                     "Kami mencari nomor: *$cleanPhone* (dan variasinya)\n".
                     "namun tidak menemukan data yang cocok.\n\n".
                     "Ketik *DAFTAR* untuk buat akun baru.";
@@ -992,12 +992,12 @@ class ProcessIncomingMessage implements ShouldQueue
         if (preg_match('/^(?:isi|tambah|top\s*up)\s+saldo\s+([a-zA-Z0-9\s]+)$/i', trim($messageText), $incompleteMatch)) {
             $walletName = trim($incompleteMatch[1]);
             $this->replyService->sendReply(
-                "âš ï¸ *Nominal tidak terdeteksi*\n\n" .
+                "⚠️ *Nominal tidak terdeteksi*\n\n" .
                 "Untuk menambah saldo ke *{$walletName}*, sertakan nominal:\n\n" .
                 "Contoh:\n" .
-                "â€¢ _tambah saldo {$walletName} 100rb_\n" .
-                "â€¢ _isi saldo {$walletName} 1jt_\n" .
-                "â€¢ _top up {$walletName} 500.000_"
+                "• _tambah saldo {$walletName} 100rb_\n" .
+                "• _isi saldo {$walletName} 1jt_\n" .
+                "• _top up {$walletName} 500.000_"
             );
             return;
         }
@@ -1005,12 +1005,12 @@ class ProcessIncomingMessage implements ShouldQueue
         if (preg_match('/^(?:isi|tambah|top\s*up)\s+uang\s+(?:ke\s+|di\s+)?([a-zA-Z0-9\s]+)$/i', trim($messageText), $incompleteMatchUang)) {
             $walletName = trim($incompleteMatchUang[1]);
             $this->replyService->sendReply(
-                "âš ï¸ *Nominal tidak terdeteksi*\n\n" .
+                "⚠️ *Nominal tidak terdeteksi*\n\n" .
                 "Untuk menambah uang ke *{$walletName}*, sertakan nominal:\n\n" .
                 "Contoh:\n" .
-                "â€¢ _tambah uang ke {$walletName} 100rb_\n" .
-                "â€¢ _isi uang {$walletName} 1jt_\n" .
-                "â€¢ _top up uang {$walletName} 500.000_"
+                "• _tambah uang ke {$walletName} 100rb_\n" .
+                "• _isi uang {$walletName} 1jt_\n" .
+                "• _top up uang {$walletName} 500.000_"
             );
             return;
         }
@@ -1075,7 +1075,7 @@ class ProcessIncomingMessage implements ShouldQueue
                     $this->replyService->sendReply($insightService->generateInsightReport());
                 } catch (\Exception $e) {
                     Log::error('Error generating insight report', ['message_id' => $this->message->id, 'error' => $e->getMessage()]);
-                    $this->replyService->sendReply("âš ï¸ *Gagal memuat insight*\n\nTerjadi kesalahan. Silakan coba lagi nanti.");
+                    $this->replyService->sendReply("⚠️ *Gagal memuat insight*\n\nTerjadi kesalahan. Silakan coba lagi nanti.");
                 }
                 return;
             }
@@ -1093,7 +1093,7 @@ class ProcessIncomingMessage implements ShouldQueue
                     $this->replyService->sendReply($achievementService->generateSummaryMessage());
                 } catch (\Exception $e) {
                     Log::error('Error generating achievement report', ['error' => $e->getMessage()]);
-                    $this->replyService->sendReply("âš ï¸ *Gagal memuat achievement*\n\nTerjadi kesalahan. Silakan coba lagi nanti.");
+                    $this->replyService->sendReply("⚠️ *Gagal memuat achievement*\n\nTerjadi kesalahan. Silakan coba lagi nanti.");
                 }
                 return;
             }
@@ -1175,7 +1175,7 @@ class ProcessIncomingMessage implements ShouldQueue
                     $this->replyService->sendReply($trackerService->generateSummaryMessage());
                 } catch (\Exception $e) {
                     Log::error('Error viewing subscriptions', ['message_id' => $this->message->id, 'error' => $e->getMessage()]);
-                    $this->replyService->sendReply("âš ï¸ *Gagal memuat langganan*\n\nTerjadi kesalahan. Silakan coba lagi.");
+                    $this->replyService->sendReply("⚠️ *Gagal memuat langganan*\n\nTerjadi kesalahan. Silakan coba lagi.");
                 }
                 return;
             }
@@ -1859,10 +1859,10 @@ class ProcessIncomingMessage implements ShouldQueue
             $this->greetingService->handleSpecialIntent('sapa');
         } elseif ($intent === 'unknown') {
             $this->replyService->sendReply(
-                "ðŸ¤” Maaf, pesan tidak dikenali.\n\n".
-                "â€¢ _beli kopi 25rb_\n".
-                "â€¢ _ringkasan bulan ini_\n".
-                "â€¢ _help_ untuk panduan"
+                "🤔 Maaf, pesan tidak dikenali.\n\n".
+                "• _beli kopi 25rb_\n".
+                "• _ringkasan bulan ini_\n".
+                "• _help_ untuk panduan"
             );
             return;
         } else {
@@ -1891,12 +1891,12 @@ class ProcessIncomingMessage implements ShouldQueue
                 $amount = $finwaEntities['nominal'] ?? 0;
                 $formattedAmount = 'Rp ' . number_format($amount, 0, ',', '.');
                 
-                $clarificationMessage = "ðŸ¤” *Transfer {$formattedAmount}* - Ambigu (Pemasukan/Pengeluaran?)\n\n" .
+                $clarificationMessage = "🤔 *Transfer {$formattedAmount}* - Ambigu (Pemasukan/Pengeluaran?)\n\n" .
                     "Sistem tidak yakin apakah ini uang masuk atau keluar.\n\n" .
                     "Mohon ketik ulang dengan lebih jelas:\n" .
-                    "â€¢ *\"terima transfer {$formattedAmount}\"* (Pemasukan)\n" .
-                    "â€¢ *\"kirim transfer {$formattedAmount}\"* (Pengeluaran)\n" .
-                    "â€¢ *\"transfer ke Budi {$formattedAmount}\"* (Pengeluaran)";
+                    "• *\"terima transfer {$formattedAmount}\"* (Pemasukan)\n" .
+                    "• *\"kirim transfer {$formattedAmount}\"* (Pengeluaran)\n" .
+                    "• *\"transfer ke Budi {$formattedAmount}\"* (Pengeluaran)";
                 
                 $this->replyService->sendReply($clarificationMessage);
                 return;
@@ -1923,29 +1923,80 @@ class ProcessIncomingMessage implements ShouldQueue
             return;
         }
 
+        // Normalisasi slang sebelum deteksi tipe transaksi
+        $normalizedText = \App\Services\KeywordNormalizer::normalize($messageText);
+
         $formattedAmount = 'Rp ' . number_format($amount, 0, ',', '.');
+        $descDisplay = $description ?: $messageText;
+        $textLower = mb_strtolower($normalizedText);
+
+        // Deteksi apakah transaksi ini condong ke pemasukan atau pengeluaran
+        $incomeKeywords = config('finwa_category_rules.income_detection_keywords', []);
+        $isIncome = false;
+
+        foreach ($incomeKeywords as $keyword) {
+            if (str_starts_with($textLower, $keyword)) {
+                $afterKeyword = strlen($keyword);
+                if ($afterKeyword >= strlen($textLower)
+                    || $textLower[$afterKeyword] === ' '
+                    || ctype_digit($textLower[$afterKeyword])) {
+                    $isIncome = true;
+                    break;
+                }
+            }
+        }
+
+        if (! $isIncome) {
+            $expenseOverridePatterns = config('finwa_category_rules.expense_detection_patterns', []);
+            $isExpenseOverride = false;
+            foreach ($expenseOverridePatterns as $pattern) {
+                if (str_contains($textLower, $pattern)) {
+                    $isExpenseOverride = true;
+                    break;
+                }
+            }
+            if (! $isExpenseOverride && preg_match('/\bbayar\b/u', $textLower)) {
+                $isExpenseOverride = true;
+            }
+
+            if (! $isExpenseOverride) {
+                foreach ($incomeKeywords as $keyword) {
+                    if (preg_match('/\b'.preg_quote($keyword, '/').'\b/u', $textLower)) {
+                        $isIncome = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        $type = $isIncome ? 'income' : 'expense';
+        $typeLabel = $isIncome ? 'Pemasukan' : 'Pengeluaran';
+        $typeEmoji = $isIncome ? '💰' : '💸';
+        $exampleText = $isIncome
+            ? "• _dapat {$descDisplay} {$formattedAmount}_"
+            : "• _beli {$descDisplay} {$formattedAmount}_";
 
         $contextService->storePendingConfirmation([
             'original_message' => $messageText,
-            'description' => $description ?: $messageText,
+            'description' => $descDisplay,
             'amount' => $amount,
-            'type' => 'expense',
+            'type' => $type,
         ]);
 
-        $descDisplay = $description ?: $messageText;
         $this->replyService->sendReply(
-            "ðŸ¤” *Konfirmasi Transaksi*\n\n" .
+            "🤔 *Konfirmasi Transaksi*\n\n" .
             "Sepertinya Anda ingin mencatat:\n" .
-            "ðŸ’¸ *Pengeluaran* {$formattedAmount}\n" .
-            "ðŸ“ _{$descDisplay}_\n\n" .
+            "{$typeEmoji} *{$typeLabel}* {$formattedAmount}\n" .
+            "📝 _{$descDisplay}_\n\n" .
             "Balas *YA* untuk mencatat transaksi ini.\n" .
             "Atau kirim ulang dengan format yang lebih jelas, contoh:\n" .
-            "â€¢ _beli {$descDisplay} {$formattedAmount}_"
+            $exampleText
         );
 
         Log::info('Sent transaction confirmation prompt', [
             'message_id' => $this->message->id,
             'amount' => $amount,
+            'type' => $type,
             'description' => $description,
             'original' => $messageText,
         ]);
@@ -2003,14 +2054,14 @@ class ProcessIncomingMessage implements ShouldQueue
         $cur = number_format($outstanding, 0, ',', '.');
 
         if ($outstanding <= 0.009) {
-            return "âœ… Tidak ada sisa {$party['kind']} dengan *{$label}* (lunas).";
+            return "✅ Tidak ada sisa {$party['kind']} dengan *{$label}* (lunas).";
         }
 
         if ($party['kind'] === 'hutang') {
-            return "ðŸ¦ *Hutang ke {$label}*: Rp {$cur}\n\nKamu masih berutang ke {$label} sebesar Rp {$cur}.";
+            return "🏦 *Hutang ke {$label}*: Rp {$cur}\n\nKamu masih berutang ke {$label} sebesar Rp {$cur}.";
         }
 
-        return "ðŸ’¸ *Piutang dari {$label}*: Rp {$cur}\n\n{$label} masih berutang ke kamu sebesar Rp {$cur}.";
+        return "💸 *Piutang dari {$label}*: Rp {$cur}\n\n{$label} masih berutang ke kamu sebesar Rp {$cur}.";
     }
 
     /**
@@ -2024,26 +2075,26 @@ class ProcessIncomingMessage implements ShouldQueue
         $lines = [];
 
         if ($showHutang) {
-            $lines[] = 'ðŸ¦ *Hutang* (kamu berutang):';
+            $lines[] = '🏦 *Hutang* (kamu berutang):';
             $active = array_values(array_filter($summary['hutang'], static fn ($r) => abs((float) $r['outstanding']) > 0.009));
             if ($active === []) {
                 $lines[] = 'Tidak ada hutang aktif.';
             } else {
                 foreach ($active as $r) {
-                    $lines[] = "â€¢ {$r['counterparty']}: Rp ".number_format(abs((float) $r['outstanding']), 0, ',', '.');
+                    $lines[] = "• {$r['counterparty']}: Rp ".number_format(abs((float) $r['outstanding']), 0, ',', '.');
                 }
             }
             $lines[] = '';
         }
 
         if ($showPiutang) {
-            $lines[] = 'ðŸ’¸ *Piutang* (orang berutang ke kamu):';
+            $lines[] = '💸 *Piutang* (orang berutang ke kamu):';
             $active = array_values(array_filter($summary['piutang'], static fn ($r) => abs((float) $r['outstanding']) > 0.009));
             if ($active === []) {
                 $lines[] = 'Tidak ada piutang aktif.';
             } else {
                 foreach ($active as $r) {
-                    $lines[] = "â€¢ {$r['counterparty']}: Rp ".number_format(abs((float) $r['outstanding']), 0, ',', '.');
+                    $lines[] = "• {$r['counterparty']}: Rp ".number_format(abs((float) $r['outstanding']), 0, ',', '.');
                 }
             }
         }
@@ -2061,7 +2112,7 @@ class ProcessIncomingMessage implements ShouldQueue
         $incomeCategoryName = $this->getAmbiguousCategoryDisplayName($ambiguousResult['income_category_type']);
         $expenseCategoryName = $this->getAmbiguousCategoryDisplayName($ambiguousResult['expense_category_type']);
 
-        $prompt = "ðŸ¤” *Konfirmasi Tipe Transaksi*\n\n" .
+        $prompt = "🤔 *Konfirmasi Tipe Transaksi*\n\n" .
             "Pesan: _{$description}_\n" .
             "Jumlah: *{$formattedAmount}*\n\n" .
             "Ketik 1 untuk Pemasukan ({$incomeCategoryName})\n" .
@@ -2150,7 +2201,7 @@ class ProcessIncomingMessage implements ShouldQueue
         if ($retryCount >= 1) {
             // Max retries reached â€” cancel
             $contextService->clearPendingConfirmation();
-            $this->replyService->sendReply("âŒ Konfirmasi dibatalkan. Silakan kirim ulang transaksi Anda.");
+            $this->replyService->sendReply("❌ Konfirmasi dibatalkan. Silakan kirim ulang transaksi Anda.");
             return;
         }
 
@@ -2159,10 +2210,10 @@ class ProcessIncomingMessage implements ShouldQueue
         $contextService->storePendingConfirmation($pending);
 
         $this->replyService->sendReply(
-            "âš ï¸ Jawaban tidak dikenali.\n\n" .
+            "⚠️ Jawaban tidak dikenali.\n\n" .
             "Balas dengan:\n" .
-            "â€¢ *1* atau *pemasukan* untuk Pemasukan\n" .
-            "â€¢ *2* atau *pengeluaran* untuk Pengeluaran"
+            "• *1* atau *pemasukan* untuk Pemasukan\n" .
+            "• *2* atau *pengeluaran* untuk Pengeluaran"
         );
     }
 

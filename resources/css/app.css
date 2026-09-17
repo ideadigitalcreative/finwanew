@@ -182,16 +182,16 @@
     /* Radius */
     --radius: 0.5rem;
 
-    /* Sidebar */
-    --sidebar-background: hsl(210 20% 98%);
-    --sidebar-foreground: hsl(220 20% 10%);
-    --sidebar-primary: hsl(145 63% 42%);
-    --sidebar-primary-foreground: hsl(0 0% 100%);
-    --sidebar-accent: hsl(210 20% 96%);
-    --sidebar-accent-foreground: hsl(220 20% 10%);
-    --sidebar-border: hsl(214 20% 92%);
-    --sidebar-ring: hsl(145 63% 42%);
-    --sidebar: hsl(210 20% 98%);
+    /* Sidebar - Warm Finwa Theme */
+    --sidebar-background: #fbf9f3;
+    --sidebar-foreground: #1b1c19;
+    --sidebar-primary: #ffd23f;
+    --sidebar-primary-foreground: #574500;
+    --sidebar-accent: #f0eee8;
+    --sidebar-accent-foreground: #1b1c19;
+    --sidebar-border: #eae8e2;
+    --sidebar-ring: #ffd23f;
+    --sidebar: #fbf9f3;
 }
 
 .dark {
@@ -263,16 +263,16 @@
     --success: hsl(145 63% 45%);
     --success-light: hsl(145 40% 20%);
 
-    /* Sidebar */
-    --sidebar-background: hsl(220 20% 10%);
-    --sidebar-foreground: hsl(210 20% 98%);
-    --sidebar-primary: hsl(145 63% 45%);
-    --sidebar-primary-foreground: hsl(0 0% 100%);
-    --sidebar-accent: hsl(217 20% 20%);
-    --sidebar-accent-foreground: hsl(210 20% 98%);
-    --sidebar-border: hsl(217 20% 20%);
-    --sidebar-ring: hsl(145 63% 45%);
-    --sidebar: hsl(220 20% 10%);
+    /* Sidebar Dark */
+    --sidebar-background: #1b1c19;
+    --sidebar-foreground: #f5f3ee;
+    --sidebar-primary: #ffd23f;
+    --sidebar-primary-foreground: #241a00;
+    --sidebar-accent: rgba(255, 255, 255, 0.06);
+    --sidebar-accent-foreground: #f5f3ee;
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+    --sidebar-ring: #ffd23f;
+    --sidebar: #1b1c19;
 }
 
 @layer base {

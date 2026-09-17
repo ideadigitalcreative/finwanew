@@ -58,22 +58,14 @@ class TransactionConfirmationService
 
         $count = count($transactions);
 
-        // Random confirmation messages for variety
-        $confirmMessages = [
-            'Berhasil Dicatat! 🎉',
-            'Tercatat! ✨',
-            'Sudah Dicatat! 📝',
-            'Oke, Dicatat! 👍',
-            'Siap, Sudah Masuk! ✅',
-        ];
-        $statusText = $needsReview ? 'Menunggu Review ⏳' : $confirmMessages[array_rand($confirmMessages)];
+        // Fitur "tunggu review" dihilangkan — semua transaksi langsung dikonfirmasi
 
         // Default Standard Responses
         $confirmMessages = [
             'Berhasil Dicatat! 🎉', 'Tercatat! ✨', 'Sudah Dicatat! 📝',
             'Oke, Dicatat! 👍', 'Siap, Sudah Masuk! ✅',
         ];
-        $statusText = $needsReview ? 'Menunggu Review ⏳' : $confirmMessages[array_rand($confirmMessages)];
+        $statusText = $confirmMessages[array_rand($confirmMessages)];
 
         // Dynamic Sentiment Response (Respon Emosional) 🎭
         // Restore from Cache if property is lost (Robustness Fix)
@@ -108,7 +100,7 @@ class TransactionConfirmationService
         // Access the first transaction safely for sentiment check
         $firstTransaction = $transactions[0] ?? null;
 
-        if (! $needsReview && $currentSentiment && isset($currentSentiment['mood'])) {
+        if ($currentSentiment && isset($currentSentiment['mood'])) {
             $mood = $currentSentiment['mood'];
             $score = $currentSentiment['score'] ?? 0;
             $txType = $firstTransaction->type ?? 'expense';
@@ -166,7 +158,9 @@ class TransactionConfirmationService
             $reply .= "{$typeEmoji} *{$typeLabel}*\n";
             $reply .= "💵 Rp {$amount}\n";
             $reply .= "{$categoryIcon} {$category}";
-            if ($desc && $desc !== '-' && strlen($desc) < 50) {
+            if ($transaction->merchant) {
+                $reply .= " • 🏪 {$transaction->merchant}";
+            } elseif ($desc && $desc !== '-' && strlen($desc) < 50) {
                 $reply .= " • _{$desc}_";
             }
 
@@ -390,6 +384,88 @@ class TransactionConfirmationService
             ->sum('amount');
         $monthlyExpenseFormatted = number_format($monthlyExpense, 0, ',', '.');
         $reply .= '📊 Belanja '.now()->translatedFormat('F').": Rp {$monthlyExpenseFormatted}";
+
+        $this->sendReply($reply);
+    }
+
+    /**
+     * Send detailed transfer confirmation for bank transfer proofs
+     * Shows: bank name, recipient, account, reference, transfer note, and total
+     */
+    public function sendTransferConfirmation(
+        Transaction $transaction,
+        ?string $bankName,
+        ?string $recipientName,
+        ?string $recipientAccount,
+        ?string $senderAccount,
+        ?string $referenceNumber,
+        ?string $transferNote
+    ): void {
+        $amount = number_format($transaction->amount, 0, ',', '.');
+
+        $reply = "🏦 *Transfer Tercatat!* ✅\n";
+        if ($bankName) {
+            $reply .= "🏪 *{$bankName}*\n";
+        }
+        $reply .= "\n";
+
+        // Transaction date
+        $transactionDate = $transaction->transaction_date ?? now();
+        $reply .= '📅 '.$transactionDate->translatedFormat('d F Y')."\n";
+
+        // Category info
+        $transaction->load('category');
+        if ($transaction->category) {
+            $catIcon = $transaction->category->icon ?? '📤';
+            $catName = $transaction->category->name ?? 'Transfer Keluar';
+            $reply .= "{$catIcon} Kategori: {$catName}\n";
+        }
+        $reply .= "\n";
+
+        // Transfer details
+        if ($recipientName) {
+            $reply .= "📤 Ke: *{$recipientName}*\n";
+        }
+        if ($recipientAccount) {
+            $reply .= "💳 Rek: {$recipientAccount}\n";
+        }
+        if ($senderAccount) {
+            $reply .= "📥 Dari: {$senderAccount}\n";
+        }
+        if ($transferNote) {
+            $reply .= "📝 Berita: _{$transferNote}_\n";
+        }
+        if ($referenceNumber) {
+            $reply .= "🔖 Ref: {$referenceNumber}\n";
+        }
+
+        // Total
+        $reply .= "\n━━━━━━━━━━━━━━━\n";
+        $reply .= "💵 *TOTAL: Rp {$amount}*\n\n";
+
+        // Balance
+        if ($transaction->balance) {
+            $currentBalance = number_format($transaction->balance->balance ?? 0, 0, ',', '.');
+            $balanceName = $transaction->balance->account_name ?? 'Saldo';
+            $reply .= "👛 Sisa saldo {$balanceName}: Rp {$currentBalance}\n";
+        } else {
+            $totalBalance = Balance::where('tenant_id', $this->message->tenant_id)
+                ->sum('balance');
+            if ($totalBalance > 0) {
+                $currentBalance = number_format($totalBalance, 0, ',', '.');
+                $reply .= "👛 Total saldo: Rp {$currentBalance}\n";
+            }
+        }
+
+        // Monthly summary
+        $monthStart = now()->startOfMonth();
+        $monthEnd = now()->endOfMonth();
+        $monthlyExpense = Transaction::where('tenant_id', $this->message->tenant_id)
+            ->where('type', 'expense')
+            ->whereBetween('transaction_date', [$monthStart, $monthEnd])
+            ->sum('amount');
+        $monthlyExpenseFormatted = number_format($monthlyExpense, 0, ',', '.');
+        $reply .= '📊 Pengeluaran '.now()->translatedFormat('F').": Rp {$monthlyExpenseFormatted}";
 
         $this->sendReply($reply);
     }

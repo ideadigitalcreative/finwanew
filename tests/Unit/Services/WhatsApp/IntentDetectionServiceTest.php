@@ -55,6 +55,9 @@ it('detects simple queries', function () {
 it('detects balance check', function () {
     expect($this->service->isBalanceCheck('saldo'))->toBeTrue();
     expect($this->service->isBalanceCheck('cek saldo'))->toBeTrue();
+    expect($this->service->isBalanceCheck('cek cashflow'))->toBeTrue();
+    expect($this->service->isBalanceCheck('cash flow'))->toBeTrue();
+    expect($this->service->isBalanceCheck('arus kas'))->toBeTrue();
     expect($this->service->isBalanceCheck('saldo 400rb'))->toBeFalse(); // This is set balance
 });
 

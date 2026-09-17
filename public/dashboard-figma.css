@@ -1,0 +1,442 @@
+/* ===== Dashboard Figma - Streak Mingguan ===== */
+/* Desain tokens dari Figma:
+   oranye #ffbb46 | ungu #5b5bd6 | ungu muda #cac8ff | maroon #703333
+   abu #e5e5e5 | abu teks #b5b5b5 | merah #ff6f6f | font Inter */
+
+:root {
+    --orange: #ffbb46;
+    --purple: #5b5bd6;
+    --purple-soft: #cac8ff;
+    --maroon: #703333;
+    --gray-card: #e5e5e5;
+    --gray-text: #b5b5b5;
+    --red: #ff6f6f;
+    --dark: #373636;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f4f4f9;
+    min-height: 100vh;
+}
+
+/* ===== Layout ===== */
+.dashboard {
+    width: min(1361px, 100% - 48px);
+    margin: 0 auto;
+    padding: 40px 0 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+}
+
+/* ===== Banner Streak ===== */
+.streak-banner {
+    position: relative;
+    background-color: var(--orange);
+    border-radius: 66px;
+    padding: 64px 720px 64px 80px;
+    min-height: 325px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+}
+
+.banner-title {
+    font-size: 64px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--maroon);
+    max-width: 809px;
+}
+
+.banner-art {
+    position: absolute;
+    right: 60px;
+    bottom: -10px;
+    width: 551px;
+    height: auto;
+    max-height: 390px;
+    object-fit: contain;
+    border-radius: 24px;
+}
+
+/* ===== Streak Mingguan ===== */
+.weekly-streak {
+    display: grid;
+    grid-template-columns: repeat(5, 217px);
+    justify-content: center;
+    gap: 40px;
+}
+
+.streak-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.day-label {
+    font-size: 48px;
+    font-weight: 500;
+    color: var(--gray-text);
+    line-height: 1;
+}
+
+.streak-col.active .day-label,
+.streak-col.done .day-label {
+    color: var(--purple);
+}
+
+.streak-card {
+    position: relative;
+    width: 217px;
+    height: 267px;
+    border-radius: 100px;
+    background-color: var(--gray-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.day-num {
+    font-size: 96px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--gray-text);
+}
+
+.streak-col.done .streak-card,
+.streak-col.active .streak-card {
+    background-color: var(--purple-soft);
+}
+
+.streak-col.done .day-num {
+    color: #ffffff;
+}
+
+.streak-col.today-complete .streak-card {
+    background-color: var(--purple);
+    border-radius: 87px;
+}
+
+.check-icon {
+    width: 64px;
+    height: 64px;
+    display: none;
+}
+
+.streak-col.done .check-icon {
+    display: block;
+}
+
+/* Titik penanda pada hari aktif */
+.streak-dots {
+    display: none;
+    gap: 18px;
+}
+
+.streak-col.active .streak-dots {
+    display: flex;
+}
+
+.streak-dots span {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background-color: var(--purple);
+}
+
+/* ===== Pemasukan & Pengeluaran ===== */
+.summary-row {
+    display: grid;
+    grid-template-columns: 658px 1fr;
+    gap: 54px;
+}
+
+.summary-card {
+    height: 278px;
+    border-radius: 66px;
+    padding: 48px 56px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.summary-card.income {
+    background-color: var(--purple-soft);
+}
+
+.summary-card.expense {
+    background-color: var(--red);
+}
+
+.summary-card.income .summary-label,
+.summary-card.income .summary-amount {
+    color: var(--purple);
+}
+
+.summary-card.expense .summary-label {
+    color: var(--dark);
+}
+
+.summary-card.expense .summary-amount {
+    color: #000000;
+}
+
+.summary-label {
+    font-size: 48px;
+    font-weight: 500;
+}
+
+.summary-amount {
+    font-size: 64px;
+    font-weight: 700;
+}
+
+/* ===== Bottom Navigation (BNB-27) ===== */
+.bottom-nav {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: min(1361px, 100%);
+    background-color: #ffffff;
+    border-radius: 0 0 82px 82px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 0 156px;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.08);
+    z-index: 100;
+}
+
+/* Bar putih dengan tinggi visual 238px seperti di Figma */
+.bottom-nav::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    height: 140px;
+    background-color: #ffffff;
+    border-radius: 82px;
+}
+
+.nav-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 39px 38px;
+    text-decoration: none;
+}
+
+/* Lingkaran putih (notch) tempat ikon Home aktif menonjol keluar bar */
+.nav-bubble {
+    position: relative;
+    width: 172px;
+    height: 172px;
+    margin-top: -100px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-bubble svg {
+    width: 76px;
+    height: 76px;
+}
+
+.nav-icon {
+    width: 76px;
+    height: 76px;
+}
+
+.nav-label {
+    font-size: 32px;
+    font-weight: 500;
+    color: #9db2ce;
+    white-space: nowrap;
+}
+
+.nav-item.active .nav-label {
+    color: var(--orange);
+    font-weight: 700;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 1200px) {
+    .banner-title {
+        font-size: 48px;
+    }
+
+    .day-label {
+        font-size: 32px;
+    }
+
+    .day-num {
+        font-size: 64px;
+    }
+
+    .streak-card {
+        width: 140px;
+        height: 180px;
+        border-radius: 70px;
+    }
+
+    .check-icon {
+        width: 44px;
+        height: 44px;
+    }
+
+    .streak-dots span {
+        width: 36px;
+        height: 36px;
+    }
+
+    .weekly-streak {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+    }
+
+    .summary-row {
+        grid-template-columns: 1fr;
+    }
+
+    .summary-card {
+        height: auto;
+        min-height: 180px;
+        padding: 32px 40px;
+    }
+
+    .summary-label {
+        font-size: 32px;
+    }
+
+    .summary-amount {
+        font-size: 44px;
+    }
+
+    .streak-banner {
+        padding: 48px 380px 48px 48px;
+        min-height: 260px;
+    }
+
+    .banner-art {
+        width: 320px;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard {
+        width: min(1361px, 100% - 32px);
+        gap: 28px;
+    }
+
+    .streak-banner {
+        padding: 40px 32px;
+        min-height: auto;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 24px;
+    }
+
+    .banner-title {
+        font-size: 36px;
+    }
+
+    .banner-art {
+        position: static;
+        width: 100%;
+        max-height: 220px;
+    }
+
+    .weekly-streak {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 8px;
+    }
+
+    .streak-col {
+        gap: 8px;
+    }
+
+    .day-label {
+        font-size: 20px;
+    }
+
+    .streak-card {
+        width: 100%;
+        height: 120px;
+        border-radius: 40px;
+        gap: 8px;
+    }
+
+    .day-num {
+        font-size: 40px;
+    }
+
+    .check-icon {
+        width: 32px;
+        height: 32px;
+    }
+
+    .streak-dots span {
+        width: 22px;
+        height: 22px;
+    }
+
+    .summary-label {
+        font-size: 24px;
+    }
+
+    .summary-amount {
+        font-size: 36px;
+    }
+
+    .summary-card {
+        padding: 28px 32px;
+        border-radius: 40px;
+    }
+
+    .bottom-nav {
+        padding: 0 16px;
+        border-radius: 0 0 36px 36px;
+    }
+
+    .bottom-nav::before {
+        height: 76px;
+        border-radius: 36px;
+    }
+
+    .nav-bubble {
+        width: 92px;
+        height: 92px;
+        margin-top: -56px;
+    }
+
+    .nav-bubble svg,
+    .nav-icon {
+        width: 42px;
+        height: 42px;
+    }
+
+    .nav-label {
+        font-size: 14px;
+    }
+
+    .nav-item {
+        padding: 20px 8px;
+        gap: 8px;
+    }
+}

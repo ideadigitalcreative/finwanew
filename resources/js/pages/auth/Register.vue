@@ -9,24 +9,31 @@ import AuthBase from '@/layouts/AuthLayout.vue';
 import { login } from '@/routes';
 import { store } from '@/routes/register';
 import { Form, Head } from '@inertiajs/vue3';
+import { ref } from 'vue';
+
+const showPassword = ref(false);
+const showConfirmPassword = ref(false);
 </script>
 
 <template>
     <AuthBase
-        title="Create an account"
-        description="Enter your details below to create your account"
+        title="Buat Akun Baru"
+        description="Mulai langkah mudah mengelola keuangan pribadimu bersama FinWa"
     >
-        <Head title="Register" />
+        <Head title="Daftar Akun - FinWa">
+            <meta name="description" content="Daftar akun FinWa gratis. Mulai catat keuangan via WhatsApp secara otomatis hari ini." />
+            <meta name="robots" content="noindex, follow" />
+        </Head>
 
         <Form
             v-bind="store.form()"
             :reset-on-success="['password', 'password_confirmation']"
             v-slot="{ errors, processing }"
-            class="flex flex-col gap-6"
+            class="flex flex-col gap-4"
         >
-            <div class="grid gap-6">
-                <div class="grid gap-2">
-                    <Label for="name">Name</Label>
+            <div class="grid gap-4">
+                <div class="grid gap-1.5">
+                    <Label for="name" class="text-xs font-bold text-[#1b1c19] dark:text-white">Nama Lengkap</Label>
                     <Input
                         id="name"
                         type="text"
@@ -35,13 +42,14 @@ import { Form, Head } from '@inertiajs/vue3';
                         :tabindex="1"
                         autocomplete="name"
                         name="name"
-                        placeholder="Full name"
+                        placeholder="Contoh: Budi Santoso"
+                        class="bg-[#f5f3ee]/40 dark:bg-white/5 border-[#eae8e2] dark:border-white/10 text-[#1b1c19] dark:text-white placeholder:text-[#4d4634]/40 dark:placeholder:text-white/30 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:border-[#ffd23f] focus:ring-2 focus:ring-[#ffd23f]/30"
                     />
                     <InputError :message="errors.name" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="email">Email address</Label>
+                <div class="grid gap-1.5">
+                    <Label for="email" class="text-xs font-bold text-[#1b1c19] dark:text-white">Alamat Email</Label>
                     <Input
                         id="email"
                         type="email"
@@ -49,59 +57,90 @@ import { Form, Head } from '@inertiajs/vue3';
                         :tabindex="2"
                         autocomplete="email"
                         name="email"
-                        placeholder="email@example.com"
+                        placeholder="nama@email.com"
+                        class="bg-[#f5f3ee]/40 dark:bg-white/5 border-[#eae8e2] dark:border-white/10 text-[#1b1c19] dark:text-white placeholder:text-[#4d4634]/40 dark:placeholder:text-white/30 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:border-[#ffd23f] focus:ring-2 focus:ring-[#ffd23f]/30"
                     />
                     <InputError :message="errors.email" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="password">Password</Label>
-                    <Input
-                        id="password"
-                        type="password"
-                        required
-                        :tabindex="3"
-                        autocomplete="new-password"
-                        name="password"
-                        placeholder="Password"
-                    />
+                <div class="grid gap-1.5">
+                    <Label for="password" class="text-xs font-bold text-[#1b1c19] dark:text-white">Kata Sandi</Label>
+                    <div class="relative">
+                        <Input
+                            id="password"
+                            :type="showPassword ? 'text' : 'password'"
+                            required
+                            :tabindex="3"
+                            autocomplete="new-password"
+                            name="password"
+                            placeholder="Minimal 8 karakter"
+                            class="bg-[#f5f3ee]/40 dark:bg-white/5 border-[#eae8e2] dark:border-white/10 text-[#1b1c19] dark:text-white placeholder:text-[#4d4634]/40 dark:placeholder:text-white/30 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:border-[#ffd23f] focus:ring-2 focus:ring-[#ffd23f]/30 pr-10"
+                        />
+                        <button
+                            type="button"
+                            class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-[#4d4634]/50 hover:text-[#1b1c19] dark:text-white/50 dark:hover:text-white transition-colors"
+                            :aria-label="showPassword ? 'Sembunyikan password' : 'Tampilkan password'"
+                            @click="showPassword = !showPassword"
+                        >
+                            <span class="material-symbols-outlined text-lg leading-none select-none">
+                                {{ showPassword ? 'visibility_off' : 'visibility' }}
+                            </span>
+                        </button>
+                    </div>
                     <InputError :message="errors.password" />
                 </div>
 
-                <div class="grid gap-2">
-                    <Label for="password_confirmation">Confirm password</Label>
-                    <Input
-                        id="password_confirmation"
-                        type="password"
-                        required
-                        :tabindex="4"
-                        autocomplete="new-password"
-                        name="password_confirmation"
-                        placeholder="Confirm password"
-                    />
+                <div class="grid gap-1.5">
+                    <Label for="password_confirmation" class="text-xs font-bold text-[#1b1c19] dark:text-white">Konfirmasi Kata Sandi</Label>
+                    <div class="relative">
+                        <Input
+                            id="password_confirmation"
+                            :type="showConfirmPassword ? 'text' : 'password'"
+                            required
+                            :tabindex="4"
+                            autocomplete="new-password"
+                            name="password_confirmation"
+                            placeholder="Ulangi kata sandi"
+                            class="bg-[#f5f3ee]/40 dark:bg-white/5 border-[#eae8e2] dark:border-white/10 text-[#1b1c19] dark:text-white placeholder:text-[#4d4634]/40 dark:placeholder:text-white/30 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:border-[#ffd23f] focus:ring-2 focus:ring-[#ffd23f]/30 pr-10"
+                        />
+                        <button
+                            type="button"
+                            class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-[#4d4634]/50 hover:text-[#1b1c19] dark:text-white/50 dark:hover:text-white transition-colors"
+                            :aria-label="showConfirmPassword ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'"
+                            @click="showConfirmPassword = !showConfirmPassword"
+                        >
+                            <span class="material-symbols-outlined text-lg leading-none select-none">
+                                {{ showConfirmPassword ? 'visibility_off' : 'visibility' }}
+                            </span>
+                        </button>
+                    </div>
                     <InputError :message="errors.password_confirmation" />
                 </div>
 
                 <Button
                     type="submit"
-                    class="mt-2 w-full"
-                    tabindex="5"
+                    class="mt-2 w-full bg-[#ffd23f] hover:bg-[#ffe089] text-[#574500] font-bold text-sm transition-all rounded-xl py-2.5 h-auto shadow-none border-0"
+                    :tabindex="5"
                     :disabled="processing"
                     data-test="register-user-button"
                 >
                     <Spinner v-if="processing" />
-                    Create account
+                    <span v-else class="flex items-center justify-center gap-1.5">
+                        <span class="material-symbols-outlined text-lg">person_add</span>
+                        Daftar Akun FinWa
+                    </span>
                 </Button>
             </div>
 
-            <div class="text-center text-sm text-muted-foreground">
-                Already have an account?
+            <div class="text-center text-xs text-[#4d4634]/70 dark:text-white/60 mt-2">
+                Sudah memiliki akun?
                 <TextLink
                     :href="login()"
-                    class="underline underline-offset-4"
+                    class="font-bold text-[#006c4f] hover:text-[#007152] dark:text-[#51fac1] dark:hover:text-[#51fac1]/80 transition-colors ml-1"
                     :tabindex="6"
-                    >Log in</TextLink
                 >
+                    Masuk di sini
+                </TextLink>
             </div>
         </Form>
     </AuthBase>

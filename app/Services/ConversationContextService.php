@@ -192,6 +192,112 @@ class ConversationContextService
     }
 
     /**
+     * Store last balance correction in context (for undoing it)
+     */
+    public function storeLastBalanceCorrection(int $balanceId, float $oldBalance, float $newBalance): void
+    {
+        try {
+            $lastContext = $this->getBaseQuery()
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $correctionData = [
+                'balance_id' => $balanceId,
+                'old_balance' => $oldBalance,
+                'new_balance' => $newBalance,
+                'created_at' => now()->toIso8601String(),
+            ];
+
+            if ($lastContext) {
+                $entities = $lastContext->entities ?? [];
+                $entities['last_balance_correction'] = $correctionData;
+                $lastContext->update(['entities' => $entities]);
+
+                Log::info('Stored last balance correction in context', [
+                    'tenant_id' => $this->tenantId,
+                    'balance_id' => $balanceId,
+                    'old_balance' => $oldBalance,
+                    'new_balance' => $newBalance,
+                ]);
+            } else {
+                $this->addContext(
+                    'update_saldo',
+                    'update_saldo',
+                    ['last_balance_correction' => $correctionData],
+                    'balance_correction'
+                );
+
+                Log::info('Created new context for last balance correction', [
+                    'tenant_id' => $this->tenantId,
+                    'balance_id' => $balanceId,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to store last balance correction', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Get last balance correction from context
+     */
+    public function getLastBalanceCorrection(): ?array
+    {
+        try {
+            $contexts = $this->getBaseQuery()
+                ->where('created_at', '>=', Carbon::now()->subMinutes(self::CONTEXT_EXPIRY_MINUTES))
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
+
+            foreach ($contexts as $context) {
+                $entities = $context->entities ?? [];
+                if (isset($entities['last_balance_correction'])) {
+                    return $entities['last_balance_correction'];
+                }
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::warning('Error getting last balance correction', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Clear last balance correction from context
+     */
+    public function clearLastBalanceCorrection(): void
+    {
+        try {
+            $contexts = $this->getBaseQuery()
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
+
+            foreach ($contexts as $context) {
+                $entities = $context->entities ?? [];
+                if (isset($entities['last_balance_correction'])) {
+                    unset($entities['last_balance_correction']);
+                    $context->update(['entities' => $entities]);
+                    break;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to clear last balance correction', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Get recent context entries
      */
     public function getContext(int $limit = 5): array
@@ -464,6 +570,132 @@ class ConversationContextService
             }
         } catch (\Exception $e) {
             Log::warning('Failed to clear pending transaction', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Store pending transaction confirmation
+     * When user sends "[description] [amount]" without recognized keyword,
+     * store the extracted data and wait for user to confirm with "YA"
+     */
+    public function storePendingConfirmation(array $transactionData): void
+    {
+        try {
+            $lastContext = $this->getBaseQuery()
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $pendingData = [
+                'original_message' => $transactionData['original_message'],
+                'description' => $transactionData['description'],
+                'amount' => $transactionData['amount'],
+                'type' => $transactionData['type'] ?? 'expense',
+                'created_at' => now()->toIso8601String(),
+            ];
+
+            // Include additional fields for ambiguous confirmations
+            if (($transactionData['type'] ?? null) === 'ambiguous') {
+                $pendingData['income_category_type'] = $transactionData['income_category_type'] ?? null;
+                $pendingData['expense_category_type'] = $transactionData['expense_category_type'] ?? null;
+                $pendingData['transaction_date'] = $transactionData['transaction_date'] ?? now()->toDateString();
+                $pendingData['retry_count'] = $transactionData['retry_count'] ?? 0;
+            }
+
+            if ($lastContext) {
+                $entities = $lastContext->entities ?? [];
+                $entities['pending_confirmation'] = $pendingData;
+                $lastContext->update(['entities' => $entities]);
+            } else {
+                $this->addContext(
+                    $transactionData['original_message'],
+                    'pending_confirmation',
+                    ['pending_confirmation' => $pendingData],
+                    'confirmation'
+                );
+            }
+
+            Log::info('Stored pending confirmation in context', [
+                'tenant_id' => $this->tenantId,
+                'original_message' => $transactionData['original_message'],
+                'amount' => $transactionData['amount'],
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('Failed to store pending confirmation', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Get pending confirmation (if exists and not expired - 5 min)
+     */
+    public function getPendingConfirmation(): ?array
+    {
+        try {
+            $contexts = $this->getBaseQuery()
+                ->where('created_at', '>=', Carbon::now()->subMinutes(5))
+                ->orderBy('created_at', 'desc')
+                ->limit(3)
+                ->get();
+
+            foreach ($contexts as $context) {
+                $entities = $context->entities ?? [];
+                if (isset($entities['pending_confirmation'])) {
+                    $pending = $entities['pending_confirmation'];
+
+                    $createdAt = Carbon::parse($pending['created_at'] ?? now());
+                    if ($createdAt->diffInMinutes(now()) <= 5) {
+                        Log::info('Found pending confirmation in context', [
+                            'tenant_id' => $this->tenantId,
+                            'pending' => $pending,
+                        ]);
+
+                        return $pending;
+                    }
+                }
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::warning('Error getting pending confirmation', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Clear pending confirmation after processed
+     */
+    public function clearPendingConfirmation(): void
+    {
+        try {
+            $contexts = $this->getBaseQuery()
+                ->orderBy('created_at', 'desc')
+                ->limit(3)
+                ->get();
+
+            foreach ($contexts as $context) {
+                $entities = $context->entities ?? [];
+                if (isset($entities['pending_confirmation'])) {
+                    unset($entities['pending_confirmation']);
+                    $context->update(['entities' => $entities]);
+
+                    Log::info('Cleared pending confirmation from context', [
+                        'tenant_id' => $this->tenantId,
+                        'context_id' => $context->id,
+                    ]);
+                    break;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to clear pending confirmation', [
                 'tenant_id' => $this->tenantId,
                 'error' => $e->getMessage(),
             ]);
