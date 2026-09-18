@@ -2179,7 +2179,14 @@ class TransactionService
     public function askBackForEdit(string $field): void
     {
         try {
+            Log::info('🔍 DEBUG askBackForEdit: START', ['field' => $field]);
+
             $transaction = $this->resolveLastTransaction();
+
+            Log::info('🔍 DEBUG askBackForEdit: after resolveLastTransaction', [
+                'has_transaction' => $transaction ? true : false,
+                'transaction_id' => $transaction?->id,
+            ]);
 
             if (! $transaction) {
                 $this->sendReply("⚠️ Tidak ada transaksi terakhir yang bisa diubah.");
@@ -2187,16 +2194,32 @@ class TransactionService
             }
 
             // Simpan state pending_edit
+            Log::info('🔍 DEBUG askBackForEdit: sebelum storePendingEdit');
             $contextService = new ConversationContextService(
                 $this->message->tenant_id,
                 $this->getAttributionSenderId()
             );
             $contextService->storePendingEdit($transaction->id, $field);
+            Log::info('🔍 DEBUG askBackForEdit: setelah storePendingEdit');
 
             // Format info transaksi terakhir
+            Log::info('🔍 DEBUG askBackForEdit: sebelum akses category');
             $amount = number_format($transaction->amount, 0, ',', '.');
-            $category = $transaction->category->name ?? 'Lainnya';
+            $category = 'Lainnya'; // Default aman
+            try {
+                if ($transaction->category) {
+                    $category = $transaction->category->name;
+                }
+            } catch (\Exception $catEx) {
+                Log::warning('Gagal load kategori', ['error' => $catEx->getMessage()]);
+            }
             $typeLabel = $transaction->type === 'income' ? 'Pemasukan' : 'Pengeluaran';
+
+            Log::info('🔍 DEBUG askBackForEdit: sebelum sendReply', [
+                'amount' => $amount,
+                'category' => $category,
+                'type' => $typeLabel,
+            ]);
 
             // Template pertanyaan per field
             $labels = [
@@ -2220,9 +2243,11 @@ class TransactionService
                 'transaction_id' => $transaction->id,
                 'field'          => $field,
             ]);
+            Log::info('🔍 DEBUG askBackForEdit: SELESAI (success)');
         } catch (\Exception $e) {
             Log::error('Error in askBackForEdit', [
                 'error'   => $e->getMessage(),
+                'trace'   => $e->getTraceAsString(),
                 'field'   => $field,
             ]);
 
