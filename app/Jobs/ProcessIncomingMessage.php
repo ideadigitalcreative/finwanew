@@ -344,6 +344,23 @@ class ProcessIncomingMessage implements ShouldQueue
     }
 
     /**
+     * Ambil ID pengirim sebenarnya (participant jika pesan dari grup).
+     * Dipakai agar context/pending_edit ter-scope ke pengirim yang tepat.
+     */
+    protected function getAttributionSenderId(): string
+    {
+        $metadata = is_array($this->message->metadata)
+            ? $this->message->metadata
+            : json_decode($this->message->metadata ?? '{}', true);
+
+        if (($metadata['is_group'] ?? false) && ! empty($metadata['author'])) {
+            return $metadata['author'];
+        }
+
+        return $this->message->sender_id;
+    }
+
+    /**
      * Process text message - classify intent and handle accordingly
      * 
      * @param string|null $overrideText Optional text to process (used for STT transcribed text)
@@ -1225,17 +1242,31 @@ class ProcessIncomingMessage implements ShouldQueue
         // tidak memiliki format perintah yang jelas dan akan tertangkap oleh AI fallback
         // jika tidak dicek di sini.
         if (! $hasAmount || strlen($messageText) < 60) {
-            $contextServiceForPending = new ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
+            $contextServiceForPending = new \App\Services\ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
             $pendingEdit = $contextServiceForPending->getPendingEdit();
-            
-            if ($pendingEdit) {
-                Log::info('Fast-path 1.6af0: Jawaban ask-back terdeteksi', [
-                    'message' => $messageText,
-                    'field'   => $pendingEdit['awaiting_field'] ?? 'unknown',
-                ]);
 
-                $this->transactionService->handleEditWithContext($messageText);
-                return;
+            if ($pendingEdit) {
+                // Validasi: pastikan pesan memang berbentuk jawaban untuk field yang ditanya.
+                // Mencegah transaksi baru (mis. "makan siang 50rb") salah dianggap jawaban ask-back.
+                $awaitingField = $pendingEdit['awaiting_field'] ?? '';
+                $trimmedLower = trim($textLower);
+                $isValidAnswer = match ($awaitingField) {
+                    'amount' => (bool) preg_match('/\d/', $messageText),
+                    'type'   => (bool) preg_match('/^(pemasukan|pendapatan|income|uang masuk|pengeluaran|expense|uang keluar)$/i', $trimmedLower),
+                    'date'   => (bool) preg_match('/\d/', $messageText),
+                    'category' => ! $hasAmount,
+                    default  => ! $hasAmount,
+                };
+
+                if ($isValidAnswer) {
+                    Log::info('Fast-path 1.6af0: Jawaban ask-back terdeteksi', [
+                        'message' => $messageText,
+                        'field'   => $awaitingField ?: 'unknown',
+                    ]);
+
+                    $this->transactionService->handleEditWithContext($messageText);
+                    return;
+                }
             }
         }
         

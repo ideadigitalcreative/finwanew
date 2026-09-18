@@ -291,3 +291,31 @@ it('menolak "hapus transaksi ini" sebagai jawaban (ada kata perintah)', function
 
     expect($hasCommand)->toBeTrue(); // Ada kata "hapus" di awal
 });
+
+// ==========================================
+// TASK 7: Regresi — Method Kritis Harus Ada
+// ==========================================
+// Mencegah bug "Call to undefined method" yang membuat SEMUA pesan
+// gagal diproses (job crash sebelum kirim balasan).
+
+it('ProcessIncomingMessage memiliki method getAttributionSenderId()', function () {
+    // Bug: fast-path 1.6af0 memanggil $this->getAttributionSenderId()
+    // padahal method ini tidak ada → semua pesan pendek crash.
+    expect((new ReflectionClass(ProcessIncomingMessage::class))->hasMethod('getAttributionSenderId'))->toBeTrue();
+});
+
+it('TransactionService memiliki method yang dipakai alur ask-back', function () {
+    $reflection = new ReflectionClass(\App\Services\Transaction\TransactionService::class);
+
+    expect($reflection->hasMethod('askBackForEdit'))->toBeTrue();
+    expect($reflection->hasMethod('resolveLastTransaction'))->toBeTrue();
+    expect($reflection->hasMethod('handleEditWithContext'))->toBeTrue();
+});
+
+it('ConversationContextService memiliki method state pending_edit', function () {
+    $reflection = new ReflectionClass(ConversationContextService::class);
+
+    expect($reflection->hasMethod('storePendingEdit'))->toBeTrue();
+    expect($reflection->hasMethod('getPendingEdit'))->toBeTrue();
+    expect($reflection->hasMethod('clearPendingEdit'))->toBeTrue();
+});
