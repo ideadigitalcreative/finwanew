@@ -18,6 +18,9 @@ class ConversationContextService
     // Maximum context entries to keep
     const MAX_CONTEXT_ENTRIES = 5;
 
+    // Pending edit expires after 5 minutes
+    const PENDING_EDIT_EXPIRY_MINUTES = 5;
+
     public function __construct(int $tenantId, ?string $senderId = null)
     {
         $this->tenantId = $tenantId;
@@ -734,6 +737,131 @@ class ConversationContextService
                 ->orderBy('created_at', 'asc')
                 ->limit($toDelete)
                 ->delete();
+        }
+    }
+
+    // ==========================================
+    // PENDING EDIT — State untuk sesi edit ambigu
+    // ==========================================
+
+    /**
+     * Simpan state pending edit (user diminta klarifikasi).
+     *
+     * @param int $transactionId ID transaksi yang akan diedit
+     * @param string $awaitingField Field yang ditanya: 'type' | 'category' | 'amount' | 'date'
+     * @param array $meta Data tambahan (opsional)
+     */
+    public function storePendingEdit(int $transactionId, string $awaitingField, array $meta = []): void
+    {
+        try {
+            $pending = [
+                'transaction_id'  => $transactionId,
+                'awaiting_field'  => $awaitingField,
+                'created_at'      => now()->toIso8601String(),
+                'meta'            => $meta,
+            ];
+
+            $lastContext = $this->getBaseQuery()
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if ($lastContext) {
+                $entities = $lastContext->entities ?? [];
+                $entities['pending_edit'] = $pending;
+                $lastContext->update(['entities' => $entities]);
+            } else {
+                $this->addContext(
+                    'pending_edit',
+                    'pending_edit',
+                    ['pending_edit' => $pending],
+                    'edit_prompt'
+                );
+            }
+
+            Log::info('Stored pending edit in context', [
+                'tenant_id'      => $this->tenantId,
+                'transaction_id' => $transactionId,
+                'awaiting_field' => $awaitingField,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('Failed to store pending edit', [
+                'tenant_id' => $this->tenantId,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Ambil pending edit jika ada dan belum expired (5 menit).
+     *
+     * @return array|null Data pending edit atau null jika tidak ada/expired
+     */
+    public function getPendingEdit(): ?array
+    {
+        try {
+            $contexts = $this->getBaseQuery()
+                ->where('created_at', '>=', Carbon::now()->subMinutes(self::PENDING_EDIT_EXPIRY_MINUTES))
+                ->orderBy('created_at', 'desc')
+                ->limit(3)
+                ->get();
+
+            foreach ($contexts as $context) {
+                $entities = $context->entities ?? [];
+                if (isset($entities['pending_edit'])) {
+                    $pending = $entities['pending_edit'];
+
+                    $createdAt = Carbon::parse($pending['created_at'] ?? now());
+                    if ($createdAt->diffInMinutes(now()) <= self::PENDING_EDIT_EXPIRY_MINUTES) {
+                        Log::info('Found pending edit in context', [
+                            'tenant_id' => $this->tenantId,
+                            'pending'   => $pending,
+                        ]);
+
+                        return $pending;
+                    }
+                }
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::warning('Error getting pending edit', [
+                'tenant_id' => $this->tenantId,
+                'error'     => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Hapus pending edit setelah diproses.
+     */
+    public function clearPendingEdit(): void
+    {
+        try {
+            $contexts = $this->getBaseQuery()
+                ->orderBy('created_at', 'desc')
+                ->limit(3)
+                ->get();
+
+            foreach ($contexts as $context) {
+                $entities = $context->entities ?? [];
+                if (isset($entities['pending_edit'])) {
+                    unset($entities['pending_edit']);
+                    $context->update(['entities' => $entities]);
+
+                    Log::info('Cleared pending edit from context', [
+                        'tenant_id'  => $this->tenantId,
+                        'context_id' => $context->id,
+                    ]);
+                    break;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to clear pending edit', [
+                'tenant_id' => $this->tenantId,
+                'error'     => $e->getMessage(),
+            ]);
         }
     }
 }

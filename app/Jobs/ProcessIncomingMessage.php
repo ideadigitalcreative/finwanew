@@ -1250,6 +1250,26 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
         
+        // 1.6af2.6: Perintah edit AMBIGU → tanya balik, jangan kirim template
+        // Menangkap: "Ubah kategori", "Ganti nominal", "Edit tanggal", "Ubah tipe"
+        // Ini adalah kasus 4 dari chat log: user bilang "Ubah kategori" tapi bot kirim template
+        $ambiguousEditPatterns = [
+            '/^(ubah|ganti|edit|pindah(?:in)?)\s+(?:ke\s+)?kategori\s*$/i'   => 'category',
+            '/^(ubah|ganti|edit)\s+(?:ke\s+)?(?:nominal|jumlah|harga)\s*$/i'  => 'amount',
+            '/^(ubah|ganti|edit)\s+(?:ke\s+)?(?:tanggal|tgl)\s*$/i'           => 'date',
+            '/^(ubah|ganti|edit)\s+(?:ke\s+)?tipe\s*$/i'                      => 'type',
+        ];
+        foreach ($ambiguousEditPatterns as $pattern => $field) {
+            if (preg_match($pattern, $textLower)) {
+                Log::info('Fast-path 1.6af2.6: Perintah edit ambigu terdeteksi', [
+                    'message' => $messageText,
+                    'field'   => $field,
+                ]);
+                $this->transactionService->askBackForEdit($field);
+                return;
+            }
+        }
+        
         // 1.6af2.4: Ubah TIPE transaksi terakhir — "ganti jadi pemasukan", "ubah ke pengeluaran"
         // Menangkap perintah ubah tipe TANPA nominal (misalnya dari chat log: "Ganti jadi 'pemasukan'")
         if (preg_match('/^(?:ganti|ubah|edit|koreksi)\s+(?:jadi|ke|menjadi)\s*[\'"]?(pemasukan|pendapatan|income|uang masuk|pengeluaran|expense|uang keluar)[\'"]?\s*$/i', $textLower)) {

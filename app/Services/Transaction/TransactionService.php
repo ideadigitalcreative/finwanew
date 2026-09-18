@@ -2169,6 +2169,71 @@ class TransactionService
     }
 
     /**
+     * Handle AMBIGUOUS edit command — ask user for clarification.
+     *
+     * Dipanggil oleh fast-path 1.6af2.6 saat user mengirim perintah
+     * seperti "Ubah kategori", "Ganti nominal", dll tanpa nilai spesifik.
+     *
+     * Menyimpan state pending_edit dan mengirim pertanyaan klarifikasi.
+     */
+    public function askBackForEdit(string $field): void
+    {
+        try {
+            $transaction = $this->resolveLastTransaction();
+
+            if (! $transaction) {
+                $this->sendReply("⚠️ Tidak ada transaksi terakhir yang bisa diubah.");
+                return;
+            }
+
+            // Simpan state pending_edit
+            $contextService = new ConversationContextService(
+                $this->message->tenant_id,
+                $this->getAttributionSenderId()
+            );
+            $contextService->storePendingEdit($transaction->id, $field);
+
+            // Format info transaksi terakhir
+            $amount = number_format($transaction->amount, 0, ',', '.');
+            $category = $transaction->category->name ?? 'Lainnya';
+            $typeLabel = $transaction->type === 'income' ? 'Pemasukan' : 'Pengeluaran';
+
+            // Template pertanyaan per field
+            $labels = [
+                'category' => "Mau diubah ke kategori apa?\n\nContoh: _Hiburan_, _Transport_, _Makanan_",
+                'amount'   => "Mau diubah jadi berapa?\n\nContoh: _50rb_, _1,5jt_",
+                'date'     => "Mau diubah ke tanggal berapa?\n\nContoh: _kemarin_, _11 des 2025_",
+                'type'     => "Mau diubah jadi *Pemasukan* atau *Pengeluaran*?",
+            ];
+
+            $this->sendReply(
+                "✏️ *Ubah Transaksi*\n\n".
+                "Transaksi terakhir:\n".
+                "• 📁 {$category}\n".
+                "• 💰 Rp {$amount}\n".
+                "• 🔄 {$typeLabel}\n\n".
+                "━━━━━━━━━━━━━━━\n\n".
+                ($labels[$field] ?? 'Silakan sebutkan perubahan yang diinginkan.')
+            );
+
+            Log::info('Ask-back for ambiguous edit', [
+                'transaction_id' => $transaction->id,
+                'field'          => $field,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in askBackForEdit', [
+                'error'   => $e->getMessage(),
+                'field'   => $field,
+            ]);
+
+            $this->sendReply(
+                "⚠️ *Gagal memproses permintaan ubah*\n\n".
+                'Terjadi kesalahan. Silakan coba lagi.'
+            );
+        }
+    }
+
+    /**
      * Handle edit transaction with context
      * Allows users to correct their last transaction using "salah harusnya 50rb"
      *
@@ -2180,6 +2245,14 @@ class TransactionService
     {
         try {
             $contextService = new ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
+
+            // CEK: Apakah ini jawaban dari pertanyaan ask-back?
+            $pendingEdit = $contextService->getPendingEdit();
+            if ($pendingEdit && $this->isAnswerOnly($messageText)) {
+                $this->handlePendingEditAnswer($pendingEdit, $messageText, $contextService);
+                return;
+            }
+
             $lastTransactionId = $contextService->getLastTransactionId();
 
             if (! $lastTransactionId) {
@@ -2391,6 +2464,255 @@ class TransactionService
                 'Terjadi kesalahan. Silakan coba lagi.'
             );
         }
+    }
+
+    // ==========================================
+    // HELPER: Konsumsi jawaban ask-back
+    // ==========================================
+
+    /**
+     * Cek apakah pesan adalah jawaban sederhana (bukan perintah baru).
+     *
+     * Kriteria: pesan pendek (< 60 karakter) tanpa kata kunci perintah
+     * seperti "hapus", "ubah", "tambah", "baru", dll.
+     */
+    protected function isAnswerOnly(string $text): bool
+    {
+        $textLower = strtolower(trim($text));
+
+        // Terlalu panjang → kemungkinan bukan jawaban singkat
+        if (strlen($textLower) > 60) {
+            return false;
+        }
+
+        // Ada kata kunci perintah → ini perintah baru, bukan jawaban
+        $commandKeywords = [
+            'hapus', 'delete', 'batal', 'tambah', 'baru', 'buat',
+            'transfer', 'kirim', 'bayar', 'beli', 'cek', 'lihat',
+            'laporan', 'ringkasan', 'saldo', 'budget', 'anggaran',
+        ];
+
+        foreach ($commandKeywords as $keyword) {
+            if (str_starts_with($textLower, $keyword)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Proses jawaban user dari pertanyaan ask-back.
+     *
+     * @param array $pendingEdit Data pending_edit dari context
+     * @param string $answer Jawaban user (misal: "Hiburan", "50rb", "pemasukan")
+     * @param ConversationContextService $contextService Service untuk clear state
+     */
+    protected function handlePendingEditAnswer(
+        array $pendingEdit,
+        string $answer,
+        ConversationContextService $contextService
+    ): void {
+        try {
+            $transaction = Transaction::find($pendingEdit['transaction_id']);
+            $field = $pendingEdit['awaiting_field'];
+
+            if (! $transaction) {
+                $contextService->clearPendingEdit();
+                $this->sendReply("⚠️ Transaksi tidak ditemukan atau sudah dihapus.");
+                return;
+            }
+
+            // Proses berdasarkan field yang ditanya
+            switch ($field) {
+                case 'category':
+                    $this->applyCategoryChange($transaction, $answer);
+                    break;
+
+                case 'amount':
+                    $this->applyAmountChange($transaction, $answer);
+                    break;
+
+                case 'type':
+                    $this->applyTypeChange($transaction, $answer);
+                    break;
+
+                case 'date':
+                    $this->sendReply("📅 Perubahan tanggal akan segera hadir!");
+                    break;
+
+                default:
+                    $this->sendReply("⚠️ Field '{$field}' belum didukung untuk edit cepat.");
+            }
+
+            // Hapus state pending_edit setelah diproses
+            $contextService->clearPendingEdit();
+        } catch (\Exception $e) {
+            Log::error('Error handling pending edit answer', [
+                'error'   => $e->getMessage(),
+                'pending' => $pendingEdit,
+                'answer'  => $answer,
+            ]);
+
+            $contextService->clearPendingEdit();
+            $this->sendReply("⚠️ Gagal memproses jawaban. Silakan coba lagi.");
+        }
+    }
+
+    /**
+     * Terapkan perubahan kategori dari jawaban ask-back.
+     */
+    protected function applyCategoryChange(Transaction $transaction, string $categoryName): void
+    {
+        $oldCategoryName = $transaction->category->name ?? 'Lainnya';
+
+        // Cari kategori berdasarkan nama
+        $category = \App\Models\Category::where('tenant_id', $transaction->tenant_id)
+            ->where(function ($query) use ($categoryName) {
+                $query->whereRaw('LOWER(name) LIKE ?', ['%'.strtolower($categoryName).'%']);
+            })
+            ->first();
+
+        if (! $category) {
+            $this->sendReply("⚠️ Kategori '{$categoryName}' tidak ditemukan.\n\nCoba sebutkan nama lain, misal: _Hiburan_, _Transport_, _Makanan_.");
+            return;
+        }
+
+        // Pastikan tipe kategori konsisten dengan transaksi
+        $expectedPrefix = $transaction->type === 'income' ? 'pendapatan_' : 'pengeluaran_';
+        if (! str_starts_with($category->type, $expectedPrefix)) {
+            $this->sendReply(
+                "⚠️ Kategori '{$category->name}' tidak cocok untuk tipe *".
+                ($transaction->type === 'income' ? 'Pemasukan' : 'Pengeluaran')."*.\n\n".
+                'Silakan pilih kategori dengan tipe yang sesuai.'
+            );
+            return;
+        }
+
+        // Update kategori
+        $transaction->category_id = $category->id;
+        $transaction->save();
+
+        $this->sendReply(
+            "✅ *Kategori Diperbarui*\n\n".
+            "📁 ~{$oldCategoryName}~ ➝ *{$category->name}*\n\n".
+            "_Data berhasil diperbarui_"
+        );
+
+        Log::info('Category updated via ask-back', [
+            'transaction_id' => $transaction->id,
+            'old_category'   => $oldCategoryName,
+            'new_category'   => $category->name,
+        ]);
+    }
+
+    /**
+     * Terapkan perubahan nominal dari jawaban ask-back.
+     */
+    protected function applyAmountChange(Transaction $transaction, string $amountText): void
+    {
+        // Extract number dari teks (sama seperti di handleEditWithContext)
+        $textLower = strtolower(trim($amountText));
+        $newAmount = null;
+
+        if (preg_match('/(\d+(?:[.,]\d+)?)/', $textLower, $matches)) {
+            $number = (float) str_replace(',', '.', $matches[1]);
+
+            if (preg_match('/(?:jt|juta)/i', $textLower)) {
+                $newAmount = $number * 1000000;
+            } elseif (preg_match('/(?:rb|ribu)/i', $textLower)) {
+                $newAmount = $number * 1000;
+            } else {
+                $newAmount = $number * 1000; // Asumsi ribu
+            }
+        }
+
+        if (! $newAmount || $newAmount <= 0) {
+            $this->sendReply("⚠️ Tidak bisa membaca nominal '{$amountText}'.\n\nContoh: _50rb_, _1,5jt_, _100000_.");
+            return;
+        }
+
+        $oldAmount = $transaction->amount;
+
+        // Update saldo
+        $balanceService = app(BalanceService::class);
+        if ($transaction->balance_id) {
+            $balanceService->reverseBalanceUpdate($transaction);
+        }
+
+        $transaction->amount = $newAmount;
+        $transaction->save();
+
+        if ($transaction->balance_id) {
+            $balanceService->updateBalanceFromTransaction($transaction);
+        }
+
+        $this->sendReply(
+            "✅ *Nominal Diperbarui*\n\n".
+            '💰 ~'.number_format($oldAmount, 0, ',', '.').'~ ➝ *'.number_format($newAmount, 0, ',', '.')."*\n\n".
+            '_Data berhasil diperbarui_'
+        );
+
+        Log::info('Amount updated via ask-back', [
+            'transaction_id' => $transaction->id,
+            'old_amount'     => $oldAmount,
+            'new_amount'     => $newAmount,
+        ]);
+    }
+
+    /**
+     * Terapkan perubahan tipe dari jawaban ask-back.
+     */
+    protected function applyTypeChange(Transaction $transaction, string $typeAnswer): void
+    {
+        $typeChangeKeywords = config('finwa_category_rules.type_change_keywords', []);
+        $textLower = strtolower(trim($typeAnswer));
+
+        // Cek apakah jawaban mengandung kata kunci tipe
+        $newType = null;
+        foreach ($typeChangeKeywords as $keyword => $type) {
+            if (str_contains($textLower, $keyword)) {
+                $newType = $type;
+                break;
+            }
+        }
+
+        if (! $newType || $newType === $transaction->type) {
+            $this->sendReply(
+                "⚠️ Tidak bisa mengenali tipe '{$typeAnswer}'.\n\n".
+                'Jawab dengan: *pemasukan* atau *pengeluaran*.'
+            );
+            return;
+        }
+
+        // Terapkan perubahan tipe (dengan penyesuaian saldo)
+        $balanceService = app(BalanceService::class);
+        $oldType = $transaction->type;
+
+        if ($transaction->balance_id) {
+            $balanceService->reverseBalanceUpdate($transaction);
+        }
+
+        $transaction->type = $newType;
+        $transaction->category_id = $this->remapCategoryForType($transaction, $newType);
+        $transaction->save();
+
+        if ($transaction->balance_id) {
+            $balanceService->updateBalanceFromTransaction($transaction);
+        }
+
+        $typeLabel = fn (string $t) => $t === 'income' ? 'Pemasukan' : 'Pengeluaran';
+        $this->sendReply(
+            "✅ *Tipe Diperbarui*\n\n".
+            "🔄 ~{$typeLabel($oldType)}~ ➝ *{$typeLabel($newType)}*\n\n".
+            '_Data berhasil diperbarui_'
+        );
+
+        Log::info('Type updated via ask-back', [
+            'transaction_id' => $transaction->id,
+            'old_type'       => $oldType,
+            'new_type'       => $newType,
+        ]);
     }
 
     /**
