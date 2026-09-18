@@ -644,7 +644,28 @@ class ProcessIncomingMessage implements ShouldQueue
                 'error' => $e->getMessage()
             ]);
         }
-        
+
+        // COMMAND PREFIX NORMALIZATION
+        // "Revisi: hapus X" / "Koreksi: ganti jadi Y" → strip label agar regex ber-anchor tetap match
+        $prefixLabels = config('finwa_category_rules.command_prefix_labels', []);
+        foreach ($prefixLabels as $label) {
+            $stripped = preg_replace(
+                '/^\s*'.preg_quote($label, '/').'\s*[:\-]\s*/iu',
+                '',
+                $messageText
+            );
+            if ($stripped !== null && $stripped !== '' && $stripped !== $messageText) {
+                Log::info('Command prefix normalized', [
+                    'original'   => $messageText,
+                    'normalized' => $stripped,
+                    'label'      => $label,
+                ]);
+                $messageText = $stripped;
+                $textLower = strtolower($messageText);
+                break;
+            }
+        }
+
 
         // BATCH TRANSACTION: Check for multiple transactions in list format
         // Handles formats like:
@@ -1250,11 +1271,13 @@ class ProcessIncomingMessage implements ShouldQueue
         // 1.6ag: Context-based Edit/Correction - "salah harusnya 50rb", "koreksi jadi 30rb"
         $editContextKeywords = [
             'salah', 'koreksi', 'harusnya', 'seharusnya', 'ubah jadi', 'ganti jadi',
-            'bukan', 'yang bener', 'yang benar', 'ralat'
+            'bukan', 'yang bener', 'yang benar', 'ralat',
+            'revisi', 'perbaikan'
         ];
         foreach ($editContextKeywords as $keyword) {
             // Use word boundary to avoid matching "peralatan" with "ralat"
-            if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $textLower) && $hasAmount) {
+            // Lepaskan syarat $hasAmount untuk niat koreksi tegas (mis. "Ganti jadi pemasukan")
+            if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/i', $textLower)) {
 
                 $this->transactionService->handleEditWithContext($messageText);
                 return;

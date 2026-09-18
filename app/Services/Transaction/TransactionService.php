@@ -2239,12 +2239,33 @@ class TransactionService
             if (preg_match('/(?:kategori|masuk|pindah(?:in)?|ubah|ganti)\s+(?:ke\s+|jadi\s+)?([a-zA-Z\s]+)/i', $textLower, $catMatches)) {
                 // Ignore "jadi 50rb" or "jadi rp"
                 $candidate = trim($catMatches[1]);
-                if (! preg_match('/^(\d+|rp|rupiah)/i', $candidate) && strlen($candidate) > 2) {
+                if (! preg_match('/^(\d+|rp|rupiah|tanggal|tgl|harga|nominal|kategori|tipe|type|transaksi|jumlah)/i', $candidate) && strlen($candidate) > 2) {
                     $newCategoryName = $candidate;
                 }
             }
 
-            if (! $newAmount && ! $newCategoryName) {
+            // Detect type change request: "ganti jadi pemasukan", "ubah ke pengeluaran"
+            $newType = null;
+            $typeChangeKeywords = config('finwa_category_rules.type_change_keywords', []);
+            if (preg_match(
+                '/^(?:ganti|ubah|edit|koreksi|jadikan)\s+(?:jadi|ke|menjadi)?\s*[\'"]?([a-z\s]+?)[\'"]?\s*$/i',
+                $textLower,
+                $typeMatch
+            )) {
+                $typeCandidate = trim($typeMatch[1] ?? '');
+                $newType = $typeChangeKeywords[$typeCandidate] ?? null;
+            }
+            // Juga cek pola: "... jadi 'pemasukan'" atau "... ke income"
+            if (! $newType && preg_match(
+                '/(?:jadi|ke|menjadi)\s+[\'"]?(pemasukan|pendapatan|income|uang masuk|pengeluaran|expense|uang keluar)[\'"]?/i',
+                $textLower,
+                $typeMatch2
+            )) {
+                $typeCandidate2 = trim($typeMatch2[1] ?? '');
+                $newType = $typeChangeKeywords[$typeCandidate2] ?? null;
+            }
+
+            if (! $newAmount && ! $newCategoryName && ! $newType) {
                 $this->sendReply(
                     "⚠️ *Koreksi tidak jelas*\n\n".
                     "Silakan sebutkan nominal atau kategori yang benar.\n".
@@ -2324,6 +2345,30 @@ class TransactionService
                 }
             }
 
+            // Handle Type Change (income ↔ expense)
+            if ($newType && $newType !== $transaction->type) {
+                $balanceService = app(BalanceService::class);
+                $oldType = $transaction->type;
+
+                // 1. Batalkan efek tipe lama pada saldo
+                if ($transaction->balance_id) {
+                    $balanceService->reverseBalanceUpdate($transaction);
+                }
+
+                // 2. Ubah tipe + remap kategori agar prefix konsisten
+                $transaction->type = $newType;
+                $transaction->category_id = $this->remapCategoryForType($transaction, $newType);
+                $transaction->save();
+
+                // 3. Terapkan efek tipe baru pada saldo
+                if ($transaction->balance_id) {
+                    $balanceService->updateBalanceFromTransaction($transaction);
+                }
+
+                $typeLabel = fn (string $t) => $t === 'income' ? 'Pemasukan' : 'Pengeluaran';
+                $replyMsg .= "🔄 Tipe: ~{$typeLabel($oldType)}~ ➝ *{$typeLabel($newType)}*\n";
+            }
+
             $replyMsg .= "\n📝 ".($transaction->description ?? '-')."\n";
             $replyMsg .= "\n_Data berhasil diperbarui_";
 
@@ -2346,6 +2391,60 @@ class TransactionService
                 'Terjadi kesalahan. Silakan coba lagi.'
             );
         }
+    }
+
+    /**
+     * Remap kategori saat tipe transaksi berubah (income ↔ expense).
+     *
+     * Kategori harus ikut berpindah prefix agar konsisten:
+     * - pengeluaran_bahan_makanan → pendapatan_bahan_makanan (jika ada)
+     * - Jika padanan tidak ada di enum, fallback ke *_lainnya
+     */
+    protected function remapCategoryForType(Transaction $transaction, string $newType): int
+    {
+        $category = $transaction->category;
+        if (! $category) {
+            return $this->defaultCategoryIdForType($newType);
+        }
+
+        $oppositePrefix = $newType === 'income' ? 'pengeluaran_' : 'pendapatan_';
+        $targetPrefix   = $newType === 'income' ? 'pendapatan_'    : 'pengeluaran_';
+
+        // Jika kategori sudah punya prefix yang benar, tidak perlu diubah
+        if (! str_starts_with($category->type, $oppositePrefix)) {
+            return $category->id;
+        }
+
+        // Coba cari padanan dengan prefix baru
+        $candidateType = $targetPrefix . substr($category->type, strlen($oppositePrefix));
+
+        $target = Category::where('tenant_id', $this->message->tenant_id)
+            ->where('type', $candidateType)
+            ->first();
+
+        // Fallback wajib: bila padanan tidak ada, gunakan kategori "lainnya"
+        return $target?->id ?? $this->defaultCategoryIdForType($newType);
+    }
+
+    /**
+     * Ambil ID kategori default untuk tipe tertentu.
+     */
+    protected function defaultCategoryIdForType(string $type): int
+    {
+        $defaultType = $type === 'income' ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
+
+        $category = Category::where('tenant_id', $this->message->tenant_id)
+            ->where('type', $defaultType)
+            ->first();
+
+        // Fallback terakhir: ambil kategori pertama dengan tipe yang sesuai
+        if (! $category) {
+            $category = Category::where('tenant_id', $this->message->tenant_id)
+                ->where('type', 'LIKE', $type === 'income' ? 'pendapatan_%' : 'pengeluaran_%')
+                ->first();
+        }
+
+        return $category?->id ?? 0;
     }
 
     /**

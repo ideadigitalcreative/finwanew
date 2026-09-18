@@ -110,47 +110,14 @@ class CategoryInferenceService
 
     protected function detectIntentType(?bool $isIncomeHint = null): string
     {
-        $text = $this->messageLower;
-
         if ($isIncomeHint !== null) {
             return $isIncomeHint ? 'income' : 'expense';
         }
 
-        // 1. Check expense override patterns first (like TransactionService)
-        $expensePatterns = config('finwa_category_rules.expense_detection_patterns', []);
-        $isExpense = false;
-        foreach ($expensePatterns as $pattern) {
-            if (str_contains($text, $pattern)) {
-                $isExpense = true;
-                break;
-            }
-        }
-        
-        if (!$isExpense && (preg_match('/\bbayar\b/u', $text) || preg_match('/\b(beli|belanja|keluar|dibayar|servis|ganti)\b/u', $text))) {
-            $isExpense = true;
-        }
-
-        if ($isExpense) {
-            return 'expense';
-        }
-
-        // 2. Check income detection keywords
-        $incomeKeywordsConfig = config('finwa_category_rules.income_detection_keywords', []);
-        foreach ($incomeKeywordsConfig as $kw) {
-            if (preg_match('/\b' . preg_quote($kw, '/') . '\b/u', $text)) {
-                return 'income';
-            }
-        }
-
-        $incomeKeywords = ['gajian', 'dikasih', 'terima', 'dapat', 'pemasukan', 'bonus', 'thr', 'cashback', 'refund', 'dividen', 'penjualan', 'omset', 'fee', 'komisi', 'uang masuk', 'masuk uang', 'duit masuk', 'masuk duit', 'gaji'];
-        foreach ($incomeKeywords as $kw) {
-            if (str_contains($text, $kw)) return 'income';
-        }
-
-        if (preg_match('/\b(transfer|tf|kirim)\b.*\b(ke|keluar)\b/u', $text)) return 'expense';
-        if (preg_match('/\b(transfer|tf)\b.*\b(dari|masuk)\b/u', $text)) return 'income';
-
-        return 'expense';
+        // Delegasikan ke TransactionTypeDetector — satu sumber kebenaran
+        // (sebelumnya logika ini terduplikasi dengan urutan cek berbeda,
+        //  menyebabkan "Uang lembur" salah jadi expense)
+        return app(TransactionTypeDetector::class)->detect($this->messageLower);
     }
 
     protected function matchKeywords(string $intentType): void
@@ -159,6 +126,12 @@ class CategoryInferenceService
 
         foreach ($this->categoryMap as $categoryType => $config) {
             if (($config['type'] ?? 'expense') !== $intentType) continue;
+
+            // Guard: pastikan prefix kategori konsisten dengan intentType.
+            // Mencegah "Uang lembur" (income) memenangkan kategori pengeluaran_bahan_makanan
+            // lewat context boost atau jalur lain, meski tipe sudah benar income.
+            if ($intentType === 'income' && str_starts_with($categoryType, 'pengeluaran_')) continue;
+            if ($intentType === 'expense' && str_starts_with($categoryType, 'pendapatan_')) continue;
 
             $score = 0;
             $matched = [];

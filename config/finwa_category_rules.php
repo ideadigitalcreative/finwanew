@@ -2448,6 +2448,9 @@ return [
         'bayaran proyek', 'bayaran klien', 'project masuk',
         'terima dp', 'dp diterima', 'pelunasan proyek',
         'tagihan lunas', 'nota masuk',
+        // Pendapatan tambahan (sinkronisasi dari income_keywords)
+        'lembur', 'uang lembur', 'insentif', 'tunjangan', 'reward',
+        'cashback', 'refund', 'dividen', 'fee', 'komisi',
     ],
 
     /*
@@ -2487,6 +2490,40 @@ return [
     |
     | Digunakan di TransactionService (AI fast path) untuk meng-override kategori
     | dari AI jika keyword spesifik terdeteksi di pesan.
+    | SEMUA entry di sini = ALWAYS expense ($isIncome dipaksa false).
+    |
+    | 'keyword' => 'kategori_nama' (tanpa prefix pengeluaran_)
+    |
+    */
+    'command_prefix_labels' => [
+        'revisi', 'koreksi', 'ralat', 'perbaikan', 'edit', 'revisi transaksi',
+        'edit transaksi',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Type Change Keywords
+    |--------------------------------------------------------------------------
+    |
+    | Mapping kata kunci ke tipe transaksi untuk perintah ubah tipe.
+    | Digunakan di handleEditWithContext() saat user bilang "ganti jadi pemasukan".
+    |
+    */
+    'type_change_keywords' => [
+        'pemasukan'  => 'income',
+        'pendapatan' => 'income',
+        'income'     => 'income',
+        'uang masuk' => 'income',
+        'pengeluaran' => 'expense',
+        'expense'     => 'expense',
+        'uang keluar' => 'expense',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | AI Category Overrides
+    |--------------------------------------------------------------------------
+    |
     | SEMUA entry di sini = ALWAYS expense ($isIncome dipaksa false).
     |
     | 'keyword' => 'kategori_nama' (tanpa prefix pengeluaran_)

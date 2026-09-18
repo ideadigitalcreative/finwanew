@@ -375,48 +375,9 @@ class TransactionExtractorService
         }
 
         // Determine transaction type (income vs expense)
-        // PRIORITY: Position-based income check — income keyword di awal pesan memiliki prioritas tertinggi
-        $incomeKeywords = config('finwa_category_rules.income_detection_keywords', []);
-        $isIncome = false;
-
-        foreach ($incomeKeywords as $keyword) {
-            if (str_starts_with($textLower, $keyword)) {
-                $afterKeyword = strlen($keyword);
-                // Word boundary: keyword harus diikuti spasi, digit, atau end-of-string
-                if ($afterKeyword >= strlen($textLower)
-                    || $textLower[$afterKeyword] === ' '
-                    || ctype_digit($textLower[$afterKeyword])) {
-                    $isIncome = true;
-                    break;
-                }
-            }
-        }
-
-        // Expense override dan fallback income check — hanya jika belum terdeteksi income dari posisi awal
-        if (! $isIncome) {
-            // Check for expense override patterns
-            $expenseOverridePatterns = config('finwa_category_rules.expense_detection_patterns', []);
-            $isExpenseOverride = false;
-            foreach ($expenseOverridePatterns as $pattern) {
-                if (str_contains($textLower, $pattern)) {
-                    $isExpenseOverride = true;
-                    break;
-                }
-            }
-            if (! $isExpenseOverride && preg_match('/\bbayar\b/u', $textLower)) {
-                $isExpenseOverride = true;
-            }
-
-            // Check income keywords via word boundary (if not expense overridden)
-            if (! $isExpenseOverride) {
-                foreach ($incomeKeywords as $keyword) {
-                    if (preg_match('/\b'.preg_quote($keyword, '/').'\b/u', $textLower)) {
-                        $isIncome = true;
-                        break;
-                    }
-                }
-            }
-        }
+        // Delegasikan ke TransactionTypeDetector — satu sumber kebenaran
+        $typeDetector = app(TransactionTypeDetector::class);
+        $isIncome = ($typeDetector->detect($messageText) === 'income');
 
         // Category is determined by CategoryInferenceService, set default here
         $categoryType = $isIncome ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
