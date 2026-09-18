@@ -761,6 +761,16 @@ class ProcessIncomingMessage implements ShouldQueue
         $hasPeriodKeyword = false;
         $hasTransactionKeyword = false;
         $hasAmount = preg_match('/\d+\s*(rb|ribu|k|jt|juta)?/i', $textLower);
+
+        // 🔍 DEBUG: Log pesan masuk untuk troubleshooting
+        Log::info('📩 PESAN MASUK', [
+            'message'    => $messageText,
+            'text_lower' => $textLower,
+            'has_amount' => $hasAmount,
+            'length'     => strlen($messageText),
+            'trimmed'    => trim($messageText),
+            'hex_dump'   => bin2hex($messageText),
+        ]);
         
         foreach ($queryKeywords as $keyword) {
             if (str_contains($textLower, $keyword)) {
@@ -1222,9 +1232,10 @@ class ProcessIncomingMessage implements ShouldQueue
         if (count($lines) > 1) {
             $commandPattern = '/^(hapus|delete|batal|ubah|edit|ganti|koreksi)\s+/i';
             $commandLines = array_filter($lines, fn($line) => preg_match($commandPattern, trim($line)));
-            
+
             if (count($commandLines) >= 2) {
                 // Multiple commands detected - process each
+                Log::info('🔍 DEBUG: Tertangkap oleh 1.6af1 (multi-line)', ['message' => $messageText]);
                 $this->transactionService->handleMultipleTransactionCommands($lines);
                 return;
             }
@@ -1287,6 +1298,10 @@ class ProcessIncomingMessage implements ShouldQueue
         // 1.6af3: Edit specific transaction by keyword - "ubah beli kue jadi 25rb", "edit makan siang 30rb"
         // Must have keyword + amount
         if (preg_match('/^(ubah|edit|ganti|koreksi)\s+(?!transaksi\s*$)(?!jadi\s)(?!ke\s)/i', $textLower) && $hasAmount) {
+            Log::info('🔍 DEBUG: Tertangkap oleh 1.6af3 (edit by keyword)', [
+                'message' => $messageText,
+                'has_amount' => $hasAmount,
+            ]);
             // Check if pattern matches: "ubah [keyword] [jadi/ke]? [amount]"
             $isSpecificEdit = preg_match('/^(ubah|edit|ganti|koreksi)\s+(?:transaksi\s+)?[a-zA-Z].+\d+\s*(rb|ribu|k|jt|juta)?/i', $textLower);
             if ($isSpecificEdit && !str_contains($textLower, 'terakhir')) {
@@ -1333,6 +1348,10 @@ class ProcessIncomingMessage implements ShouldQueue
         // Does NOT require prefix like "edit/ubah/ganti"
         // EXCEPTION: Skip if the phrase is "uang masuk", "uang keluar", "masuk uang", "keluar uang", "duit masuk", "duit keluar" â€” those are transactions, not corrections!
         if (preg_match('/^(.+?)\s+(?:kategori|ganti(?:in)?|ubah|pindah(?:in)?|masuk(?:in)?)\s+(?:ke\s+|jadi\s+)?(.+)$/i', $textLower, $corrMatches)) {
+            Log::info('🔍 DEBUG: Tertangkap oleh 1.6ag3 (category correction)', [
+                'message' => $messageText,
+                'matches' => $corrMatches,
+            ]);
             $txKeyword = trim($corrMatches[1]);
             $catCandidate = trim($corrMatches[2]);
             // Validate: txKeyword should look like a transaction description (not empty, not just a number)
