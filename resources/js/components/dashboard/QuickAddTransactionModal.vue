@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import {
-    X, Send, ArrowUpCircle, ArrowDownCircle, Check, Loader2, Pencil, ChevronDown, Calendar, Wallet, Camera
+    X, Send, ArrowUpCircle, ArrowDownCircle, Check, Loader2, Pencil, ChevronDown, Calendar, Wallet, Camera,
+    PiggyBank, Utensils, Home, Car, GraduationCap, ShoppingBag,
+    Heart, Gamepad2, Shirt, Sparkles, Coffee, Film, Music,
+    Dumbbell, Plane, Gift, Zap, Smartphone,
 } from 'lucide-vue-next';
-
 interface ParsedResult {
     success: boolean;
     type: string;
@@ -55,9 +57,15 @@ const isSaving = ref(false);
 const isUploadingReceipt = ref(false);
 const parseError = ref('');
 const showSuccessAnim = ref(false);
+const savedTransactionInfo = ref<{ amount: number; type: string; description: string } | null>(null);
 const receiptItems = ref<Array<{ name: string; price: number }>>([]);
 const receiptMerchant = ref<string | null>(null);
 let parseTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const page = usePage();
+const isPremium = computed(() => {
+    return (page.props as any).auth?.user?.is_premium ?? false;
+});
 
 const editableType = ref('');
 const editableCategoryId = ref<number | null>(null);
@@ -72,6 +80,19 @@ function getCsrfToken(): string {
         try { return decodeURIComponent(cookie.split('=')[1]); } catch { }
     }
     return '';
+}
+
+function getRequestHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+    };
+    const csrf = getCsrfToken();
+    if (csrf) {
+        headers['X-CSRF-TOKEN'] = csrf;
+        headers['X-XSRF-TOKEN'] = csrf;
+    }
+    return headers;
 }
 
 const chatMessages = ref<Array<{
@@ -154,19 +175,20 @@ async function parseInput() {
     parseError.value = '';
 
     try {
-        const csrfToken = getCsrfToken();
-
         const response = await fetch('/transactions/parse', {
             method: 'POST',
             headers: {
+                ...getRequestHeaders(),
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': csrfToken,
             },
             credentials: 'same-origin',
             body: JSON.stringify({ text }),
         });
+
+        if (response.status === 419) {
+            parseError.value = 'Sesi telah kedaluwarsa. Silakan refresh halaman browser.';
+            return;
+        }
 
         const data = await response.json();
 
@@ -205,20 +227,26 @@ async function handleReceiptUpload(event: Event) {
     });
 
     try {
-        const csrfToken = getCsrfToken();
         const formData = new FormData();
         formData.append('image', file);
 
         const response = await fetch('/transactions/parse-receipt', {
             method: 'POST',
             headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': csrfToken,
+                ...getRequestHeaders(),
             },
             credentials: 'same-origin',
             body: formData,
         });
+
+        if (response.status === 419) {
+            chatMessages.value.push({
+                role: 'system',
+                type: 'error',
+                content: 'Sesi telah kedaluwarsa. Silakan refresh halaman browser Anda.',
+            });
+            return;
+        }
 
         const data = await response.json();
 
@@ -258,6 +286,14 @@ async function handleReceiptUpload(event: Event) {
 }
 
 function triggerReceiptUpload() {
+    if (!isPremium.value) {
+        chatMessages.value.push({
+            role: 'system',
+            type: 'error',
+            content: '⚠️ <strong>Fitur Scan Struk Premium</strong><br>Fitur membaca struk belanja otomatis (OCR) hanya tersedia untuk paket Premium (Grow/Pro).<br><br><a href="/subscriptions" class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition-all mt-1">Upgrade Sekarang</a>',
+        });
+        return;
+    }
     fileInputRef.value?.click();
 }
 
@@ -295,37 +331,48 @@ async function saveTransaction() {
     }
 
     try {
-        const csrfToken = getCsrfToken();
-
         const response = await fetch('/transactions/store-json', {
             method: 'POST',
             headers: {
+                ...getRequestHeaders(),
                 'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': csrfToken,
             },
             credentials: 'same-origin',
             body: JSON.stringify(payload),
         });
 
+        if (response.status === 419) {
+            chatMessages.value.push({
+                role: 'system',
+                type: 'error',
+                content: 'Sesi telah kedaluwarsa. Silakan refresh halaman browser Anda.',
+            });
+            return;
+        }
+
         const data = await response.json();
 
         if (response.ok && data.transaction) {
+            savedTransactionInfo.value = {
+                amount: data.transaction.amount,
+                type: data.transaction.type,
+                description: data.transaction.description || 'Transaksi berhasil',
+            };
             showSuccessAnim.value = true;
 
             chatMessages.value.push(
-                { role: 'user', type: 'text', content: inputText.value },
-                { role: 'system', type: 'success', content: `✅ ${typeLabel(data.transaction.type)} ${formatCurrency(data.transaction.amount)} tersimpan!` },
+                { role: 'user', type: 'text', content: inputText.value || parsed.value.description },
+                { role: 'system', type: 'success', content: `✅ ${typeLabel(data.transaction.type)} ${formatCurrency(data.transaction.amount)} berhasil dicatat!` },
             );
 
             inputText.value = '';
             parsed.value = null;
 
             setTimeout(() => {
+                showSuccessAnim.value = false;
                 emit('saved');
                 router.reload({ only: ['balanceData', 'recentTransactions', 'chartData', 'insights'] });
-            }, 800);
+            }, 1800);
         } else {
             chatMessages.value.push(
                 { role: 'system', type: 'error', content: data.message || 'Gagal menyimpan transaksi' },
@@ -359,6 +406,72 @@ function handleOverlayClick(e: MouseEvent) {
 function toggleType() {
     editableType.value = editableType.value === 'income' ? 'expense' : 'income';
     if (parsed.value) parsed.value.type = editableType.value;
+}
+
+function getCategoryIcon(iconEmoji: string) {
+    const iconMap: Record<string, any> = {
+        // Makanan
+        '🍔': Utensils, '🍕': Utensils, '🍜': Utensils, '🍽️': Utensils,
+        // Hunian
+        '🏠': Home, '🏡': Home,
+        // Transport
+        '🚗': Car, '🚙': Car, '🚕': Car,
+        // Pendidikan
+        '📚': GraduationCap, '🎓': GraduationCap,
+        // Belanja
+        '🛍️': ShoppingBag, '🛒': ShoppingBag, '📦': ShoppingBag,
+        // Kesehatan / Donasi
+        '❤️': Heart, '💊': Heart, '🏥': Heart,
+        // Hiburan
+        '🎮': Gamepad2, '🎯': Gamepad2, '🎬': Film,
+        // Pakaian
+        '👕': Shirt, '👔': Shirt,
+        // Perawatan diri
+        '✨': Sparkles, '💇': Sparkles,
+        // Kopi
+        '☕': Coffee,
+        // Musik
+        '🎵': Music,
+        // Olahraga
+        '🏋️': Dumbbell,
+        // Travel
+        '✈️': Plane,
+        // Hadiah / Bonus
+        '🎁': Gift, '🎊': Gift,
+        // Utilitas / Operasional
+        '⚡': Zap, '⚙️': Zap,
+        // Pulsa / Gadget
+        '📱': Smartphone,
+        // Keuangan / Dompet
+        '💳': Wallet, '💰': Wallet, '💵': Wallet, '💸': Wallet, '💼': Wallet,
+        // Tagihan / Dokumen
+        '📄': Wallet, '📊': Wallet, '📝': Wallet,
+        // Transfer
+        '📤': Wallet, '📥': Wallet,
+        // Investasi
+        '📈': PiggyBank,
+        // Sosial / Piutang
+        '🤝': Heart,
+        // Cicilan / Bank
+        '🏦': Wallet,
+        // Asuransi
+        '🛡️': Heart,
+        // Gaji karyawan
+        '👷': Wallet,
+        // Keluarga
+        '👨‍👩‍👧‍👦': Home, '👶': Heart,
+        // Langganan
+        '🔄': Smartphone,
+        // Hewan
+        '🐾': Heart,
+        // Otomotif
+        '🔧': Car,
+        // Usaha
+        '🏪': ShoppingBag, '🏘️': Home,
+        // Lainnya
+        '✅': Wallet,
+    };
+    return iconMap[iconEmoji] ?? PiggyBank;
 }
 
 onMounted(() => {
@@ -396,28 +509,44 @@ onBeforeUnmount(() => {
                 >
                     <div
                         v-if="show"
-                        class="relative w-full max-w-lg rounded-t-2xl bg-white shadow-2xl dark:bg-neutral-900 sm:rounded-2xl sm:mx-4 flex flex-col"
+                        class="relative w-full max-w-lg rounded-t-3xl sm:rounded-3xl sm:mx-4 flex flex-col font-['Plus_Jakarta_Sans',sans-serif] overflow-hidden bg-[#efeae2] dark:bg-[#0c1317] border border-[#d1c7b7] dark:border-[#222e35] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.4)]"
                         style="max-height: 85vh"
                     >
-                        <div class="flex items-center justify-between border-b border-gray-100 px-5 py-3 dark:border-neutral-800">
-                            <div class="flex items-center gap-2">
-                                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
-                                    <Pencil class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <!-- WhatsApp Pattern Wallpaper Background -->
+                        <div 
+                            class="pointer-events-none absolute inset-0 z-0 opacity-[0.06] dark:opacity-[0.04]"
+                            style="background-image: radial-gradient(#000 1px, transparent 1px), radial-gradient(#000 1px, #efeae2 1px); background-size: 20px 20px; background-position: 0 0, 10px 10px;"
+                        ></div>
+
+                        <!-- Header Dialog Khas WhatsApp -->
+                        <div class="relative z-10 flex items-center justify-between border-b border-[#e1d9cc] dark:border-[#202c33] px-4 py-3 bg-[#f0f2f5] dark:bg-[#202c33]">
+                            <div class="flex items-center gap-3">
+                                <div class="relative">
+                                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#25D366] text-white shadow-sm">
+                                        <span class="material-symbols-outlined text-[22px]">chat</span>
+                                    </div>
+                                    <span class="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-[#202c33] rounded-full"></span>
                                 </div>
                                 <div>
-                                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Tambah Transaksi</h3>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">Ketik seperti di WhatsApp</p>
+                                    <h3 class="text-sm font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5 leading-tight">
+                                        Catat Cepat WhatsApp
+                                    </h3>
+                                    <p class="text-[11px] text-[#008069] dark:text-[#25d366] font-semibold flex items-center gap-1 mt-0.5">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-[#25d366] inline-block animate-pulse"></span>
+                                        online • ketik seperti biasa
+                                    </p>
                                 </div>
                             </div>
                             <button
                                 @click="emit('close')"
-                                class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-neutral-800 dark:hover:text-gray-300 transition-colors"
+                                class="rounded-full p-2 text-[#54656f] hover:bg-black/5 hover:text-[#111b21] dark:text-[#aebac1] dark:hover:bg-white/5 dark:hover:text-white transition-colors"
                             >
                                 <X class="h-5 w-5" />
                             </button>
                         </div>
 
-                        <div class="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+                        <!-- Area Percakapan & Bubble Chat WhatsApp Style -->
+                        <div class="relative z-10 flex-1 overflow-y-auto px-4 py-4 space-y-3">
                             <div
                                 v-for="(msg, i) in chatMessages"
                                 :key="i"
@@ -428,27 +557,28 @@ onBeforeUnmount(() => {
                             >
                                 <div
                                     :class="[
-                                        'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm',
+                                        'max-w-[85%] px-3.5 py-2 text-xs sm:text-sm leading-relaxed shadow-sm rounded-lg',
                                         msg.role === 'user'
-                                            ? 'bg-emerald-600 text-white rounded-br-md'
+                                            ? 'bg-[#d9fdd3] text-[#111b21] dark:bg-[#005c4b] dark:text-[#e9edef] rounded-tr-none font-medium'
                                             : msg.type === 'success'
-                                                ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 rounded-bl-md'
+                                                ? 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] border-l-4 border-[#25D366] rounded-tl-none font-medium'
                                                 : msg.type === 'error'
-                                                    ? 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200 rounded-bl-md'
-                                                    : 'bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-gray-300 rounded-bl-md',
+                                                    ? 'bg-[#ffebee] border-l-4 border-rose-500 text-rose-900 dark:bg-rose-950/50 dark:text-rose-200 rounded-tl-none'
+                                                    : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-none',
                                     ]"
                                     v-html="msg.content.replace(/\*(.*?)\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>')"
                                 />
                             </div>
 
+                            <!-- Card Preview Transaksi Khas Stiker WhatsApp -->
                             <div
                                 v-if="parsed?.success"
-                                class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-neutral-700 dark:bg-neutral-800/50"
+                                class="rounded-xl border border-[#e1d9cc] dark:border-[#2a3942] bg-white dark:bg-[#202c33] p-3.5 shadow-sm space-y-2.5"
                             >
-                                <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center justify-between">
                                     <span
                                         :class="[
-                                            'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold',
+                                            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold transition-all',
                                             typeColor(editableType),
                                         ]"
                                     >
@@ -457,87 +587,57 @@ onBeforeUnmount(() => {
                                             class="h-3.5 w-3.5"
                                         />
                                         {{ typeLabel(editableType) }}
-                                        <button @click="toggleType" class="ml-1 opacity-60 hover:opacity-100 transition-opacity">
-                                            <ChevronDown class="h-3 w-3" />
+                                        <button @click="toggleType" class="ml-1 opacity-70 hover:opacity-100 transition-opacity" title="Klik untuk ubah jenis transaksi">
+                                            ⇄
                                         </button>
                                     </span>
-                                    <span :class="['text-xs font-medium', confidenceColor]">
-                                        {{ confidencePercent }}% yakin
+                                    <span class="text-[11px] font-bold text-[#008069] dark:text-[#25D366] bg-[#25D366]/10 px-2 py-0.5 rounded-full">
+                                        {{ confidencePercent }}% akurat
                                     </span>
                                 </div>
 
-                                <div class="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                                <div class="text-2xl font-extrabold text-[#111b21] dark:text-white tracking-tight">
                                     {{ formatCurrency(parsed.amount) }}
                                 </div>
 
-                                <div class="space-y-2 text-sm">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-gray-500 dark:text-gray-400">Deskripsi</span>
-                                        <span class="font-medium text-gray-900 dark:text-white">{{ parsed.description }}</span>
+                                <div class="divide-y divide-[#f0f2f5] dark:divide-[#2a3942] text-xs">
+                                    <div class="flex items-center justify-between py-1.5">
+                                        <span class="text-[#54656f] dark:text-[#8696a0]">Keterangan</span>
+                                        <span class="font-semibold text-[#111b21] dark:text-[#e9edef]">{{ parsed.description }}</span>
                                     </div>
 
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-gray-500 dark:text-gray-400">Kategori</span>
-                                        <select
-                                            v-if="parsed.alternatives.length > 0"
-                                            v-model="editableCategoryId"
-                                            class="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-900 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white"
-                                        >
-                                            <option :value="parsed.category_id">
-                                                {{ parsed.category_icon }} {{ parsed.category_name }}
-                                            </option>
-                                            <option
-                                                v-for="alt in parsed.alternatives"
-                                                :key="alt.id"
-                                                :value="alt.id"
-                                            >
-                                                {{ alt.icon }} {{ alt.name }}
-                                            </option>
-                                        </select>
-                                        <span v-else class="font-medium text-gray-900 dark:text-white">
-                                            {{ parsed.category_icon }} {{ parsed.category_name }}
+                                    <div class="flex items-center justify-between py-1.5">
+                                        <span class="text-[#54656f] dark:text-[#8696a0]">Kategori</span>
+                                        <span class="font-bold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
+                                            <span class="w-5 h-5 rounded-full bg-[#25D366]/15 flex items-center justify-center text-[12px]">
+                                                <component :is="getCategoryIcon(parsed.category_icon)" class="w-3 h-3 text-[#008069] dark:text-[#25D366]" />
+                                            </span>
+                                            {{ parsed.category_name }}
                                         </span>
                                     </div>
 
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                            <Calendar class="h-3.5 w-3.5" /> Tanggal
-                                        </span>
-                                        <input
-                                            type="date"
-                                            v-model="editableDate"
-                                            class="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-900 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white"
-                                        />
+                                    <div class="flex items-center justify-between py-1.5">
+                                        <span class="text-[#54656f] dark:text-[#8696a0]">Tanggal</span>
+                                        <span class="font-semibold text-[#111b21] dark:text-[#e9edef]">{{ editableDate }}</span>
                                     </div>
 
                                     <div
                                         v-if="parsed.balances.length > 0"
-                                        class="flex items-center justify-between"
+                                        class="flex items-center justify-between py-1.5"
                                     >
-                                        <span class="text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                            <Wallet class="h-3.5 w-3.5" /> Dompet
+                                        <span class="text-[#54656f] dark:text-[#8696a0]">Dompet</span>
+                                        <span class="font-semibold text-[#111b21] dark:text-[#e9edef]">
+                                            {{ parsed.balances.find(b => b.id === editableBalanceId)?.name || parsed.balances[0]?.name }}
                                         </span>
-                                        <select
-                                            v-model="editableBalanceId"
-                                            class="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-900 dark:border-neutral-600 dark:bg-neutral-700 dark:text-white"
-                                        >
-                                            <option
-                                                v-for="bal in parsed.balances"
-                                                :key="bal.id"
-                                                :value="bal.id"
-                                            >
-                                                {{ bal.name }}
-                                            </option>
-                                        </select>
                                     </div>
                                 </div>
 
                                 <div
                                     v-if="receiptItems.length > 0"
-                                    class="mt-3 border-t border-gray-200 dark:border-neutral-700 pt-3"
+                                    class="mt-2 border-t border-[#f0f2f5] dark:border-[#2a3942] pt-2"
                                 >
-                                    <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
-                                        🧾 Item dari struk
+                                    <p class="text-[11px] font-bold text-[#54656f] dark:text-[#8696a0] mb-1.5">
+                                        🧾 Rincian Item dari Struk
                                     </p>
                                     <div class="space-y-1 max-h-32 overflow-y-auto">
                                         <div
@@ -545,8 +645,8 @@ onBeforeUnmount(() => {
                                             :key="i"
                                             class="flex items-center justify-between text-xs"
                                         >
-                                            <span class="text-gray-700 dark:text-gray-300 truncate mr-2">{{ item.name }}</span>
-                                            <span class="text-gray-500 dark:text-gray-400 font-mono whitespace-nowrap">
+                                            <span class="text-[#111b21] dark:text-[#e9edef] truncate mr-2">{{ item.name }}</span>
+                                            <span class="text-[#54656f] dark:text-[#8696a0] font-mono whitespace-nowrap">
                                                 {{ formatCurrency(item.price) }}
                                             </span>
                                         </div>
@@ -556,21 +656,22 @@ onBeforeUnmount(() => {
 
                             <div
                                 v-if="isParsing"
-                                class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 px-1"
+                                class="flex items-center gap-2 text-xs font-semibold text-[#54656f] dark:text-[#8696a0] px-1"
                             >
-                                <Loader2 class="h-4 w-4 animate-spin" />
-                                <span>Menganalisis...</span>
+                                <Loader2 class="h-3.5 w-3.5 animate-spin text-[#008069] dark:text-[#25D366]" />
+                                <span>sedang mengetik...</span>
                             </div>
 
                             <div
                                 v-if="parseError && !isParsing"
-                                class="rounded-lg bg-red-50 px-4 py-2.5 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300"
+                                class="rounded-lg bg-rose-50 border border-rose-200 px-3.5 py-2 text-xs font-medium text-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
                             >
                                 {{ parseError }}
                             </div>
                         </div>
 
-                        <div class="border-t border-gray-100 px-4 py-3 dark:border-neutral-800">
+                        <!-- Bar Input Bawah Khas WhatsApp (Pill Input & Green Send Button) -->
+                        <div class="relative z-10 p-2.5 sm:px-4 sm:py-3 bg-[#f0f2f5] dark:bg-[#202c33] border-t border-[#e1d9cc] dark:border-[#202c33]">
                             <div class="flex items-center gap-2">
                                 <input
                                     type="file"
@@ -582,8 +683,8 @@ onBeforeUnmount(() => {
                                 <button
                                     @click="triggerReceiptUpload"
                                     :disabled="isUploadingReceipt || isSaving"
-                                    class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-600 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-400 dark:hover:bg-amber-900/60 transition-all"
-                                    title="Foto struk belanja"
+                                    class="flex h-10 w-10 items-center justify-center rounded-full text-[#54656f] hover:bg-black/5 dark:text-[#aebac1] dark:hover:bg-white/5 transition-colors shrink-0"
+                                    :title="isPremium ? 'Foto struk belanja' : 'Foto struk belanja (Fitur Premium)'"
                                 >
                                     <Loader2 v-if="isUploadingReceipt" class="h-5 w-5 animate-spin" />
                                     <Camera v-else class="h-5 w-5" />
@@ -592,26 +693,71 @@ onBeforeUnmount(() => {
                                     ref="inputRef"
                                     v-model="inputText"
                                     type="text"
-                                    placeholder="Contoh: makan siang 25rb"
-                                    class="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-neutral-700 dark:bg-neutral-800 dark:text-white dark:placeholder-gray-500 transition-all"
+                                    placeholder="Ketik pesan..."
+                                    class="flex-1 rounded-full border-0 bg-white dark:bg-[#2a3942] px-4 py-2.5 text-xs sm:text-sm font-normal text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] focus:ring-0 focus:outline-none shadow-xs transition-all"
                                     :disabled="isSaving"
                                 />
                                 <button
                                     @click="parsed?.success ? saveTransaction() : handleSend()"
                                     :disabled="(!inputText.trim() && !parsed?.success) || isSaving || isParsing"
                                     :class="[
-                                        'flex h-10 w-10 items-center justify-center rounded-xl transition-all',
+                                        'flex h-10 w-10 items-center justify-center rounded-full transition-all active:scale-95 shrink-0 shadow-sm',
                                         canSave || (inputText.trim().length >= 3 && !isParsing)
-                                            ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-500/25'
-                                            : 'bg-gray-100 text-gray-400 dark:bg-neutral-800 dark:text-gray-600',
+                                            ? 'bg-[#00a884] hover:bg-[#008f6f] text-white'
+                                            : 'bg-[#00a884]/40 text-white/70 cursor-not-allowed',
                                     ]"
                                 >
-                                    <Loader2 v-if="isSaving" class="h-5 w-5 animate-spin" />
-                                    <Check v-else-if="parsed?.success" class="h-5 w-5" />
-                                    <Send v-else class="h-5 w-5" />
+                                    <Loader2 v-if="isSaving" class="h-4 w-4 animate-spin" />
+                                    <Check v-else-if="parsed?.success" class="h-5 w-5 stroke-[2.5]" />
+                                    <Send v-else class="h-4 w-4" />
                                 </button>
                             </div>
                         </div>
+
+                        <!-- Overlay Animasi Sukses Menarik & Playful -->
+                        <Transition
+                            enter-active-class="transition-all duration-400 ease-out"
+                            enter-from-class="opacity-0 scale-90"
+                            enter-to-class="opacity-100 scale-100"
+                            leave-active-class="transition-all duration-300 ease-in"
+                            leave-from-class="opacity-100 scale-100"
+                            leave-to-class="opacity-0 scale-95"
+                        >
+                            <div
+                                v-if="showSuccessAnim"
+                                class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white/95 dark:bg-[#111b21]/95 backdrop-blur-md p-6 text-center"
+                            >
+                                <!-- Efek Confetti Floating Rings -->
+                                <div class="relative flex items-center justify-center mb-4">
+                                    <div class="absolute w-24 h-24 rounded-full bg-[#25D366]/20 animate-ping duration-1000"></div>
+                                    <div class="absolute w-20 h-20 rounded-full bg-[#ffd23f]/30 animate-pulse"></div>
+                                    
+                                    <!-- Lingkaran Checklist Sukses -->
+                                    <div class="relative w-16 h-16 rounded-full bg-gradient-to-tr from-[#00a884] to-[#25D366] text-white flex items-center justify-center shadow-lg shadow-[#25D366]/40 transform scale-100 animate-bounce">
+                                        <span class="material-symbols-outlined text-3xl font-black">check</span>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1 transform transition-all">
+                                    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-[#d9fdd3] text-[#007152] dark:bg-[#005c4b] dark:text-[#51fac1] tracking-wide uppercase">
+                                        <span class="material-symbols-outlined text-[14px]">verified</span>
+                                        Transaksi Tersimpan!
+                                    </span>
+                                    <h4 class="text-2xl font-black text-[#111b21] dark:text-white pt-1">
+                                        {{ savedTransactionInfo ? formatCurrency(savedTransactionInfo.amount) : '' }}
+                                    </h4>
+                                    <p class="text-xs text-[#54656f] dark:text-[#8696a0] font-medium max-w-xs truncate">
+                                        {{ savedTransactionInfo?.description }}
+                                    </p>
+                                </div>
+
+                                <!-- Floating Little Coins / Badge -->
+                                <div class="mt-4 flex items-center gap-1.5 text-[11px] font-bold text-[#574500] bg-[#ffd23f]/25 px-3 py-1 rounded-full">
+                                    <span class="material-symbols-outlined text-sm text-[#ffd23f]">monetization_on</span>
+                                    <span>Saldo & riwayat otomatis terupdate!</span>
+                                </div>
+                            </div>
+                        </Transition>
                     </div>
                 </Transition>
             </div>

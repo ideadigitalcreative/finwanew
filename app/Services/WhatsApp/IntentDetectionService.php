@@ -58,6 +58,14 @@ class IntentDetectionService
         if (! empty($queryKeywords)) {
             $queryPattern = '/('.implode('|', array_map(fn ($k) => preg_quote($k, '/'), $queryKeywords)).')/iu';
             $hasQueryKeyword = (bool) preg_match($queryPattern, $textLower);
+            
+            // Exception: if message has amount and it's an explicit "uang masuk X" or "uang keluar X" → NOT a query
+            if ($hasAmount && $hasQueryKeyword) {
+                $explicitTransactionPattern = '/\b(uang\s+masuk|masuk\s+uang|duit\s+masuk|masuk\s+duit|uang\s+keluar|keluar\s+uang|duit\s+keluar|keluar\s+duit)\b/i';
+                if (preg_match($explicitTransactionPattern, $textLower)) {
+                    $hasQueryKeyword = false;
+                }
+            }
         }
 
         // 2. Check Period Keywords
@@ -188,7 +196,7 @@ class IntentDetectionService
      */
     public function isBalanceCheck(string $messageText): bool
     {
-        return (bool) preg_match('/^(cek\s+)?saldo\??$/i', trim($messageText));
+        return (bool) preg_match('/^(cek\s+)?(saldo|cashflow|cash\s*flow|arus\s+kas)\??$/i', trim($messageText));
     }
 
     /**
@@ -216,14 +224,15 @@ class IntentDetectionService
      */
     public function isEditContext(string $messageText, bool $hasAmount): bool
     {
-        if (! $hasAmount) {
-            return false;
-        }
+        // Lepaskan syarat $hasAmount untuk niat koreksi yang tegas
+        // (mis. "Ganti jadi pemasukan", "Ubah ke income")
+        // Tetap memerlukan $hasAmount bila ada perubahan nominal/kategori spesifik
 
         $editContextKeywords = [
             'salah', 'koreksi', 'harusnya', 'seharusnya', 'ubah jadi', 'ganti jadi',
             'edit jadi', 'edit ke', 'ubah ke', 'ganti ke',
             'yang bener', 'yang benar', 'ralat',
+            'revisi', 'perbaikan',
         ];
 
         $textLower = mb_strtolower(trim($messageText), 'UTF-8');
@@ -253,8 +262,13 @@ class IntentDetectionService
             return true;
         }
 
-        // Delete transaction
+        // Delete transaction — dengan atau tanpa nominal, selama ada objek yang dirujuk
         if ($hasAmount && preg_match('/\b(hapus|delete|hilangkan)\b/u', $textLower)) {
+            return true;
+        }
+
+        // Niat hapus tegas dengan objek: "hapus <sesuatu>", "revisi: hapus <sesuatu>"
+        if (preg_match('/^(hapus|delete|hilangkan|batalin|batalkan|revisi)\s+\S+/u', $textLower)) {
             return true;
         }
 

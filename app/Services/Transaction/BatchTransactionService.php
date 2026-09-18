@@ -211,6 +211,10 @@ class BatchTransactionService
         // Amount formats: 20rb, 10rb, 50k, 1.5jt, 15000, 15.000
         $amountFirstPattern = '/^\d[\d\., ]*\s*(rb|ribu|k|jt|juta)?\s+.+/i';
 
+        // Pattern for receipt/struk format: "PRODUCT NAME (keterangan) Rp 24.000"
+        // Simple check: line ends with "Rp" followed by a number
+        $receiptLinePattern = '/\bRp\.?\s*[\d\.,]+\s*$/i';
+
         // Check all lines for transaction patterns
         foreach ($lines as $index => $rawLine) {
             $line = trim($rawLine);
@@ -234,6 +238,13 @@ class BatchTransactionService
 
             // PRIORITY 1b: Check amount-first format (e.g., "20rb maxim dari JGC ke Callia")
             if (preg_match($amountFirstPattern, $line)) {
+                $simpleFormatCount++;
+
+                continue;
+            }
+
+            // PRIORITY 1c: Check receipt/struk format (e.g., "DETTOL BW ORIGINAL 370M (Sabun mandi) Rp 24.000")
+            if (preg_match($receiptLinePattern, $line)) {
                 $simpleFormatCount++;
 
                 continue;
@@ -352,9 +363,18 @@ class BatchTransactionService
         $amountFirstPatternFirstLine = '/^\d[\d., ]*\s*(rb|ribu|k|jt|juta)?\s+.+/i';
         $simpleNameAmountPattern = '/^[A-Za-z][A-Za-z\s]*\s+\d+\s*(rb|ribu|k|jt|juta)?$/i';
         $simpleNamePlainAmountPattern = '/^[A-Za-z][A-Za-z\s]*\s+\d+[\.,]?\d*$/i';
+        // Receipt/struk format: "PRODUCT NAME (keterangan) Rp 24.000" or "FITTI PANTS XL 40 Rp 133.000"
+        // Simple check: line contains "Rp" followed by a number (amount at end)
+        $receiptLinePatternFirstLine = '/\bRp\.?\s*[\d\.,]+\s*$/i';
 
         if (preg_match($simpleTypeAmountPattern, $headerLine)) {
             // "Pemasukan 21.851" or "Pengeluaran 6.500" as first line → it IS a transaction
+            $firstLineIsTransaction = true;
+        } elseif (preg_match($receiptLinePatternFirstLine, $headerLine)) {
+            // Receipt/struk format: "DETTOL BW ORIGINAL 370M (Sabun mandi) Rp 24.000"
+            // IMPORTANT: Must be checked BEFORE actionAmountPattern because that pattern is too
+            // broad and matches lines like "FITTI PANTS XL 40 Rp 133.000" where "FITTI" is not
+            // an action keyword, causing the elseif chain to skip this receipt check entirely.
             $firstLineIsTransaction = true;
         } elseif (preg_match($actionAmountPattern, $headerLine, $matches)) {
             $firstWord = strtolower($matches[1]);
@@ -478,11 +498,6 @@ class BatchTransactionService
                     }
                 }
                 $categoryType = $this->determineCategoryFromText($contextText, $isIncome);
-
-                // For income from names, use appropriate category
-                if ($isIncome && preg_match('/^dari\s+/i', $description)) {
-                    $categoryType = 'pendapatan_lainnya';
-                }
 
                 $transactions[] = [
                     'description' => $description,

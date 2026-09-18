@@ -6,6 +6,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Hash;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -25,11 +26,15 @@ class User extends Authenticatable
         'password',
         'avatar',
         'whatsapp_number',
+        'telegram_username',
+        'telegram_chat_id',
         'tenant_id',
         'role_id',
         'is_super_admin',
         'google_id',
         'current_tenant_id',
+        'telegram_link_token',
+        'telegram_link_token_created_at',
     ];
 
     /**
@@ -56,6 +61,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
             'is_super_admin' => 'boolean',
+            'telegram_link_token_created_at' => 'datetime',
         ];
     }
 
@@ -146,5 +152,66 @@ class User extends Authenticatable
     public function isSuperAdmin(): bool
     {
         return $this->is_super_admin === true;
+    }
+
+    /**
+     * Get Telegram mapping for this user
+     */
+    public function telegramMapping()
+    {
+        return $this->hasOne(UserTelegramMapping::class, 'user_id');
+    }
+
+    /**
+     * Check if user has linked Telegram account
+     */
+    public function hasLinkedTelegram(): bool
+    {
+        return $this->telegram_chat_id !== null && $this->telegram_chat_id > 0;
+    }
+
+    /**
+     * Check if user has a valid (not expired) Telegram link token
+     */
+    public function hasValidTelegramLinkToken(): bool
+    {
+        return $this->telegram_link_token !== null &&
+               $this->telegram_link_token_created_at !== null &&
+               $this->telegram_link_token_created_at->gt(now()->subHour());
+    }
+
+    /**
+     * Generate a new Telegram linking token
+     */
+    public function generateTelegramLinkToken(): string
+    {
+        $token = \Str::random(32);
+        $this->telegram_link_token = Hash::make($token);
+        $this->telegram_link_token_created_at = now();
+        $this->save();
+
+        return $token;
+    }
+
+    /**
+     * Invalidate the current Telegram link token
+     */
+    public function invalidateTelegramLinkToken(): void
+    {
+        $this->telegram_link_token = null;
+        $this->telegram_link_token_created_at = null;
+        $this->save();
+    }
+
+    /**
+     * Scope untuk mencari user dengan valid telegram link token
+     * NOTE: Tidak bisa langsung query karena token di-hash, harus loop dan check manual
+     */
+    public function scopeWithValidTelegramLinkToken($query, string $plainToken)
+    {
+        // Scope ini tidak digunakan karena tidak efisien
+        // Gunakan findUserByToken() di controller sebagai gantinya
+        return $query->whereNotNull('telegram_link_token')
+            ->where('telegram_link_token_created_at', '>=', now()->subHour());
     }
 }

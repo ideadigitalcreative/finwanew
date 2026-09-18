@@ -101,6 +101,9 @@ class WhatsAppRegistrationHelper
             return null;
         }
 
+        // Do NOT recover registration flow for users who are already registered.
+        // This prevents messages like "help" or short words from being mistaken
+        // as a registration name and trapping registered users in awaiting_email.
         $candidates = [$phoneNumber];
         if (str_starts_with($phoneNumber, '62') && strlen($phoneNumber) >= 10) {
             $candidates[] = '0'.substr($phoneNumber, 2);
@@ -110,6 +113,14 @@ class WhatsAppRegistrationHelper
         } elseif (str_starts_with($phoneNumber, '8') && strlen($phoneNumber) >= 9) {
             $candidates[] = '62'.$phoneNumber;
             $candidates[] = '0'.$phoneNumber;
+        }
+
+        // If any candidate is already a registered user, skip recovery entirely.
+        $uniqueCandidates = array_values(array_unique($candidates));
+        $alreadyRegistered = User::whereIn('whatsapp_number', $uniqueCandidates)->exists()
+            || \App\Models\UserWhatsAppNumber::whereIn('whatsapp_number', $uniqueCandidates)->where('is_active', true)->exists();
+        if ($alreadyRegistered) {
+            return null;
         }
 
         $messages = Message::query()
@@ -355,9 +366,9 @@ class WhatsAppRegistrationHelper
      */
     public static function getAskNameMessage(): string
     {
-        return "👋 *Halo, senang bertemu!*\n\n"
-            ."Saya FinWa — asisten keuangan yang siap bantu catat pemasukan & pengeluaran Anda.\n\n"
-            ."Daftarnya singkat saja. Langkah pertama:\n"
+        return "👋 *Halo!*\n\n"
+            ."Saya FinWa, asisten pencatat keuangan Anda.\n\n"
+            ."Pendaftaran singkat dan mudah.\n\n"
             .'📝 *Ketik nama lengkap Anda* (contoh: Budi Santoso)';
     }
 
@@ -378,19 +389,13 @@ class WhatsAppRegistrationHelper
         return "🎉 *Akun Berhasil Dibuat!*\n\n"
             ."📧 Email: *{$result['user']->email}*\n"
             ."🔑 Password: *{$result['password']}*\n\n"
-            ."🌐 Login di: https://finwa.web.id/login\n"
-            ."📱 Download di Play Store: https://play.google.com/store/apps/details?id=com.idea.finwa\n\n"
-            ."✨ *Paket Gratis sudah aktif!*\n"
-            ."📊 50 transaksi/bulan | Catat via chat\n\n"
-            ."Sekarang Anda bisa langsung kirim transaksi ke saya. Contoh:\n"
+            ."🌐 Login: https://finwa.web.id/login\n"
+            ."📱 Play Store: https://play.google.com/store/apps/details?id=com.idea.finwa\n\n"
+            ."✅ *Paket Gratis aktif!* 50 transaksi/bulan\n\n"
+            ."Contoh:\n"
             ."• _beli makan 25rb_\n"
             ."• _terima gaji 5jt_\n\n"
-            ."💡 Ketik *help* untuk panduan singkat\n"
-            ."📖 Panduan lengkap: https://finwa.web.id/panduan-umkm\n"
-            ."💬 Gabung Grup: https://chat.whatsapp.com/DAjG9zU2e9vAi8jiDp5jar\n\n"
-            ."🚀 *Upgrade ke Premium* untuk scan struk & download laporan!\n"
-            ."👉 https://finwa.web.id/subscriptions\n\n"
-            .'Selamat mencoba! 🎉';
+            .'💡 Ketik *help* untuk panduan lengkap';
     }
 
     /**

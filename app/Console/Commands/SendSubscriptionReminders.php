@@ -204,11 +204,11 @@ class SendSubscriptionReminders extends Command
                     }
                 }
 
-                // Attempt Send
+                // Attempt Send (simulateTyping=false: blast subscription reminder, bukan percakapan)
                 if ($isToLid) {
-                    $result = $whatsappService->sendMessageToLid($sessionId, $targetPhone, $message);
+                    $result = $whatsappService->sendMessageToLid($sessionId, $targetPhone, $message, 'text', false);
                 } else {
-                    $result = $whatsappService->sendMessage($sessionId, $targetPhone, $message);
+                    $result = $whatsappService->sendMessage($sessionId, $targetPhone, $message, 'text', null, false);
                 }
 
                 // Check Result

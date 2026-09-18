@@ -12,17 +12,20 @@ class Transaction extends Model
         'category_id',
         'message_id',
         'balance_id', // Link to balance account
+        'user_whatsapp_number_id', // Nomor WA pengirim (Suami/Istri/Anak/dll)
         'type',
         'amount',
         'transaction_date',
         'source',
         'description',
+        'merchant',
         'reference_number',
         'confidence_score',
         'status',
         'reviewed_by',
         'reviewed_at',
         'metadata',
+        'linked_transaction_id',
     ];
 
     protected $casts = [
@@ -56,5 +59,15 @@ class Transaction extends Model
     public function balance(): BelongsTo
     {
         return $this->belongsTo(Balance::class);
+    }
+
+    public function linkedTransaction(): BelongsTo
+    {
+        return $this->belongsTo(Transaction::class, 'linked_transaction_id');
+    }
+
+    public function whatsappNumber(): BelongsTo
+    {
+        return $this->belongsTo(UserWhatsAppNumber::class, 'user_whatsapp_number_id');
     }
 }

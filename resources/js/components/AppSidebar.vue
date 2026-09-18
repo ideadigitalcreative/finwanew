@@ -15,7 +15,6 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { LayoutGrid, Receipt, CreditCard, MessageSquare, Wallet, Shield, Users, Building2, HelpCircle, PiggyBank, Scale, Sparkles, Search } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -54,47 +53,62 @@ const isSuperAdmin = computed(() => (auth.value?.user as any)?.is_super_admin ??
 const pendingSubscriptionsCount = computed(() => (page.props as any).pending_subscriptions_count ?? 0);
 const isPremiumUser = computed(() => (auth.value?.user as any)?.is_premium ?? false);
 
-// Menu items untuk user biasa
+// Menu items untuk user biasa - menggunakan Material Symbols sesuai tema
 const regularNavItems: NavItem[] = [
     {
         title: 'Dashboard',
         href: '/dashboard',
-        icon: LayoutGrid,
+        materialIcon: 'grid_view',
     },
     {
         title: 'Transaksi',
         href: '/transactions',
-        icon: Receipt,
+        materialIcon: 'receipt_long',
+    },
+    {
+        title: 'Laporan',
+        href: '/laporan',
+        materialIcon: 'bar_chart',
     },
     {
         title: 'Saldo Akun',
         href: '/balances',
-        icon: Wallet,
+        materialIcon: 'account_balance_wallet',
     },
     {
         title: 'Budget',
         href: '/budgets',
-        icon: PiggyBank,
+        materialIcon: 'pie_chart',
+    },
+    {
+        title: 'Tabungan',
+        href: '/tabungan',
+        materialIcon: 'savings',
     },
     {
         title: 'Hutang & Piutang',
         href: '/hutang-piutang',
-        icon: Scale,
+        materialIcon: 'balance',
     },
     {
         title: 'Subscription',
         href: '/subscriptions',
-        icon: CreditCard,
+        materialIcon: 'credit_card',
     },
     {
         title: 'WhatsApp',
         href: '/whatsapp',
-        icon: MessageSquare,
+        materialIcon: 'forum',
+    },
+    {
+        title: 'Connect Telegram',
+        href: '/telegram/connect',
+        materialIcon: 'send',
     },
     {
         title: 'Support',
         href: 'https://wa.me/6285242766676?text=saya%20butuh%20bantuan',
-        icon: HelpCircle,
+        materialIcon: 'support_agent',
     },
 ];
 
@@ -111,48 +125,48 @@ const superAdminNavItems = computed<NavItem[]>(() => [
     {
         title: 'Dashboard',
         href: superadmin.dashboard(),
-        icon: LayoutGrid,
+        materialIcon: 'grid_view',
     },
     {
         title: 'User Management',
         href: superadmin.users.index(),
-        icon: Users,
+        materialIcon: 'manage_accounts',
     },
     {
         title: 'Subscription',
         href: superadmin.subscriptions.index(),
-        icon: CreditCard,
+        materialIcon: 'credit_card',
         badge: pendingSubscriptionsCount.value,
     },
     {
         title: 'WhatsApp',
         href: superadmin.whatsapp.index(),
-        icon: MessageSquare,
+        materialIcon: 'forum',
     },
     {
         title: 'Broadcast',
         href: superadmin.broadcast.index(),
-        icon: MessageSquare,
+        materialIcon: 'campaign',
     },
     {
         title: 'Bank Management',
         href: superadmin.banks.index(),
-        icon: Building2,
+        materialIcon: 'account_balance',
     },
     {
         title: 'Gemini AI',
         href: '/superadmin/gemini-settings',
-        icon: Sparkles,
+        materialIcon: 'auto_awesome',
     },
     {
         title: 'Risen AI (SEO)',
         href: '/admin/risen-ai',
-        icon: Search,
+        materialIcon: 'search',
     },
     {
         title: 'Support',
         href: 'https://wa.me/6285242766676?text=saya%20butuh%20bantuan',
-        icon: HelpCircle,
+        materialIcon: 'support_agent',
     },
 ]);
 

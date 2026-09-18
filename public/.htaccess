@@ -81,9 +81,15 @@
     RewriteRule ^.*$ - [F,L]
 
     # Block excessive requests from same IP (basic protection)
+    # Allow webhook endpoints for Telegram bot.
+    # Gunakan THE_REQUEST (baris request asli) — nilainya TIDAK berubah walau
+    # request sudah di-rewrite internal ke index.php, sehingga pengecualian
+    # webhook tetap efektif. Telegram mengirim webhook TANPA header User-Agent,
+    # jadi endpoint ini WAJIB dikecualikan dari blokir empty-UA di bawah.
+    RewriteCond %{THE_REQUEST} !\s/+(api/)?webhooks/telegram [NC]
     RewriteCond %{REQUEST_METHOD} ^(GET|POST|HEAD) [NC]
     RewriteCond %{HTTP_USER_AGENT} ^$ [OR]
-    RewriteCond %{HTTP_USER_AGENT} (libwww-perl|BBBike|wget|winhttp|HTTrack|clshttp|archiver|loader|email|harvest|extract|grab|miner|python-requests|go-http-client) [NC]
+    RewriteCond %{HTTP_USER_AGENT} (libwww-perl|BBBike|wget|winhttp|HTTrack|clshttp|archiver|loader|email|harvest|extract|grab|miner) [NC]
     RewriteRule ^.*$ - [F,L]
 </IfModule>
 

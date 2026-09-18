@@ -69,6 +69,11 @@ interface MonthlyRevenue {
     revenue: number;
 }
 
+interface UserGrowth {
+    month: string;
+    users: number;
+}
+
 interface RecentSubscription {
     id: number;
     tenant_name: string;
@@ -98,6 +103,7 @@ interface Props {
     pendingSubscriptions: PendingSubscription[];
     expiringSubscriptions: ExpiringSubscription[];
     monthlyRevenue: MonthlyRevenue[];
+    userGrowth: UserGrowth[];
 }
 
 const props = defineProps<Props>();
@@ -207,6 +213,17 @@ const getBarHeight = (revenue: number) => {
     const max = maxRevenue.value;
     if (max <= 0 || revenue <= 0) return 0;
     return (revenue / max) * 100;
+};
+
+// User growth chart
+const maxUsers = computed(() => {
+    return Math.max(...props.userGrowth.map(u => u.users), 1);
+});
+
+const getUserBarHeight = (users: number) => {
+    const max = maxUsers.value;
+    if (max <= 0 || users <= 0) return 0;
+    return (users / max) * 100;
 };
 </script>
 
@@ -474,6 +491,59 @@ const getBarHeight = (revenue: number) => {
                             <span class="text-xs text-muted-foreground">Bank Aktif</span>
                             <p class="text-xl font-bold mt-1">{{ stats.total_banks }}</p>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Growth Chart -->
+            <div class="rounded-3xl bg-white dark:bg-gray-900 p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-800">
+                <div class="mb-8">
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-1">Pertumbuhan User</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                        Jumlah user baru per bulan
+                    </p>
+                </div>
+
+                <div class="relative">
+                    <div class="relative h-64">
+                        <!-- Horizontal Grid Lines -->
+                        <div class="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                            <div v-for="i in 6" :key="i" class="w-full border-t border-dashed border-gray-100 dark:border-gray-700/50"></div>
+                        </div>
+
+                        <!-- Bar Chart -->
+                        <div class="relative h-full flex items-end justify-between px-2 gap-3 sm:gap-4 md:gap-6">
+                            <div
+                                v-for="item in userGrowth"
+                                :key="item.month"
+                                class="flex-1 h-full flex items-end justify-center group relative"
+                            >
+                                <div
+                                    class="w-full max-w-[12px] sm:max-w-[24px] rounded-full bg-gradient-to-b from-emerald-500 to-emerald-700 hover:from-emerald-400 hover:to-emerald-600 transition-all duration-300 cursor-pointer relative shadow-[0_4px_10px_rgba(16,185,129,0.3)]"
+                                    :style="{
+                                        height: getUserBarHeight(item.users) + '%',
+                                        minHeight: item.users > 0 ? '6px' : '0'
+                                    }"
+                                >
+                                    <!-- Floating Tooltip -->
+                                    <div class="absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-xl scale-90 group-hover:scale-100 translate-y-2 group-hover:translate-y-0">
+                                        {{ item.users }} user
+                                        <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- X-axis Month labels -->
+                    <div class="flex justify-between mt-4 px-2 gap-3 sm:gap-4 md:gap-6">
+                        <span
+                            v-for="item in userGrowth"
+                            :key="item.month"
+                            class="flex-1 text-center text-[11px] text-gray-400 font-medium"
+                        >
+                            {{ item.month.split(' ')[0].substring(0, 3) }}
+                        </span>
                     </div>
                 </div>
             </div>

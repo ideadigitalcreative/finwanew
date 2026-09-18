@@ -338,6 +338,18 @@ class FinancialQueryService
             'sedekah' => 'Donasi',
             'santunan' => 'Donasi',
             'zakat' => 'Donasi',
+            'baby' => 'Baby & Anak',
+            'bayi' => 'Baby & Anak',
+            'popok' => 'Baby & Anak',
+            'anak' => 'Baby & Anak',
+            'hewan' => 'Hewan Peliharaan',
+            'kucing' => 'Hewan Peliharaan',
+            'anjing' => 'Hewan Peliharaan',
+            'pet' => 'Hewan Peliharaan',
+            'gadget' => 'Gadget & Elektronik',
+            'elektronik' => 'Gadget & Elektronik',
+            'hp' => 'Gadget & Elektronik',
+            'laptop' => 'Gadget & Elektronik',
         ];
 
         foreach ($categoryMappings as $keyword => $categoryName) {
@@ -352,9 +364,16 @@ class FinancialQueryService
             $requested['summary'] = true;
         }
 
-        // If no specific request, show summary
+        // If no specific request, show summary only if period keyword detected
+        // Prevents random messages (e.g., "edd") from defaulting to monthly summary
         if (! $requested['income'] && ! $requested['expense'] && ! $requested['balance'] && ! $requested['list']) {
-            $requested['summary'] = true;
+            $hasPeriodKeyword = preg_match('/\b(hari ini|bulan ini|minggu ini|tahun ini|kemarin|bulan lalu|minggu lalu|terakhir)\b/i', $question);
+            $hasQueryIndicator = preg_match('/\b(ringkasan|rekap|total|berapa|cek|lihat|laporan|sisa|habis)\b/i', $question);
+            if ($hasPeriodKeyword || $hasQueryIndicator) {
+                $requested['summary'] = true;
+            } else {
+                $requested['is_valid_query'] = false;
+            }
         }
 
         return $requested;
@@ -440,6 +459,13 @@ class FinancialQueryService
      */
     protected function generateAnswer(array $requested, array $data, array $period): string
     {
+        // Guard: Jika pesan bukan query keuangan yang valid
+        if (isset($requested['is_valid_query']) && $requested['is_valid_query'] === false) {
+            return "🤔 Pesan Anda tidak saya mengerti.\n\n".
+                "Ketik _help_ untuk panduan penggunaan.\n\n".
+                "💬 Butuh bantuan? Hubungi: https://wa.me/6285242766676";
+        }
+
         // If asking for list/detail
         if ($requested['list']) {
             return $this->generateListAnswer($requested, $data, $period);
@@ -525,74 +551,64 @@ class FinancialQueryService
         // Filter by type if specified
         if ($listType === 'income') {
             $transactions = $transactions->where('type', 'income');
-            $title = "💰 *Daftar Pemasukan {$period['label']}*";
+            $title = "💰 *Pemasukan {$period['label']}*";
         } elseif ($listType === 'expense') {
             $transactions = $transactions->where('type', 'expense');
-            // Special title for "belanjaan"
             if ($categoryFilter === 'pengeluaran_belanja') {
-                $title = "🛍️ *Daftar Belanjaan {$period['label']}*";
+                $title = "🛍️ *Belanjaan {$period['label']}*";
             } else {
-                $title = "💸 *Daftar Pengeluaran {$period['label']}*";
+                $title = "💸 *Pengeluaran {$period['label']}*";
             }
         } else {
-            // Both types
-            $title = "📋 *Daftar Transaksi {$period['label']}*";
+            $title = "📋 *Transaksi {$period['label']}*";
         }
 
-        // Filter by category if specified (e.g., "belanjaan" = pengeluaran_belanja)
+        // Filter by category if specified
         if ($categoryFilter) {
             $transactions = $transactions->filter(function ($tx) use ($categoryFilter) {
                 return $tx->category && $tx->category->type === $categoryFilter;
             });
         }
 
-        $answer = $title."\n\n";
-
         if ($transactions->isEmpty()) {
-            if ($categoryFilter === 'pengeluaran_belanja') {
-                $answer .= "Tidak ada belanjaan pada periode ini.\n";
-            } else {
-                $answer .= "Tidak ada transaksi pada periode ini.\n";
-            }
-
-            return $answer;
+            return $title."\n\nTidak ada transaksi.";
         }
 
-        // Sort by date (newest first)
-        $transactions = $transactions->sortByDesc('transaction_date');
+        // Sort by date (newest first) and limit to 5
+        $transactions = $transactions->sortByDesc('transaction_date')->take(5);
 
-        // Limit to 20 transactions to avoid message too long
-        $transactions = $transactions->take(20);
+        $totalAll = 0;
+        $incomeAll = 0;
+        $expenseAll = 0;
 
-        $count = 0;
-        $totalAmount = 0;
+        $answer = $title."\n";
+
         foreach ($transactions as $tx) {
-            $count++;
             $type = $tx->type === 'income' ? '💰' : '💸';
             $amount = (float) $tx->amount;
-            $totalAmount += $amount;
+            if ($tx->type === 'income') { $incomeAll += $amount; } else { $expenseAll += $amount; }
             $amountFormatted = number_format($amount, 0, ',', '.');
-            $category = $tx->category->name ?? 'Lainnya';
-            $description = $tx->description ?? '-';
-            $date = $tx->transaction_date ? $tx->transaction_date->format('d/m/Y') : '-';
+            $desc = $tx->description ?? '';
+            $desc = preg_replace('/\s*\d+[.,]?\d*\s*$/i', '', $desc);
+            $desc = trim($desc);
 
-            $answer .= "{$count}. {$type} Rp {$amountFormatted}\n";
-            $answer .= "   📁 {$category}\n";
-            if ($description && $description !== '-') {
-                $answer .= "   📝 {$description}\n";
+            // Compact format: single line per item
+            $answer .= "{$type} *Rp {$amountFormatted}*";
+            if ($desc) {
+                $answer .= " - {$desc}";
             }
-            $answer .= "   📅 {$date}\n\n";
+            $answer .= "\n";
         }
 
-        // Add total summary
-        if ($count > 0) {
-            $answer .= "━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-            $answer .= '📊 *Total: Rp '.number_format($totalAmount, 0, ',', '.')."*\n";
-            $answer .= "📝 *Jumlah Transaksi: {$count}*\n";
-        }
-
-        if ($count >= 20) {
-            $answer .= "\n... (menampilkan 20 transaksi terbaru)\n";
+        // Summary
+        $net = $incomeAll - $expenseAll;
+        $answer .= "\n";
+        if ($incomeAll > 0) $answer .= '💰 Masuk: Rp '.number_format($incomeAll, 0, ',', '.')."\n";
+        if ($expenseAll > 0) $answer .= '💸 Keluar: Rp '.number_format($expenseAll, 0, ',', '.')."\n";
+        $answer .= "📊 Net: Rp ".number_format($net, 0, ',', '.');
+        $totalTransactions = $data['transaction_count'] ?? 0;
+        if ($totalTransactions > 5) {
+            $answer .= "\n📝 Total: {$totalTransactions} transaksi (5 terbaru)";
         }
 
         return $answer;

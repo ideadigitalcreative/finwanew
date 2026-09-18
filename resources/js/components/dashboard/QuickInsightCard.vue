@@ -51,42 +51,43 @@ const hasInsights = computed(() => props.insights && props.insights.length > 0);
 </script>
 
 <template>
-    <div class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-[13px] border border-gray-100 dark:border-gray-700/30 h-full flex flex-col">
-        <div class="p-4 md:p-5 border-b border-gray-100 dark:border-gray-700/50">
+    <div class="p-4 md:p-5 rounded-2xl bg-card border border-border/60 flex flex-col gap-3.5 h-full">
+        <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-                <div class="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                    <Lightbulb class="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                </div>
+                <span class="material-symbols-outlined text-xl text-amber-500">lightbulb</span>
                 <div>
-                    <h3 class="font-bold text-lg text-gray-900 dark:text-white">Quick Insight</h3>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Analisis otomatis keuanganmu</p>
+                    <h3 class="text-sm md:text-base font-bold text-foreground">Insight Keuangan</h3>
+                    <p class="text-[10px] text-muted-foreground">Analisis cerdas pola belanja</p>
                 </div>
             </div>
+            <span class="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 text-[10px] font-bold shadow-xs">
+                AI Radar
+            </span>
         </div>
 
-        <div class="flex-1 p-4 md:p-5 space-y-3">
+        <div class="flex-1 space-y-2.5">
             <template v-if="hasInsights">
                 <div
                     v-for="(insight, index) in insights"
                     :key="index"
                     :class="[
-                        'rounded-xl border p-3.5 transition-all hover:shadow-sm',
+                        'rounded-xl border p-3 transition-all hover:shadow-sm',
                         getConfig(insight.type).bg,
                         getConfig(insight.type).border,
                     ]"
                 >
-                    <div class="flex items-start gap-3">
+                    <div class="flex items-start gap-2.5">
                         <div class="mt-0.5 flex-shrink-0">
                             <component
                                 :is="getConfig(insight.type).icon"
-                                :class="['w-5 h-5', getConfig(insight.type).iconColor]"
+                                :class="['w-4 h-4', getConfig(insight.type).iconColor]"
                             />
                         </div>
                         <div class="flex-1 min-w-0">
-                            <p class="font-semibold text-sm text-gray-900 dark:text-white leading-snug">
+                            <p class="font-bold text-xs text-foreground leading-snug">
                                 {{ insight.title }}
                             </p>
-                            <p class="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                            <p class="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                                 {{ insight.message }}
                             </p>
                         </div>
@@ -95,16 +96,12 @@ const hasInsights = computed(() => props.insights && props.insights.length > 0);
             </template>
 
             <template v-else>
-                <div class="flex flex-col items-center justify-center py-8 text-center">
-                    <div class="p-3 rounded-full bg-gray-100 dark:bg-gray-700/50 mb-3">
-                        <Lightbulb class="w-6 h-6 text-gray-400" />
+                <div class="flex flex-col items-center justify-center py-6 text-center">
+                    <div class="p-2.5 rounded-full bg-muted mb-2">
+                        <Lightbulb class="w-5 h-5 text-muted-foreground" />
                     </div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">
-                        Belum ada insight tersedia
-                    </p>
-                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                        Catat lebih banyak transaksi untuk mendapat analisis
-                    </p>
+                    <p class="text-xs font-semibold text-foreground">Belum ada insight</p>
+                    <p class="text-[10px] text-muted-foreground mt-0.5">Catat lebih banyak transaksi untuk melihat rekomendasi hemat!</p>
                 </div>
             </template>
         </div>

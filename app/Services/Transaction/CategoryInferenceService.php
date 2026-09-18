@@ -4,921 +4,391 @@ namespace App\Services\Transaction;
 
 use Illuminate\Support\Facades\Log;
 
-/**
- * CategoryInferenceService - Expert pipeline untuk kategorisasi transaksi
- * 
- * Pipeline Steps:
- * 1. Preprocessing - Normalisasi teks
- * 2. Intent Detection - Tentukan income/expense/debt
- * 3. Entity Extraction - Extract amount, date, merchant
- * 4. Category Matching - Weighted keyword matching
- * 5. Context Resolution - Resolve konflik antar keyword
- * 6. Confidence Scoring - Beri skor keyakinan
- * 7. Final Decision - Keputusan akhir kategori
- */
 class CategoryInferenceService
 {
     protected string $messageText;
     protected string $messageLower;
-    protected array $result = [];
     protected array $pipelineData = [];
+    protected array $categoryMap = [];
 
-    // Category configuration dengan priority dan context rules
-    protected array $categoryConfig = [
-        'pengeluaran_acara' => [
-            'name' => 'Acara & Hajatan',
-            'icon' => '🎊',
-            'keywords' => ['undangan', 'hajatan', 'acara', 'wedding', 'nikah', 'pernikahan', 'syukuran', 'walimatul'],
-            'context_rules' => [
-                'kasih' => ['amplop', 'sumbangan'], // "kasih amplop" → pengeluaran_sosial, tapi "kasih undangan" → pengeluaran_acara
-                'beli' => ['undangan', 'kartu'], // "beli undangan" → pengeluaran_acara
-            ],
-            'priority' => 10,
+    protected bool $loaded = false;
+
+    protected function ensureLoaded(): void
+    {
+        if ($this->loaded) return;
+        $this->loaded = true;
+        $this->loadCategoryMap();
+    }
+
+    protected function loadCategoryMap(): void
+    {
+        $expenseMap = config('finwa_category_rules.expense_keywords', []);
+        $incomeMap = config('finwa_category_rules.income_keywords', []);
+        $extras = config('finwa_category_rules.local_expense_extras', []);
+
+        $this->categoryMap = [];
+
+        foreach ($expenseMap as $keyword => $category) {
+            $this->categoryMap[$category]['keywords'][] = $keyword;
+            $this->categoryMap[$category]['type'] = 'expense';
+        }
+
+        foreach ($incomeMap as $keyword => $category) {
+            $this->categoryMap[$category]['keywords'][] = $keyword;
+            $this->categoryMap[$category]['type'] = 'income';
+        }
+
+        foreach ($extras as $keyword => $category) {
+            $this->categoryMap[$category]['keywords'][] = $keyword;
+            if (!isset($this->categoryMap[$category]['type'])) {
+                $this->categoryMap[$category]['type'] = str_contains($category, 'pengeluaran') ? 'expense' : 'income';
+            }
+        }
+
+        $this->categoryMap['pengeluaran_lainnya'] = [
+            'keywords' => [],
             'type' => 'expense',
-        ],
-        'pengeluaran_sosial' => [
-            'name' => 'Sosial & Kondangan',
-            'icon' => '🤝',
-            'keywords' => ['kondangan', 'amplop', 'sumbangan', 'sedekah', 'infaq', 'zakat'],
-            'context_rules' => [
-                'kasih' => ['amplop'], // "kasih amplop" → pengeluaran_sosial
-                'terima' => ['amplop'], // "terima amplop" → pendapatan_lainnya
-            ],
-            'priority' => 9,
-            'type' => 'expense',
-        ],
-        'pengeluaran_makanan' => [
-            'name' => 'Makanan & Minuman',
-            'icon' => '🍽️',
-            'keywords' => ['makan', 'minum', 'sarapan', 'lunch', 'dinner', 'kopi', 'kafe', 'warung', 'restoran'],
-            'context_rules' => [],
-            'priority' => 8,
-            'type' => 'expense',
-        ],
-        'pengeluaran_transport' => [
-            'name' => 'Transportasi',
-            'icon' => '🚗',
-            'keywords' => ['bensin', 'bbm', 'parkir', 'tol', 'taksi', 'grab', 'gojek', 'maxim', 'ojek'],
-            'context_rules' => [],
-            'priority' => 8,
-            'type' => 'expense',
-        ],
-        'pengeluaran_gaji' => [
-            'name' => 'Gaji Karyawan',
-            'icon' => '👷',
-            'keywords' => ['gaji', 'upah', 'honor', 'gaji karyawan'],
-            'context_rules' => [
-                'kasih' => ['gaji'], // "kasih gaji" → pengeluaran_gaji
-                'ambil' => ['gaji'], // "ambil gaji" → pengeluaran_gaji
-            ],
-            'priority' => 15,
-            'type' => 'expense',
-        ],
-        'pengeluaran_bayar_hutang' => [
-            'name' => 'Bayar Hutang',
-            'icon' => '�',
-            'keywords' => ['bayar hutang', 'bayar utang', 'lunasi hutang'],
-            'context_rules' => [],
-            'priority' => 20,
-            'type' => 'expense',
-        ],
-        'pengeluaran_piutang' => [
-            'name' => 'Piutang / Pinjaman Keluar',
-            'icon' => '💸',
-            'keywords' => ['kasih pinjam', 'pinjamkan', 'piutang'],
-            'context_rules' => [],
-            'priority' => 20,
-            'type' => 'expense',
-        ],
-        'pendapatan_gaji' => [
-            'name' => 'Gaji',
-            'icon' => '💰',
-            'keywords' => ['gajian', 'gaji bulan', 'gaji'],
-            'context_rules' => [
-                'terima' => ['gaji'], // "terima gaji" → pendapatan_gaji
-            ],
-            'priority' => 15,
-            'type' => 'income',
-        ],
-        'pendapatan_bonus' => [
-            'name' => 'Bonus',
-            'icon' => '🎁',
-            'keywords' => ['bonus', 'thr', 'insentif', 'komisi', 'uang lembur'],
-            'context_rules' => [
-                'terima' => ['bonus', 'thr', 'insentif', 'komisi'],
-            ],
-            'priority' => 14,
-            'type' => 'income',
-        ],
-        'pendapatan_investasi' => [
-            'name' => 'Investasi',
-            'icon' => '�',
-            'keywords' => ['dividen', 'bunga', 'hasil investasi', 'profit', 'cuan', 'jual saham', 'cair reksadana', 'capital gain'],
-            'context_rules' => [
-                'terima' => ['dividen', 'bunga'],
-            ],
-            'priority' => 13,
-            'type' => 'income',
-        ],
-        'pendapatan_transfer' => [
-            'name' => 'Transfer Masuk',
-            'icon' => '📥',
-            'keywords' => ['transfer masuk', 'tf masuk', 'dari', 'kiriman', 'transfer'],
-            'context_rules' => [
-                'transfer' => ['dari', 'masuk'],
-            ],
-            'priority' => 12,
-            'type' => 'income',
-        ],
-        'pendapatan_usaha' => [
-            'name' => 'Pendapatan Usaha',
-            'icon' => '🏪',
-            'keywords' => ['penjualan', 'jualan', 'laku', 'omset', 'bayar pesanan', 'invoice paid', 'dp', 'pelunasan'],
-            'context_rules' => [
-                'terima' => ['dp', 'pelunasan'],
-            ],
-            'priority' => 13,
-            'type' => 'income',
-        ],
-        'pendapatan_sewa' => [
-            'name' => 'Pendapatan Sewa',
-            'icon' => '🏘️',
-            'keywords' => ['sewa', 'kontrakan', 'kost', 'kos'],
-            'context_rules' => [
-                'terima' => ['sewa', 'kontrakan', 'kost', 'kos'],
-            ],
-            'priority' => 11,
-            'type' => 'income',
-        ],
-        'pendapatan_refund' => [
-            'name' => 'Refund & Cashback',
-            'icon' => '💸',
-            'keywords' => ['refund', 'cashback', 'kembalian', 'pengembalian', 'retur', 'rebate'],
-            'context_rules' => [
-                'terima' => ['refund', 'cashback', 'kembalian', 'pengembalian'],
-            ],
-            'priority' => 12,
-            'type' => 'income',
-        ],
-        'pendapatan_hutang' => [
-            'name' => 'Terima Hutang (Pinjaman Masuk)',
-            'icon' => '�',
-            'keywords' => ['dapat pinjaman', 'pinjaman dari', 'hutang dari'],
-            'context_rules' => [],
-            'priority' => 20,
-            'type' => 'income',
-        ],
-        'pendapatan_terima_piutang' => [
-            'name' => 'Terima Pelunasan Piutang',
-            'icon' => '✅',
-            'keywords' => ['piutang lunas', 'terima piutang', 'terima pelunasan'],
-            'context_rules' => [],
-            'priority' => 20,
-            'type' => 'income',
-        ],
-        'pengeluaran_hunian' => [
-            'name' => 'Hunian',
-            'icon' => '🏠',
-            'keywords' => ['sewa', 'kost', 'kos', 'rumah', 'apartemen', 'kontrakan'],
-            'context_rules' => [
-                'bayar' => ['sewa', 'kost', 'kos'],
-            ],
-            'priority' => 12,
-            'type' => 'expense',
-        ],
-        'pengeluaran_utilitas' => [
-            'name' => 'Utilitas',
-            'icon' => '⚡',
-            'keywords' => ['listrik', 'air', 'pln', 'pdam', 'internet', 'wifi', 'token', 'pulsa', 'paket data'],
-            'context_rules' => [
-                'bayar' => ['listrik', 'air', 'token', 'internet'],
-            ],
-            'priority' => 12,
-            'type' => 'expense',
-        ],
-        'pengeluaran_kesehatan' => [
-            'name' => 'Kesehatan',
-            'icon' => '🏥',
-            'keywords' => ['obat', 'dokter', 'rumah sakit', 'klinik', 'apotek', 'vitamin', 'suntik', 'cedera'],
-            'context_rules' => [],
-            'priority' => 11,
-            'type' => 'expense',
-        ],
-        'pengeluaran_pendidikan' => [
-            'name' => 'Pendidikan',
-            'icon' => '📚',
-            'keywords' => ['buku', 'sekolah', 'kuliah', 'kursus', 'les', 'sp', 'uas', 'uts'],
-            'context_rules' => [],
-            'priority' => 11,
-            'type' => 'expense',
-        ],
-        'pengeluaran_belanja' => [
-            'name' => 'Belanja',
-            'icon' => '🛒',
-            'keywords' => ['belanja', 'beli', 'shopee', 'tokopedia', 'lazada', 'market', 'supermarket'],
-            'context_rules' => [],
-            'priority' => 7,
-            'type' => 'expense',
-        ],
-        'pengeluaran_hiburan' => [
-            'name' => 'Hiburan',
-            'icon' => '🎬',
-            'keywords' => ['bioskop', 'nonton', 'film', 'game', 'steam', 'playstation', 'ps'],
-            'context_rules' => [],
-            'priority' => 8,
-            'type' => 'expense',
-        ],
-        'pengeluaran_pulsa_token' => [
-            'name' => 'Pulsa & Token',
-            'icon' => '📱',
-            'keywords' => ['pulsa', 'token listrik', 'voucher', 'paket data'],
-            'context_rules' => [
-                'beli' => ['pulsa', 'token'],
-            ],
-            'priority' => 10,
-            'type' => 'expense',
-        ],
-        'pengeluaran_tagihan' => [
-            'name' => 'Tagihan',
-            'icon' => '📄',
-            'keywords' => ['tagihan', 'bill', 'invoice', 'cicilan', 'angsuran'],
-            'context_rules' => [
-                'bayar' => ['tagihan', 'bill'],
-            ],
-            'priority' => 12,
-            'type' => 'expense',
-        ],
-        'pengeluaran_investasi' => [
-            'name' => 'Investasi',
-            'icon' => '💼',
-            'keywords' => ['investasi', 'reksadana', 'saham', 'crypto', 'bitcoin', 'eth', 'ethereum', 'emas', 'logam mulia'],
-            'context_rules' => [
-                'beli' => ['reksadana', 'saham', 'crypto', 'emas', 'logam mulia'],
-                'top up' => ['reksadana'],
-            ],
-            'priority' => 12,
-            'type' => 'expense',
-        ],
-        'pengeluaran_pinjaman' => [
-            'name' => 'Pinjaman',
-            'icon' => '💳',
-            'keywords' => ['pinjaman', 'pinjol', 'paylater', 'kredivo', 'akulaku', 'kredit'],
-            'context_rules' => [
-                'bayar' => ['pinjaman', 'pinjol', 'paylater', 'kredivo', 'akulaku', 'kredit'],
-            ],
-            'priority' => 13,
-            'type' => 'expense',
-        ],
-        'pengeluaran_cicilan' => [
-            'name' => 'Cicilan',
-            'icon' => '🏦',
-            'keywords' => ['cicilan', 'angsuran', 'cicil', 'kpr', 'leasing'],
-            'context_rules' => [
-                'bayar' => ['cicilan', 'angsuran', 'kpr', 'leasing'],
-            ],
-            'priority' => 13,
-            'type' => 'expense',
-        ],
-        'pengeluaran_asuransi' => [
-            'name' => 'Asuransi',
-            'icon' => '🛡️',
-            'keywords' => ['asuransi', 'premi', 'bpjs', 'prudential', 'allianz'],
-            'context_rules' => [
-                'bayar' => ['asuransi', 'premi', 'bpjs'],
-            ],
-            'priority' => 12,
-            'type' => 'expense',
-        ],
-        'pengeluaran_pajak' => [
-            'name' => 'Pajak',
-            'icon' => '📊',
-            'keywords' => ['pajak', 'pph', 'ppn', 'pbb', 'samsat', 'stnk'],
-            'context_rules' => [
-                'bayar' => ['pajak', 'pph', 'ppn', 'pbb', 'samsat', 'stnk'],
-            ],
-            'priority' => 12,
-            'type' => 'expense',
-        ],
-        'pengeluaran_donasi' => [
-            'name' => 'Donasi',
-            'icon' => '❤️',
-            'keywords' => ['donasi', 'sedekah', 'infaq', 'infak', 'zakat', 'sumbangan', 'amal', 'santunan', 'wakaf', 'qurban'],
-            'context_rules' => [],
-            'priority' => 10,
-            'type' => 'expense',
-        ],
-        'pengeluaran_keluarga' => [
-            'name' => 'Keluarga',
-            'icon' => '👨‍👩‍👧‍👦',
-            'keywords' => ['keluarga', 'orang tua', 'ibu', 'bapak', 'anak', 'adik', 'kakak', 'saudara'],
-            'context_rules' => [
-                'kasih' => ['keluarga', 'ibu', 'bapak', 'anak'],
-            ],
-            'priority' => 9,
-            'type' => 'expense',
-        ],
-        'pengeluaran_langganan' => [
-            'name' => 'Langganan',
-            'icon' => '🔄',
-            'keywords' => ['netflix', 'spotify', 'youtube premium', 'disney', 'langganan'],
-            'context_rules' => [
-                'bayar' => ['langganan', 'netflix', 'spotify'],
-            ],
-            'priority' => 10,
-            'type' => 'expense',
-        ],
-        'pengeluaran_pakaian' => [
-            'name' => 'Pakaian & Fashion',
-            'icon' => '👕',
-            'keywords' => ['pakaian', 'fashion', 'baju', 'celana', 'sepatu', 'jaket', 'uniqlo', 'zara', 'h&m', 'hm'],
-            'context_rules' => [
-                'beli' => ['baju', 'celana', 'sepatu', 'jaket', 'pakaian'],
-            ],
-            'priority' => 10,
-            'type' => 'expense',
-        ],
-        'pengeluaran_perawatan_diri' => [
-            'name' => 'Perawatan Diri',
-            'icon' => '💇',
-            'keywords' => ['salon', 'barber', 'potong rambut', 'spa', 'skincare', 'treatment', 'makeup'],
-            'context_rules' => [
-                'beli' => ['skincare', 'makeup'],
-            ],
-            'priority' => 10,
-            'type' => 'expense',
-        ],
-        'pengeluaran_otomotif' => [
-            'name' => 'Otomotif',
-            'icon' => '🔧',
-            'keywords' => ['bengkel', 'servis', 'service', 'oli', 'ban', 'aki', 'sparepart', 'spare part', 'tune up'],
-            'context_rules' => [
-                'beli' => ['oli', 'ban', 'aki', 'sparepart', 'spare part'],
-                'servis' => ['motor', 'mobil'],
-            ],
-            'priority' => 11,
-            'type' => 'expense',
-        ],
-        'pengeluaran_hadiah' => [
-            'name' => 'Hadiah & Bingkisan',
-            'icon' => '🎁',
-            'keywords' => ['hadiah', 'kado', 'bingkisan', 'parcel', 'hampers'],
-            'context_rules' => [
-                'beli' => ['hadiah', 'kado', 'bingkisan', 'parcel', 'hampers'],
-            ],
-            'priority' => 9,
-            'type' => 'expense',
-        ],
-        'pengeluaran_modal' => [
-            'name' => 'Modal & Stok',
-            'icon' => '📦',
-            'keywords' => ['modal', 'stok', 'stock', 'restock', 'kulakan', 'bahan baku', 'supplier', 'grosir', 'kulak'],
-            'context_rules' => [
-                'beli' => ['stok', 'stock', 'bahan baku', 'kulakan', 'supplier', 'grosir'],
-            ],
-            'priority' => 12,
-            'type' => 'expense',
-        ],
-        'pengeluaran_operasional' => [
-            'name' => 'Operasional',
-            'icon' => '⚙️',
-            'keywords' => ['operasional', 'packing', 'packaging', 'ekspedisi', 'ongkir', 'shipping', 'admin', 'biaya admin', 'fee', 'komisi marketplace'],
-            'context_rules' => [
-                'bayar' => ['operasional', 'admin', 'biaya admin', 'fee'],
-            ],
-            'priority' => 11,
-            'type' => 'expense',
-        ],
-        'pengeluaran_transfer' => [
-            'name' => 'Transfer Keluar',
-            'icon' => '📤',
-            'keywords' => ['transfer keluar', 'tf keluar', 'kirim', 'transfer', 'tf'],
-            'context_rules' => [
-                'transfer' => ['ke', 'keluar'],
-            ],
-            'priority' => 11,
-            'type' => 'expense',
-        ],
-        'pengeluaran_lainnya' => [
             'name' => 'Pengeluaran Lainnya',
             'icon' => '📝',
+        ];
+        $this->categoryMap['pendapatan_lainnya'] = [
             'keywords' => [],
-            'context_rules' => [],
-            'priority' => 1,
-            'type' => 'expense',
-        ],
-        'pendapatan_lainnya' => [
+            'type' => 'income',
             'name' => 'Pendapatan Lainnya',
             'icon' => '💵',
-            'keywords' => [],
-            'context_rules' => [],
-            'priority' => 1,
-            'type' => 'income',
-        ],
-    ];
+        ];
+        // Ensure bahan_makanan has correct metadata even if not in config
+        if (!isset($this->categoryMap['pengeluaran_bahan_makanan'])) {
+            $this->categoryMap['pengeluaran_bahan_makanan'] = [
+                'keywords' => [],
+                'type' => 'expense',
+                'name' => 'Bahan Makanan & Bumbu Dapur',
+                'icon' => '🍜',
+            ];
+        } else {
+            $this->categoryMap['pengeluaran_bahan_makanan']['name'] = 'Bahan Makanan & Bumbu Dapur';
+            $this->categoryMap['pengeluaran_bahan_makanan']['icon'] = '🍜';
+        }
 
-    /**
-     * Main entry point - proses seluruh pipeline
-     */
-    public function infer(string $messageText): array
+        Log::info('CategoryInference: Map loaded', [
+            'categories' => array_keys($this->categoryMap),
+            'total_keywords' => array_sum(array_map(fn($c) => count($c['keywords'] ?? []), $this->categoryMap)),
+            'otomotif_keywords' => $this->categoryMap['pengeluaran_otomotif']['keywords'] ?? 'NOT FOUND',
+        ]);
+    }
+
+    public function infer(string $messageText, ?bool $isIncomeHint = null): array
     {
+        $this->ensureLoaded();
         $this->messageText = $messageText;
         $this->messageLower = mb_strtolower($messageText);
         $this->pipelineData = [
-            'original' => $messageText,
-            'lower' => $this->messageLower,
-            'scores' => [], // category_type => score
-            'detected_intent' => null,
-            'entities' => [],
+            'scores' => [],
+            'matched_keywords' => [],
         ];
 
-        Log::info('CategoryInference: Starting pipeline', [
+        $intentType = $this->detectIntentType($isIncomeHint);
+
+        $this->matchKeywords($intentType);
+
+        $this->applyContextBoosts($intentType);
+
+        $result = $this->decide($intentType);
+
+        $result = $this->validateWithGemini($result);
+
+        Log::info('CategoryInference: Result v2', [
             'message' => $messageText,
-        ]);
-
-        // Step 1: Preprocessing
-        $this->stepPreprocessing();
-
-        // Step 2: Intent Detection
-        $this->stepIntentDetection();
-
-        // Step 3: Entity Extraction
-        $this->stepEntityExtraction();
-
-        // Step 4: Category Matching
-        $this->stepCategoryMatching();
-
-        // Step 5: Context Resolution
-        $this->stepContextResolution();
-
-        // Step 6: Confidence Scoring
-        $this->stepConfidenceScoring();
-
-        // Step 7: Final Decision
-        $result = $this->stepFinalDecision();
-
-        Log::info('CategoryInference: Pipeline complete', [
-            'message' => $messageText,
-            'result' => $result,
+            'category' => $result['category_type'],
+            'confidence' => $result['confidence'],
+            'source' => $result['source'],
+            'matched_keywords' => $result['metadata']['matched_keywords'] ?? [],
         ]);
 
         return $result;
     }
 
-    /**
-     * Step 1: Preprocessing - Normalisasi teks
-     */
-    protected function stepPreprocessing(): void
+    protected function detectIntentType(?bool $isIncomeHint = null): string
     {
-        // Remove extra whitespace
-        $normalized = preg_replace('/\s+/', ' ', $this->messageLower);
-        $this->pipelineData['normalized'] = trim($normalized);
-        
-        // Remove common prefixes/suffixes that don't affect categorization
-        $cleaned = preg_replace('/(^ya\s+|^ok\s+|^makasih\s+|^terima kasih\s+)/i', '', $normalized);
-        $this->pipelineData['cleaned'] = $cleaned;
+        if ($isIncomeHint !== null) {
+            return $isIncomeHint ? 'income' : 'expense';
+        }
+
+        // Delegasikan ke TransactionTypeDetector — satu sumber kebenaran
+        // (sebelumnya logika ini terduplikasi dengan urutan cek berbeda,
+        //  menyebabkan "Uang lembur" salah jadi expense)
+        return app(TransactionTypeDetector::class)->detect($this->messageLower);
     }
 
-    /**
-     * Step 2: Intent Detection - Tentukan income/expense/debt
-     */
-    protected function stepIntentDetection(): void
+    protected function matchKeywords(string $intentType): void
     {
-        $text = $this->pipelineData['cleaned'];
-        
-        // Detect debt flow (priority tinggi)
-        $debtPatterns = [
-            'pengeluaran_bayar_hutang' => ['bayar hutang', 'bayar utang', 'lunasi hutang', 'lunasi utang'],
-            'pendapatan_hutang' => ['dapat pinjaman', 'pinjaman dari', 'hutang dari', 'dipinjemin'],
-            'pengeluaran_piutang' => ['kasih pinjam', 'pinjamkan', 'piutang ke', 'pijemin ke'],
-            'pendapatan_terima_piutang' => ['piutang lunas', 'terima piutang', 'terima pelunasan'],
-        ];
+        $text = $this->messageLower;
 
-        foreach ($debtPatterns as $categoryType => $patterns) {
-            foreach ($patterns as $pattern) {
-                if (str_contains($text, $pattern)) {
-                    $this->pipelineData['detected_intent'] = $categoryType;
-                    $this->pipelineData['intent_type'] = str_contains($categoryType, 'pengeluaran') ? 'expense' : 'income';
-                    $this->pipelineData['scores'][$categoryType] = 100; // Max confidence
-                    Log::debug('Intent: Debt flow detected', ['type' => $categoryType]);
-                    return;
-                }
-            }
-        }
+        foreach ($this->categoryMap as $categoryType => $config) {
+            if (($config['type'] ?? 'expense') !== $intentType) continue;
 
-        // Detect income keywords
-        $incomeKeywords = ['gajian', 'gaji', 'dikasih', 'terima', 'masuk', 'dapat', 'pemasukan', 'pendapatan', 'bonus', 'thr', 'insentif', 'komisi', 'cashback', 'refund', 'dividen', 'bunga', 'penjualan', 'jualan', 'omset', 'laku'];
-        $isIncome = false;
-        foreach ($incomeKeywords as $keyword) {
-            if (str_contains($text, $keyword)) {
-                $isIncome = true;
-                break;
-            }
-        }
-
-        // Detect expense keywords
-        $expenseKeywords = ['bayar', 'beli', 'belanja', 'keluar', 'dibayar', 'cicil', 'cicilan', 'angsuran', 'kpr', 'asuransi', 'premi', 'pajak', 'kulakan', 'restock', 'servis', 'service'];
-        $isExpense = false;
-        foreach ($expenseKeywords as $keyword) {
-            if (str_contains($text, $keyword)) {
-                $isExpense = true;
-                break;
-            }
-        }
-
-        if (preg_match('/\b(bayar|kasih|beri|berikan)\b.*\b(gaji|upah|honor)\b/u', $text)) {
-            $isExpense = true;
-        }
-
-        if (preg_match('/\b(gaji|upah|honor)\b.*\b(karyawan|pegawai|tukang)\b/u', $text)) {
-            $isExpense = true;
-        }
-
-        if (preg_match('/\b(terima|dapat|masuk|gajian)\b.*\b(gaji|honor)\b/u', $text)) {
-            $isIncome = true;
-        }
-
-        if (preg_match('/^\s*gaji\b/u', $text)) {
-            $isIncome = true;
-        }
-
-        if (preg_match('/\b(transfer|tf|kirim)\b/u', $text)) {
-            if (preg_match('/\b(ke|keluar)\b/u', $text)) {
-                $isExpense = true;
-            } elseif (preg_match('/\b(dari|masuk)\b/u', $text)) {
-                $isIncome = true;
-            }
-        }
-
-        // Priority: if both detected, expense wins (more specific)
-        if ($isExpense) {
-            $this->pipelineData['intent_type'] = 'expense';
-        } elseif ($isIncome) {
-            $this->pipelineData['intent_type'] = 'income';
-        } else {
-            // Default: assume expense for messages like "kasih undangan hajatan"
-            $this->pipelineData['intent_type'] = 'expense';
-        }
-
-        Log::debug('Intent: Type detected', ['type' => $this->pipelineData['intent_type']]);
-    }
-
-    /**
-     * Step 3: Entity Extraction - Extract amount, date, merchant
-     */
-    protected function stepEntityExtraction(): void
-    {
-        $text = $this->pipelineData['cleaned'];
-        
-        // Extract amount (simplified - bisa gunakan helper yang sudah ada)
-        $amount = $this->extractAmount($text);
-        $this->pipelineData['entities']['amount'] = $amount;
-
-        // Extract date
-        $date = $this->extractDate($text);
-        $this->pipelineData['entities']['date'] = $date;
-
-        Log::debug('Entity extraction complete', $this->pipelineData['entities']);
-    }
-
-    /**
-     * Step 4: Category Matching - Weighted keyword matching
-     */
-    protected function stepCategoryMatching(): void
-    {
-        $text = $this->pipelineData['cleaned'];
-        $intentType = $this->pipelineData['intent_type'] ?? 'expense';
-
-        foreach ($this->categoryConfig as $categoryType => $config) {
-            // Skip jika tipe berbeda (income vs expense)
-            if ($config['type'] !== $intentType) {
-                continue;
-            }
+            // Guard: pastikan prefix kategori konsisten dengan intentType.
+            // Mencegah "Uang lembur" (income) memenangkan kategori pengeluaran_bahan_makanan
+            // lewat context boost atau jalur lain, meski tipe sudah benar income.
+            if ($intentType === 'income' && str_starts_with($categoryType, 'pengeluaran_')) continue;
+            if ($intentType === 'expense' && str_starts_with($categoryType, 'pendapatan_')) continue;
 
             $score = 0;
-            $matchedKeywords = [];
+            $matched = [];
+            $bestKeywordLen = 0;
 
-            // Check keywords
             foreach ($config['keywords'] as $keyword) {
                 if (str_contains($text, $keyword)) {
-                    $score += 10; // Base score per keyword match
-                    $matchedKeywords[] = $keyword;
-                    
-                    // Bonus: exact word boundary match
-                    if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/u', $text)) {
-                        $score += 5;
+                    if (!$this->isValidIndonesianMatch($text, $keyword)) {
+                        continue;
                     }
+                    $len = mb_strlen($keyword);
+                    $keywordScore = 10 + $len;
+                    if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/u', $text)) {
+                        $keywordScore += 5;
+                    }
+                    if ($len > $bestKeywordLen) {
+                        $bestKeywordLen = $len;
+                    }
+                    $score += $keywordScore;
+                    $matched[] = $keyword;
                 }
             }
 
             if ($score > 0) {
-                // Apply priority multiplier
-                $score *= ($config['priority'] / 10);
                 $this->pipelineData['scores'][$categoryType] = $score;
-                $this->pipelineData['matched_keywords'][$categoryType] = $matchedKeywords;
+                $this->pipelineData['matched_keywords'][$categoryType] = $matched;
             }
         }
-
-        Log::debug('Category matching scores', [
-            'scores' => $this->pipelineData['scores'],
-            'matched_keywords' => $this->pipelineData['matched_keywords'] ?? [],
-        ]);
     }
 
-    /**
-     * Step 5: Context Resolution - Resolve konflik antar keyword
-     * Enhanced dengan semantic understanding
-     */
-    protected function stepContextResolution(): void
+    protected function isValidIndonesianMatch(string $text, string $keyword): bool
     {
-        $text = $this->pipelineData['cleaned'];
-
-        // Apply semantic context detection
-        $this->applySemanticContext();
-
-        // Check context rules untuk setiap kategori yang terdeteksi
-        foreach ($this->categoryConfig as $categoryType => $config) {
-            if (!isset($this->pipelineData['scores'][$categoryType])) {
-                continue;
+        $keywordLower = mb_strtolower($keyword);
+        $len = mb_strlen($keywordLower);
+        
+        $offset = 0;
+        while (($pos = mb_strpos($text, $keywordLower, $offset)) !== false) {
+            $before = mb_substr($text, 0, $pos);
+            $after = mb_substr($text, $pos + $len);
+            
+            $wordBefore = '';
+            if (preg_match('/([a-zA-Z0-9]+)$/u', $before, $matches)) {
+                $wordBefore = $matches[1];
             }
-
-            // Apply context rules
-            foreach ($config['context_rules'] as $contextKeyword => $relatedKeywords) {
-                if (str_contains($text, $contextKeyword)) {
-                    foreach ($relatedKeywords as $related) {
-                        if (str_contains($text, $related)) {
-                            // Context match! Boost score significantly
-                            $this->pipelineData['scores'][$categoryType] += 30;
-                            $this->pipelineData['context_boost'][$categoryType] = "{$contextKeyword} + {$related}";
-                            Log::debug('Context boost applied', [
-                                'category' => $categoryType,
-                                'context' => $contextKeyword,
-                                'related' => $related,
-                            ]);
-                        }
+            
+            $wordAfter = '';
+            if (preg_match('/^([a-zA-Z0-9]+)/u', $after, $matches)) {
+                $wordAfter = $matches[1];
+            }
+            
+            if ($wordBefore === '' && $wordAfter === '') {
+                return true;
+            }
+            
+            $allowedPrefixes = ['me', 'mem', 'men', 'meng', 'meny', 'di', 'ke', 'ter', 'se', 'pe', 'pem', 'pen', 'peng', 'peny', 'ber', 'be', 'bel'];
+            $allowedSuffixes = ['an', 'kan', 'i', 'nya', 'lah', 'kah', 'pun'];
+            
+            $prefixValid = ($wordBefore === '' || in_array($wordBefore, $allowedPrefixes));
+            $suffixValid = ($wordAfter === '' || in_array($wordAfter, $allowedSuffixes));
+            
+            if ($prefixValid && $suffixValid) {
+                if ($len <= 3) {
+                    if ($wordBefore === '' && $wordAfter === '') {
+                        return true;
                     }
+                } else {
+                    return true;
                 }
             }
+            
+            $offset = $pos + 1;
         }
-
-        // Advanced context: Detect verb-noun combinations
-        $this->resolveVerbNounContext();
-
-        arsort($this->pipelineData['scores']);
-    }
-
-    /**
-     * Apply semantic context understanding
-     */
-    protected function applySemanticContext(): void
-    {
-        $text = $this->pipelineData['cleaned'];
-        $intentType = $this->pipelineData['intent_type'] ?? 'expense';
-
-        // Context 1: "kasih" (memberi) - pahami tujuan pemberian
-        if ($intentType === 'expense' && str_contains($text, 'kasih')) {
-            if (str_contains($text, 'undangan') || str_contains($text, 'hajatan') || str_contains($text, 'acara')) {
-                // Kasih terkait acara → pengeluaran_acara
-                $this->boostCategory('pengeluaran_acara', 50, 'semantic: kasih + undangan/hajatan');
-            } elseif (str_contains($text, 'amplop') || str_contains($text, 'sumbangan')) {
-                // Kasih amplop/sumbangan → pengeluaran_sosial
-                $this->boostCategory('pengeluaran_sosial', 45, 'semantic: kasih + amplop/sumbangan');
-            } elseif (str_contains($text, 'gaji') || str_contains($text, 'upah')) {
-                // Kasih gaji → pengeluaran_gaji
-                $this->boostCategory('pengeluaran_gaji', 55, 'semantic: kasih + gaji/upah');
-            } elseif (str_contains($text, 'pinjam') || str_contains($text, 'hutang')) {
-                // Kasih pinjaman → pengeluaran_piutang
-                $this->boostCategory('pengeluaran_piutang', 50, 'semantic: kasih + pinjam/hutang');
-            }
-        }
-
-        // Context 2: "terima" (menerima) - pahami sumber penerimaan
-        if ($intentType === 'income' && str_contains($text, 'terima')) {
-            if (str_contains($text, 'gaji') || str_contains($text, 'honor')) {
-                // Terima gaji → pendapatan_gaji
-                $this->boostCategory('pendapatan_gaji', 55, 'semantic: terima + gaji/honor');
-            } elseif (str_contains($text, 'piutang')) {
-                // Terima piutang → pendapatan_terima_piutang
-                $this->boostCategory('pendapatan_terima_piutang', 50, 'semantic: terima + piutang');
-            } elseif (str_contains($text, 'amplop')) {
-                // Terima amplop → pendapatan_lainnya (income)
-                $this->boostCategory('pendapatan_lainnya', 40, 'semantic: terima + amplop');
-            } elseif (str_contains($text, 'bonus') || str_contains($text, 'thr') || str_contains($text, 'insentif') || str_contains($text, 'komisi')) {
-                $this->boostCategory('pendapatan_bonus', 50, 'semantic: terima + bonus/thr/insentif/komisi');
-            } elseif (str_contains($text, 'refund') || str_contains($text, 'cashback')) {
-                $this->boostCategory('pendapatan_refund', 50, 'semantic: terima + refund/cashback');
-            }
-        }
-
-        // Context 3: "beli" (membeli) - pahami objek pembelian
-        if ($intentType === 'expense' && str_contains($text, 'beli')) {
-            if (str_contains($text, 'undangan') || str_contains($text, 'kartu') || str_contains($text, 'buku tamu')) {
-                // Beli terkait acara → pengeluaran_acara
-                $this->boostCategory('pengeluaran_acara', 45, 'semantic: beli + undangan/kartu');
-            } elseif (str_contains($text, 'obat') || str_contains($text, 'vitamin')) {
-                // Beli obat → pengeluaran_kesehatan
-                $this->boostCategory('pengeluaran_kesehatan', 45, 'semantic: beli + obat/vitamin');
-            } elseif (str_contains($text, 'buku') || str_contains($text, 'alat tulis')) {
-                // Beli buku → pengeluaran_pendidikan
-                $this->boostCategory('pengeluaran_pendidikan', 45, 'semantic: beli + buku/alat tulis');
-            } elseif (str_contains($text, 'baju') || str_contains($text, 'sepatu') || str_contains($text, 'pakaian')) {
-                $this->boostCategory('pengeluaran_pakaian', 45, 'semantic: beli + pakaian');
-            } elseif (str_contains($text, 'skincare') || str_contains($text, 'makeup')) {
-                $this->boostCategory('pengeluaran_perawatan_diri', 45, 'semantic: beli + perawatan diri');
-            } elseif (str_contains($text, 'oli') || str_contains($text, 'ban') || str_contains($text, 'aki') || str_contains($text, 'sparepart')) {
-                $this->boostCategory('pengeluaran_otomotif', 45, 'semantic: beli + otomotif');
-            } elseif (str_contains($text, 'stok') || str_contains($text, 'bahan baku') || str_contains($text, 'kulakan')) {
-                $this->boostCategory('pengeluaran_modal', 45, 'semantic: beli + stok/modal');
-            }
-        }
-
-        // Context 4: Location-based inference
-        if ($intentType === 'expense' && (str_contains($text, 'di') || str_contains($text, 'ke'))) {
-            if (preg_match('/\b(di|ke)\s+(restoran|kafe|warung|rm\.?)\b/i', $text)) {
-                $this->boostCategory('pengeluaran_makanan', 30, 'semantic: location indicates eating');
-            } elseif (preg_match('/\b(di|ke)\s+(apotek|klinik|rumah sakit)\b/i', $text)) {
-                $this->boostCategory('pengeluaran_kesehatan', 30, 'semantic: location indicates health');
-            } elseif (preg_match('/\b(di|ke)\s+(spbu)\b/i', $text)) {
-                $this->boostCategory('pengeluaran_transport', 30, 'semantic: location indicates fuel');
-            } elseif (preg_match('/\b(di|ke)\s+(bengkel)\b/i', $text)) {
-                $this->boostCategory('pengeluaran_otomotif', 30, 'semantic: location indicates workshop');
-            } elseif (preg_match('/\b(di|ke)\s+(salon|barber)\b/i', $text)) {
-                $this->boostCategory('pengeluaran_perawatan_diri', 30, 'semantic: location indicates grooming');
-            }
-        }
-    }
-
-    /**
-     * Resolve verb-noun context combinations
-     */
-    protected function resolveVerbNounContext(): void
-    {
-        $text = $this->pipelineData['cleaned'];
         
-        // Pattern: [verb] [noun] - understand the combination
+        return false;
+    }
+
+    protected function applyContextBoosts(string $intentType): void
+    {
+        $text = $this->messageLower;
+
         $patterns = [
-            '/\bbayar\s+(listrik|air|internet|token)\b/i' => ['pengeluaran_utilitas', 40],
             '/\bbayar\s+(hutang|utang)\b/i' => ['pengeluaran_bayar_hutang', 60],
-            '/\bbayar\s+(cicilan|angsuran|kpr|leasing)\b/i' => ['pengeluaran_cicilan', 55],
+            '/\bbayar\s+(cicilan|angsuran)\b/i' => ['pengeluaran_cicilan', 55],
             '/\bbayar\s+(asuransi|premi|bpjs)\b/i' => ['pengeluaran_asuransi', 50],
-            '/\bbayar\s+(pajak|pph|ppn|pbb|samsat|stnk)\b/i' => ['pengeluaran_pajak', 55],
-            '/\bbayar\s+(pinjaman|pinjol|paylater|kredivo|akulaku)\b/i' => ['pengeluaran_pinjaman', 55],
-            '/\bbeli\s+(bensin|bbm|solar)\b/i' => ['pengeluaran_transport', 40],
-            '/\bmakan\s+(siang|malam|pagi)\b/i' => ['pengeluaran_makanan', 40],
-            '/\bbeli\s+(saham|reksadana|emas|crypto|bitcoin|eth|ethereum)\b/i' => ['pengeluaran_investasi', 45],
+            '/\bbayar\s+(pajak|pph|ppn|pbb)\b/i' => ['pengeluaran_pajak', 55],
+            '/\bbayar\s+(pinjaman|pinjol|paylater)\b/i' => ['pengeluaran_pinjaman', 55],
+            '/\bbayar\s+(listrik|air|internet|token)\b/i' => ['pengeluaran_utilitas', 40],
+            '/\bbayar\s+(sewa|kost|kos)\b/i' => ['pengeluaran_hunian', 40],
             '/\b(servis|service)\s+(motor|mobil)\b/i' => ['pengeluaran_otomotif', 45],
+            '/\bganti\s+(oli|ban|aki)\b/i' => ['pengeluaran_otomotif', 45],
             '/\b(beli|kulakan)\s+(stok|stock|bahan baku)\b/i' => ['pengeluaran_modal', 45],
+            '/\b(beli|bayar)\s+.*(oli|ban|aki|sparepart|spare part)\b/i' => ['pengeluaran_otomotif', 40],
+            '/\b(beli|bayar)\s+.*(makan|kopi|nasi|mie|bakso|sate|gado|pecel|kue|roti|jajan|snack|cemilan)\b/i' => ['pengeluaran_makanan', 35],
+            '/\b(beli|bayar)\s+.*(beras|tepung|gula|garam|bumbu|minyak goreng|kecap|santan|bahan masak)\b/i' => ['pengeluaran_bahan_makanan', 40],
+            '/\b(indomie|mie sedaap|mie sejati|sarimi|supermi|pop mie)\b/i' => ['pengeluaran_bahan_makanan', 50],
+            '/\b(indofood|royco|masako|miwon|penyedap)\b/i' => ['pengeluaran_bahan_makanan', 50],
+            '/\b(beli|bayar)\s+.*(popok|susu formula|susu bayi|susu baby|susu anak|stroller|baju bayi|mainan|dot|teether|mpasi|bubur bayi|pampers|diapers)\b/i' => ['pengeluaran_baby', 45],
+            '/\b(fitti|fitti pants|merries|mamypoko|mamy poko|huggies|sweety|genki|goon)\b/i' => ['pengeluaran_baby', 55],
+            '/\b(zwitsal|pigeon|mustela|cussons baby|cb baby|my baby|little baby|little me)\b/i' => ['pengeluaran_baby', 55],
+            '/\b(chil kid|chil mil|promina|milna|bebelac|enfagrow|enfamil|nutrilon|pediasure|sgm|morinaga|lactogen|cerelac|gerber)\b/i' => ['pengeluaran_baby', 55],
+            '/sabun\s+(cuci\s+)?(botol\s+)?bayi/i' => ['pengeluaran_baby', 50],
+            '/\b(beli|bayar)\s+.*(pakan|kucing|anjing|whiskas|royal canin|pet shop|dokter hewan|grooming)\b/i' => ['pengeluaran_hewan', 45],
+            '/\b(dettol|lifebuoy|lux|dove|biore|nuvo|citra)\b/i' => ['pengeluaran_perawatan_diri', 50],
+            '/\b(sunsilk|pantene|rejoice|tresemme|makarizo|emeron)\b/i' => ['pengeluaran_perawatan_diri', 50],
+            '/\b(ovale|garnier|wardah|emina|somethinc|skintific|ms glow|scarlett|cetaphil|nivea|vaseline)\b/i' => ['pengeluaran_perawatan_diri', 50],
+            '/\b(softex|charm|laurier|kotex|pantyliners|pembalut)\b/i' => ['pengeluaran_perawatan_diri', 50],
+            '/\b(salonpas|koyo|balsem)\b/i' => ['pengeluaran_perawatan_diri', 50],
+            '/\b(rokok|vape|liquid vape|iqos|marlboro|gudang garam|djarum|sampoerna)\b/i' => ['pengeluaran_gaya_hidup', 60],
+            '/\b(gym|fitness|pijat|spa|massage|refleksi)\b/i' => ['pengeluaran_gaya_hidup', 50],
+            '/\b(extra joss|kratingdaeng|red bull|energy drink|minuman energi)\b/i' => ['pengeluaran_gaya_hidup', 50],
+            '/\b(nutrive|benecol|anlene|ensure|diabetasol|entrasol)\b/i' => ['pengeluaran_kesehatan', 55],
+            '/\b(beli|bayar)\s+.*(hp|laptop|charger|earphone|headset|powerbank|kamera|tablet|smartwatch|airpods)\b/i' => ['pengeluaran_gadget', 45],
             '/\btransfer\s+(masuk|dari)\b/i' => ['pendapatan_transfer', 35],
             '/\btransfer\s+(keluar|ke)\b/i' => ['pengeluaran_transfer', 35],
+            '/\bterima\s+(gaji|honor)\b/i' => ['pendapatan_gaji', 55],
+            '/\bterima\s+(piutang|pelunasan)\b/i' => ['pendapatan_terima_piutang', 50],
         ];
 
-        foreach ($patterns as $pattern => [$categoryType, $boost]) {
+        foreach ($patterns as $pattern => [$category, $boost]) {
             if (preg_match($pattern, $text)) {
-                $this->boostCategory($categoryType, $boost, "verb-noun pattern: {$pattern}");
+                $old = $this->pipelineData['scores'][$category] ?? 0;
+                $this->pipelineData['scores'][$category] = $old + $boost;
+            }
+        }
+
+        if ($intentType === 'expense') {
+            if (str_contains($text, 'kasih') && (str_contains($text, 'undangan') || str_contains($text, 'hajatan'))) {
+                $old = $this->pipelineData['scores']['pengeluaran_acara'] ?? 0;
+                $this->pipelineData['scores']['pengeluaran_acara'] = $old + 50;
+            }
+            if (str_contains($text, 'kasih') && (str_contains($text, 'amplop') || str_contains($text, 'sumbangan'))) {
+                $old = $this->pipelineData['scores']['pengeluaran_sosial'] ?? 0;
+                $this->pipelineData['scores']['pengeluaran_sosial'] = $old + 45;
+            }
+            if (str_contains($text, 'kasih') && (str_contains($text, 'gaji') || str_contains($text, 'upah'))) {
+                $old = $this->pipelineData['scores']['pengeluaran_gaji'] ?? 0;
+                $this->pipelineData['scores']['pengeluaran_gaji'] = $old + 55;
             }
         }
     }
 
-    /**
-     * Boost category score with logging
-     */
-    protected function boostCategory(string $categoryType, int $boost, string $reason): void
-    {
-        $oldScore = $this->pipelineData['scores'][$categoryType] ?? 0;
-        $this->pipelineData['scores'][$categoryType] = $oldScore + $boost;
-        $this->pipelineData['context_boost'][$categoryType] = $reason;
-        
-        Log::debug('Category boosted', [
-            'category' => $categoryType,
-            'boost' => $boost,
-            'reason' => $reason,
-            'old_score' => $oldScore,
-            'new_score' => $oldScore + $boost,
-        ]);
-    }
-
-    /**
-     * Step 6: Confidence Scoring - Beri skor keyakinan
-     */
-    protected function stepConfidenceScoring(): void
+    protected function decide(string $intentType): array
     {
         $scores = $this->pipelineData['scores'];
-        
+
         if (empty($scores)) {
-            $this->pipelineData['confidence'] = 0.3; // Low confidence
-            return;
+            $default = $intentType === 'income' ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
+            return $this->buildResult($default, 0.3, 'fallback_default');
         }
 
-        // Calculate confidence based on score distribution
-        $maxScore = max($scores);
+        arsort($scores);
+        $topCategory = array_key_first($scores);
+        $topScore = $scores[$topCategory];
         $totalScore = array_sum($scores);
-        if ($totalScore <= 0) {
-            $this->pipelineData['confidence'] = 0.3;
-            $this->pipelineData['max_score'] = $maxScore;
-            $this->pipelineData['total_score'] = $totalScore;
-            return;
-        }
-        
-        // Higher max score relative to total = higher confidence
-        $confidence = $maxScore / $totalScore;
-        
-        // Cap between 0.3 and 0.99
-        $confidence = max(0.3, min(0.99, $confidence));
-        
-        $this->pipelineData['confidence'] = $confidence;
-        $this->pipelineData['max_score'] = $maxScore;
-        $this->pipelineData['total_score'] = $totalScore;
-    }
+        $confidence = max(0.3, min(0.99, $topScore / $totalScore));
 
-    /**
-     * Step 7: Final Decision - Keputusan akhir kategori
-     */
-    protected function stepFinalDecision(): array
-    {
-        $scores = $this->pipelineData['scores'];
-        $intentType = $this->pipelineData['intent_type'] ?? 'expense';
-        $confidence = $this->pipelineData['confidence'] ?? 0.3;
-
-        // If debt flow was detected, use it directly
-        if (!empty($this->pipelineData['detected_intent'])) {
-            $categoryType = $this->pipelineData['detected_intent'];
-            return $this->buildResult($categoryType, 0.95, 'debt_flow_detection');
-        }
-
-        // If no scores, use default
-        if (empty($scores)) {
-            $defaultType = $intentType === 'income' ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
-            return $this->buildResult($defaultType, 0.3, 'fallback_default');
-        }
-
-        // Get top category
-        $topCategoryType = array_key_first($scores);
-        $topScore = $scores[$topCategoryType];
-
-        // If confidence too low, use default
         if ($confidence < 0.4) {
-            $defaultType = $intentType === 'income' ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
-            return $this->buildResult($defaultType, $confidence, 'low_confidence_fallback');
+            $default = $intentType === 'income' ? 'pendapatan_lainnya' : 'pengeluaran_lainnya';
+            return $this->buildResult($default, $confidence, 'low_confidence_fallback');
         }
 
-        return $this->buildResult($topCategoryType, $confidence, 'pipeline_decision');
+        return $this->buildResult($topCategory, $confidence, 'keyword_match');
     }
 
-    /**
-     * Build final result array
-     */
     protected function buildResult(string $categoryType, float $confidence, string $source): array
     {
-        $config = $this->categoryConfig[$categoryType] ?? null;
-        
+        $config = $this->categoryMap[$categoryType] ?? [];
+        $nameMap = config('finwa_category_rules.category_names', []);
+
         return [
             'category_type' => $categoryType,
-            'category_name' => $config['name'] ?? 'Unknown',
+            'category_name' => $nameMap[$categoryType] ?? $config['name'] ?? $categoryType,
             'category_icon' => $config['icon'] ?? '📝',
-            'type' => $config['type'] ?? ($this->pipelineData['intent_type'] ?? 'expense'),
+            'type' => $config['type'] ?? 'expense',
             'confidence' => $confidence,
             'source' => $source,
             'entities' => $this->pipelineData['entities'] ?? [],
             'metadata' => [
-                'pipeline_data' => $this->pipelineData,
                 'all_scores' => $this->pipelineData['scores'] ?? [],
+                'matched_keywords' => $this->pipelineData['matched_keywords'] ?? [],
             ],
         ];
     }
 
-    /**
-     * Simple amount extraction (placeholder - bisa gunakan helper yang ada)
-     */
-    protected function extractAmount(string $text): ?float
+    protected function validateWithGemini(array $result): array
     {
-        // Pattern: 15rb, 50.000, 1jt, Rp 100000
-        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(rb|ribu|k)\b/i', $text, $matches)) {
-            $num = str_replace(',', '.', $matches[1]);
-            return floatval($num) * 1000;
+        if (!config('finwa_category_rules.gemini_validation_enabled', false)) {
+            return $result;
         }
-        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(jt|juta|m)\b/i', $text, $matches)) {
-            $num = str_replace(',', '.', $matches[1]);
-            return floatval($num) * 1000000;
-        }
-        if (preg_match('/(\d{1,3}(?:[.,]\d{3})+)/i', $text, $matches)) {
-            return floatval(str_replace([',', '.'], '', $matches[1]));
-        }
-        if (preg_match('/(\d+)/', $text, $matches)) {
-            return floatval($matches[1]);
-        }
-        return null;
-    }
 
-    /**
-     * Simple date extraction (placeholder)
-     */
-    protected function extractDate(string $text): string
-    {
-        if (preg_match('/kemarin/', $text)) {
-            return now()->subDay()->toDateString();
+        if ($result['source'] === 'debt_flow_detection') {
+            return $result;
         }
-        if (preg_match('/lusa/', $text)) {
-            return now()->addDay()->toDateString();
+
+        if ($result['confidence'] >= 0.85 && $result['source'] === 'keyword_match') {
+            return $result;
         }
-        return now()->toDateString();
+
+        try {
+            $geminiService = app(\App\Services\GeminiAIService::class);
+
+            if (!$geminiService->isAvailable()) {
+                return $result;
+            }
+
+            $geminiResult = $geminiService->validateCategory(
+                $this->messageText,
+                $result['type'],
+                $result['category_type'],
+                $this->categoryMap
+            );
+
+            if (!$geminiResult) {
+                return $result;
+            }
+
+            if ($geminiResult['corrected']) {
+                $newType = $geminiResult['category_type'];
+                $newConfig = $this->categoryMap[$newType] ?? null;
+
+                if (!$newConfig) {
+                    foreach ($this->categoryMap as $type => $config) {
+                        if (mb_strtolower($config['name'] ?? '') === mb_strtolower($newType) ||
+                            str_contains(mb_strtolower($newType), mb_strtolower($type))) {
+                            $newType = $type;
+                            $newConfig = $config;
+                            break;
+                        }
+                    }
+                }
+
+                if ($newConfig) {
+                    $nameMap = config('finwa_category_rules.category_names', []);
+                    return [
+                        'category_type' => $newType,
+                        'category_name' => $nameMap[$newType] ?? $newConfig['name'] ?? $newType,
+                        'category_icon' => $newConfig['icon'] ?? '📝',
+                        'type' => $newConfig['type'] ?? $result['type'],
+                        'confidence' => $geminiResult['confidence'],
+                        'source' => 'gemini_ai_validation',
+                        'entities' => $result['entities'],
+                        'metadata' => array_merge($result['metadata'] ?? [], [
+                            'gemini_correction' => [
+                                'original_category' => $result['category_type'],
+                                'reason' => $geminiResult['reason'],
+                            ],
+                        ]),
+                    ];
+                }
+            }
+
+        } catch (\Exception $e) {
+            Log::error('CategoryInference: Gemini validation failed', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $result;
     }
 }

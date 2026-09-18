@@ -6,6 +6,7 @@ use App\Models\Balance;
 use App\Models\Category;
 use App\Models\Tenant;
 use App\Models\Transaction;
+use App\Services\Category\CategoryCorrectionService;
 use App\Services\GeminiAIService;
 use App\Services\SubscriptionLimitService;
 use App\Services\Transaction\TransactionParserService;
@@ -13,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -25,13 +27,22 @@ class TransactionController extends Controller
         $tenant = Tenant::findOrFail($tenantId);
 
         $query = Transaction::where('tenant_id', $tenant->id)
-            ->with(['category', 'message'])
+            ->with(['category', 'message', 'whatsappNumber'])
             ->orderByRaw('COALESCE(created_at, updated_at, NOW()) DESC')  // Handle NULL created_at
             ->orderBy('id', 'desc');  // Secondary sort by ID to ensure consistent ordering
 
         // Filters
         if ($request->filled('type')) {
             $query->where('type', $request->type);
+        }
+
+        // Filter berdasarkan nomor WhatsApp pengirim (anggota keluarga)
+        if ($request->filled('number_id')) {
+            if ($request->number_id === 'none') {
+                $query->whereNull('user_whatsapp_number_id');
+            } else {
+                $query->where('user_whatsapp_number_id', (int) $request->number_id);
+            }
         }
 
         if ($request->filled('category_id')) {
@@ -79,14 +90,32 @@ class TransactionController extends Controller
             ->orderBy('name')
             ->get();
 
+        // Daftar nomor WhatsApp anggota untuk filter "Oleh"
+        $whatsappNumbers = \App\Models\UserWhatsAppNumber::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->where('is_lid', false)
+            ->orderBy('is_primary', 'desc')
+            ->orderBy('id')
+            ->get(['id', 'whatsapp_number', 'name', 'is_primary', 'is_lid']);
+
         $limitService = app(\App\Services\SubscriptionLimitService::class);
         $txLimit = $limitService->canCreateTransaction($tenant->id);
+
+        // 5 transaksi terakhir tanpa filter (untuk ditampilkan di empty state)
+        $latestTransactions = Transaction::where('tenant_id', $tenant->id)
+            ->with(['category', 'whatsappNumber'])
+            ->orderByRaw('COALESCE(transaction_date, created_at) DESC')
+            ->orderBy('id', 'desc')
+            ->limit(5)
+            ->get();
 
         return Inertia::render('Transactions/Index', [
             'transactions' => $transactions,
             'categories' => $categories,
-            'filters' => $request->only(['type', 'category_id', 'status', 'start_date', 'end_date', 'search']),
+            'whatsappNumbers' => $whatsappNumbers,
+            'filters' => $request->only(['type', 'category_id', 'status', 'start_date', 'end_date', 'search', 'number_id']),
             'transactionLimit' => $txLimit,
+            'latestTransactions' => $latestTransactions,
         ]);
     }
 
@@ -113,16 +142,17 @@ class TransactionController extends Controller
             abort(403);
         }
 
+        // Fitur "tunggu review" dihilangkan — hanya confirmed/rejected
         $request->validate([
-            'status' => 'required|in:confirmed,review,rejected',
+            'status' => 'required|in:confirmed,rejected',
         ]);
 
         $oldStatus = $transaction->status;
 
         $transaction->update([
             'status' => $request->status,
-            'reviewed_by' => $request->status !== 'review' ? $user->id : null,
-            'reviewed_at' => $request->status !== 'review' ? now() : null,
+            'reviewed_by' => $user->id,
+            'reviewed_at' => now(),
         ]);
 
         // Sync Balance
@@ -150,7 +180,10 @@ class TransactionController extends Controller
             'description' => 'required|string|max:255',
             'source' => 'nullable|string|max:255',
             'category_id' => 'required|integer|exists:categories,id',
-            'status' => 'required|in:confirmed,review,rejected',
+            // Fitur "tunggu review" dihilangkan — hanya confirmed/rejected
+            'status' => 'required|in:confirmed,rejected',
+            'attachment' => 'nullable|file|mimes:jpg,jpeg,png,webp,pdf|max:5120',
+            'delete_attachment' => 'nullable|boolean',
         ]);
 
         // Verify category belongs to tenant
@@ -164,11 +197,48 @@ class TransactionController extends Controller
         $oldType = $transaction->type;
         $oldAmount = $transaction->amount;
         $oldStatus = $transaction->status;
+        $oldCategoryId = $transaction->category_id;
 
         // Convert category_id to integer
         $validated['category_id'] = (int) $validated['category_id'];
 
-        $transaction->update($validated);
+        $metadata = $transaction->metadata ?? [];
+
+        // Check if user requested to delete attachment
+        if ($request->boolean('delete_attachment')) {
+            if (!empty($metadata['attachment_path'])) {
+                if (Storage::disk('public')->exists($metadata['attachment_path'])) {
+                    Storage::disk('public')->delete($metadata['attachment_path']);
+                }
+            }
+            unset($metadata['attachment_path']);
+            unset($metadata['attachment_name']);
+            unset($metadata['attachment_uploaded_at']);
+        } elseif ($request->hasFile('attachment')) {
+            // Delete old attachment if exists
+            if (!empty($metadata['attachment_path'])) {
+                if (Storage::disk('public')->exists($metadata['attachment_path'])) {
+                    Storage::disk('public')->delete($metadata['attachment_path']);
+                }
+            }
+
+            // Store new attachment
+            $file = $request->file('attachment');
+            $path = $file->store(
+                "transactions/{$transaction->tenant_id}/attachments",
+                'public'
+            );
+
+            $metadata['attachment_path'] = $path;
+            $metadata['attachment_name'] = $file->getClientOriginalName();
+            $metadata['attachment_uploaded_at'] = Carbon::now('Asia/Jakarta')->toIso8601String();
+        }
+
+        // Remove extra fields from validated data before updating transaction main attributes
+        unset($validated['attachment']);
+        unset($validated['delete_attachment']);
+
+        $transaction->update(array_merge($validated, ['metadata' => $metadata]));
 
         // Sync Balance
         $balanceService = app(\App\Services\BalanceService::class);
@@ -185,6 +255,29 @@ class TransactionController extends Controller
         // If it is now confirmed, apply the new impact
         if ($transaction->status === 'confirmed' && $transaction->balance_id) {
             $balanceService->updateBalanceFromTransaction($transaction);
+        }
+
+        // ── Feedback Loop: Record category correction ──
+        if ($oldCategoryId !== $transaction->category_id) {
+            $oldCategory = Category::find($oldCategoryId);
+            $newCategory = Category::find($transaction->category_id);
+            if ($oldCategory && $newCategory) {
+                $correctionService = app(CategoryCorrectionService::class);
+                $correctionService->recordCorrection(
+                    $transaction->tenant_id,
+                    $transaction->description ?? '',
+                    $oldCategory->type,
+                    $newCategory->type,
+                    $transaction->source,
+                    (float) $transaction->amount
+                );
+                Log::info('FeedbackLoop: Category correction recorded', [
+                    'transaction_id' => $transaction->id,
+                    'description' => $transaction->description,
+                    'old_category' => $oldCategory->type,
+                    'new_category' => $newCategory->type,
+                ]);
+            }
         }
 
         return redirect()->back()->with('success', 'Transaksi berhasil diperbarui');
@@ -233,6 +326,14 @@ class TransactionController extends Controller
 
             if (! $tenantId) {
                 return response()->json(['success' => false, 'error' => 'Tenant tidak ditemukan'], 404);
+            }
+
+            $limitService = app(\App\Services\SubscriptionLimitService::class);
+            if (! $limitService->canTenantUseOcr($tenantId)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Fitur baca struk otomatis hanya tersedia untuk paket berbayar (Grow/Pro). Silakan upgrade paket Anda.',
+                ], 403);
             }
 
             $request->validate([
@@ -363,7 +464,8 @@ class TransactionController extends Controller
             'category_id' => 'nullable|integer|exists:categories,id',
             'balance_id' => 'nullable|integer|exists:balances,id',
             'transaction_date' => 'nullable|date',
-            'status' => 'nullable|in:confirmed,review',
+            // Fitur "tunggu review" dihilangkan — transaksi baru selalu confirmed
+            'status' => 'nullable|in:confirmed',
             'source' => 'nullable|string|max:50',
         ]);
 
@@ -423,5 +525,67 @@ class TransactionController extends Controller
 
             return response()->json(['message' => 'Gagal menyimpan transaksi', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    public function uploadAttachment(Request $request, Transaction $transaction)
+    {
+        // Verify transaction belongs to current tenant
+        if ($transaction->tenant_id !== $request->tenant_id) {
+            abort(403);
+        }
+
+        $request->validate([
+            'attachment' => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:5120', // 5MB max
+        ]);
+
+        // Delete old attachment if exists
+        $metadata = $transaction->metadata ?? [];
+        if (!empty($metadata['attachment_path'])) {
+            if (Storage::disk('public')->exists($metadata['attachment_path'])) {
+                Storage::disk('public')->delete($metadata['attachment_path']);
+            }
+        }
+
+        // Store new attachment
+        $file = $request->file('attachment');
+        $path = $file->store(
+            "transactions/{$transaction->tenant_id}/attachments",
+            'public'
+        );
+
+        $metadata['attachment_path'] = $path;
+        $metadata['attachment_name'] = $file->getClientOriginalName();
+        $metadata['attachment_uploaded_at'] = Carbon::now('Asia/Jakarta')->toIso8601String();
+
+        $transaction->update([
+            'metadata' => $metadata,
+        ]);
+
+        return redirect()->back()->with('success', 'Lampiran berhasil diunggah');
+    }
+
+    public function deleteAttachment(Request $request, Transaction $transaction)
+    {
+        // Verify transaction belongs to current tenant
+        if ($transaction->tenant_id !== $request->tenant_id) {
+            abort(403);
+        }
+
+        $metadata = $transaction->metadata ?? [];
+        if (!empty($metadata['attachment_path'])) {
+            if (Storage::disk('public')->exists($metadata['attachment_path'])) {
+                Storage::disk('public')->delete($metadata['attachment_path']);
+            }
+        }
+
+        unset($metadata['attachment_path']);
+        unset($metadata['attachment_name']);
+        unset($metadata['attachment_uploaded_at']);
+
+        $transaction->update([
+            'metadata' => $metadata,
+        ]);
+
+        return redirect()->back()->with('success', 'Lampiran berhasil dihapus');
     }
 }

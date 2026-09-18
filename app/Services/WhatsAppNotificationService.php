@@ -172,12 +172,15 @@ class WhatsAppNotificationService
                 ]);
             }
 
-            // Send message via LID if available, otherwise normal phone number
-            if ($lidAddress) {
-                $result = $this->whatsappService->sendMessageToLid($sessionId, $lidAddress, $message);
-            } else {
-                $result = $this->whatsappService->sendMessage($sessionId, $toNumber, $message);
+            // Delay 2 detik antar pesan untuk menghindari WhatsApp restrict/ban
+            sleep(2);
 
+            // Send message via LID if available, otherwise normal phone number.
+            // simulateTyping=false karena ini notifikasi sistem (registrasi/aktivasi), bukan percakapan.
+            if ($lidAddress) {
+                $result = $this->whatsappService->sendMessageToLid($sessionId, $lidAddress, $message, 'text', false);
+            } else {
+                $result = $this->whatsappService->sendMessage($sessionId, $toNumber, $message, 'text', null, false);
             }
 
             if ($result['success']) {

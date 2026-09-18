@@ -189,8 +189,13 @@ class WhatsAppWebhookService
                 $msgBodyRaw = trim($waMessageData['body'] ?? '');
 
                 // 1. Token-based linking (NEW): LINK ABC-123
-                if (preg_match('/^link\s+([A-Z0-9]{3}-[A-Z0-9]{3})$/i', $msgBodyRaw, $tokenMatches)) {
-                    $tokenValue = strtoupper($tokenMatches[1]);
+                if (preg_match('/^link\s+([A-Z0-9]{3}-?[A-Z0-9]{3})$/i', $msgBodyRaw, $tokenMatches)) {
+                    $tokenValue = strtoupper(str_replace('-', '', $tokenMatches[1]));
+                    // Make sure token always has the hyphen for querying DB (ABC-123)
+                    if (strlen($tokenValue) === 6 && !str_contains($tokenValue, '-')) {
+                        $tokenValue = substr($tokenValue, 0, 3) . '-' . substr($tokenValue, 3, 3);
+                    }
+                    
                     $linkToken = \App\Models\DeviceLinkToken::where('token', $tokenValue)
                         ->where('expires_at', '>', now())
                         ->first();
@@ -226,9 +231,15 @@ class WhatsAppWebhookService
                     $phoneToLink = $linkMatches[1];
                     Log::info('Intercepting LINK command', ['phone' => $phoneToLink, 'sender' => $senderId]);
 
+                    // Clean input number to ensure it starts with 62
+                    $cleanInputPhone = $phoneToLink;
+                    if (str_starts_with($cleanInputPhone, '0')) {
+                        $cleanInputPhone = '62' . substr($cleanInputPhone, 1);
+                    }
+
                     // Use helper to find user
-                    $existingUser = $this->findUserByPhoneNumber($phoneToLink);
-                    $cleanPhone = $mappingService->cleanPhoneNumber($phoneToLink); // Needed for linking
+                    $existingUser = $this->findUserByPhoneNumber($cleanInputPhone);
+                    $cleanPhone = $mappingService->cleanPhoneNumber($cleanInputPhone); // Needed for linking
 
                     if ($existingUser) {
                         // CHECK SUBSCRIPTION BEFORE LINKING - Fix for expired users linking devices
@@ -1255,12 +1266,8 @@ class WhatsAppWebhookService
             // Set cache for 5 minutes to prevent duplicate messages
             Cache::put($cacheKey, true, now()->addMinutes(5));
 
-            $message = "👋 *Selamat Datang di FinWa!*\n\n".
-                "Untuk memulai, FinWa perlu menghubungkan perangkat ini ke akun Anda.\n\n".
-                "*Caranya sangat mudah:*\n".
-                "Balas dengan nomor HP yang Anda daftarkan.\n".
-                "Contoh: `6285159205506`\n\n".
-                '💡 *Tips:* Gunakan format 62xxx (tanpa tanda +)';
+            $message = "👋 Halo! Anda belum terdaftar.\n\n".
+                "Ketik *DAFTAR* untuk buat akun gratis ✅";
 
             $whatsappService = new WhatsAppService;
 

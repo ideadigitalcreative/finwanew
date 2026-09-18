@@ -23,6 +23,15 @@ class SendDailyReminder extends Command
 
     public function handle(): int
     {
+        // Guard: reminder blast dimatikan via FINWA_REMINDER_BLASTS_ENABLED=false
+        // untuk mengurangi risiko restrict nomor bot WhatsApp.
+        // Subscription reminder (H-2/H-1 paket Pro) TETAP aktif.
+        if (! config('services.reminder_blasts.enabled', false)) {
+            $this->info('Reminder blasts dinonaktifkan (FINWA_REMINDER_BLASTS_ENABLED=false). Lewati.');
+
+            return Command::SUCCESS;
+        }
+
         $this->info('Starting Daily Reminder...');
 
         $currentHour = Carbon::now('Asia/Jakarta')->hour;
@@ -324,6 +333,8 @@ class SendDailyReminder extends Command
             return null;
         }
 
+        Budget::loadBulkSpending($budgets);
+
         $now = Carbon::now('Asia/Jakarta');
         $startOfMonth = $now->copy()->startOfMonth();
         $daysInMonth = $now->daysInMonth;
@@ -424,7 +435,7 @@ class SendDailyReminder extends Command
             // Format phone number
             $formattedNumber = $this->formatPhoneNumber($phoneNumber);
 
-            $result = $whatsAppService->sendMessage($sessionId, $formattedNumber, $message);
+            $result = $whatsAppService->sendMessage($sessionId, $formattedNumber, $message, 'text', null, false);
 
             if (! ($result['success'] ?? false)) {
                 throw new \Exception($result['error'] ?? 'Failed to send message');

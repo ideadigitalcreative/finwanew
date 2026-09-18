@@ -90,6 +90,24 @@ class FinancialQueryHandler
                 return;
             }
 
+            // VALIDASI: Pastikan pesan benar-benar merupakan query keuangan
+            // Cegah pesan tidak jelas (misal "edd", "halo", "ok") agar tidak
+            // default menjadi "Ringkasan Keuangan"
+            if (!$this->isRecognizedFinancialQuery($questionLower)) {
+                Log::info('Pesan bukan query keuangan yang dikenali, mengabaikan', [
+                    'message_id' => $this->message->id,
+                    'question' => $question,
+                ]);
+                $this->sendReply(
+                    "🤔 Maaf, pesan tidak dikenali.\n\n".
+                    "• _beli kopi 25rb_\n".
+                    "• _ringkasan bulan ini_\n".
+                    "• _help_ untuk panduan"
+                );
+
+                return;
+            }
+
             $queryService = new FinancialQueryService;
             $result = $queryService->answerQuestion($this->message->tenant_id, $question);
 
@@ -127,6 +145,12 @@ class FinancialQueryHandler
                     'tagihan' => 'Tagihan',
                     'listrik' => 'Tagihan',
                     'pulsa' => 'Komunikasi',
+                    'baby' => 'Baby & Anak',
+                    'bayi' => 'Baby & Anak',
+                    'hewan' => 'Hewan Peliharaan',
+                    'kucing' => 'Hewan Peliharaan',
+                    'gadget' => 'Gadget & Elektronik',
+                    'elektronik' => 'Gadget & Elektronik',
                 ];
                 foreach ($categoryPatterns as $keyword => $cat) {
                     if (str_contains($questionLower, $keyword)) {
@@ -154,5 +178,42 @@ class FinancialQueryHandler
             ]);
             $this->sendReply('Maaf, terjadi error saat memproses pertanyaan Anda.');
         }
+    }
+
+    /**
+     * Validasi apakah pesan benar-benar merupakan query keuangan yang dikenali.
+     * Mencegah pesan acak (misal "edd", "ok", "test") diproses sebagai query
+     * yang default-nya menghasilkan Ringkasan Keuangan.
+     */
+    protected function isRecognizedFinancialQuery(string $questionLower): bool
+    {
+        $queryKeywords = [
+            'ringkasan', 'rekap', 'rekapan', 'rangkuman', 'laporan',
+            'pengeluaran', 'pemasukan', 'pendapatan', 'penghasilan',
+            'saldo', 'cashflow', 'arus kas', 'cash flow',
+            'berapa', 'total', 'habis', 'keluar', 'masuk',
+            'mutasi', 'transaksi', 'riwayat',
+            'budget', 'anggaran',
+            'omset', 'omzet', 'income', 'expense', 'revenue', 'spending',
+            'statistik', 'analisis', 'analisa', 'keuanganku',
+            'hari ini', 'bulan ini', 'minggu ini', 'tahun ini',
+            'kemarin', 'bulan lalu', 'minggu lalu',
+            'terakhir', 'tertinggi', 'terbesar', 'terbanyak',
+            'daftar', 'list', 'detail', 'rincian', 'rinci',
+            'cek', 'lihat', 'tampilkan', 'tunjukkan', 'sebutkan',
+            'belanjaan', 'sisa', 'duit', 'uang',
+        ];
+
+        foreach ($queryKeywords as $keyword) {
+            if (str_contains($questionLower, $keyword)) {
+                return true;
+            }
+        }
+
+        if (str_contains($questionLower, '?')) {
+            return true;
+        }
+
+        return false;
     }
 }

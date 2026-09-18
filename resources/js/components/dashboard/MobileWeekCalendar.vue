@@ -117,7 +117,7 @@ const isActive = computed(() => {
 
 <template>
     <!-- Smooth Gradient Container - No borders, blends smoothly -->
-    <div class="w-full rounded-3xl p-4 relative overflow-hidden">
+    <div class="w-full max-w-full rounded-3xl p-4 relative overflow-hidden overflow-x-hidden">
         
         <!-- Base gradient: green concentrated at top, fading to white at bottom -->
         <div class="absolute inset-0 bg-gradient-to-b from-emerald-100 via-white/80 to-white dark:from-emerald-900/40 dark:via-gray-800/80 dark:to-gray-800"></div>

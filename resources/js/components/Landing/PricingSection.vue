@@ -223,7 +223,7 @@
 import { computed } from 'vue';
 import { Gift, ArrowRight, Users, Check, Lock, CreditCard, MessageCircle, Tag } from 'lucide-vue-next';
 
-const WA_BOT_NUMBER = '6285762000079';
+const WA_BOT_NUMBER = '6285159205506';
 const waRegisterUrl = computed(() => {
     const message = encodeURIComponent('Halo kak, saya mau daftar FinWa. Ketik Daftar untuk mulai ya!');
     return `https://wa.me/${WA_BOT_NUMBER}?text=${message}`;

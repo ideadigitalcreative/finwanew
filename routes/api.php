@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\TelegramHealthController;
+use App\Http\Controllers\Api\TelegramUserMapper;
 use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -40,6 +42,10 @@ Route::prefix('auth')->middleware('throttle:api-auth')->group(function () {
 
             // WhatsApp Link (Token-based)
             Route::post('/whatsapp-link/token', [\App\Http\Controllers\Api\WhatsAppLinkController::class, 'generateToken']);
+
+            // Telegram Link (Token-based)
+            Route::post('/telegram/link-token', [TelegramUserMapper::class, 'generateLinkToken']);
+            Route::get('/telegram/link-token-status', [TelegramUserMapper::class, 'checkLinkTokenStatus']);
         });
     });
 });
@@ -58,6 +64,9 @@ Route::prefix('webhooks/whatsapp')
 
         // Route untuk menerima LID mapping dari gateway (auto-discovery)
         Route::post('/lid-mapping', [\App\Http\Controllers\Webhook\WhatsAppEngineWebhookController::class, 'handleLidMapping']);
+
+        // Route untuk resolve LID menjadi nomor telepon asli sebelum gateway mengirim pesan
+        Route::post('/lid-resolve', [\App\Http\Controllers\Webhook\WhatsAppEngineWebhookController::class, 'handleLidResolve']);
     });
 
 // OCR & STT Job Routes
@@ -85,6 +94,10 @@ Route::prefix('stt-jobs')->group(function () {
 Route::prefix('webhooks/telegram')->group(function () {
     Route::post('/message', [\App\Http\Controllers\Webhook\TelegramWebhookController::class, 'handleMessage']);
 });
+
+// Telegram Health Check (public, rate limited)
+Route::get('/health/telegram', [TelegramHealthController::class, 'check'])
+    ->middleware('throttle:10,1'); // 10 requests per minute
 
 // Slack Webhook Routes
 Route::prefix('webhooks/slack')->group(function () {

@@ -17,7 +17,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { type BreadcrumbItem } from '@/types';
-import { Wallet, Plus, Pencil, Trash2, Check, Coins, Landmark, Banknote, Smartphone, TrendingUp, Briefcase } from 'lucide-vue-next';
+
 
 interface Balance {
     id: number;
@@ -76,14 +76,25 @@ const getAccountTypeLabel = (type: string) => {
 };
 
 const getAccountTypeIcon = (type: string) => {
-    const icons: Record<string, any> = {
-        bank: Landmark,
-        cash: Banknote,
-        wallet: Smartphone,
-        investment: TrendingUp,
-        other: Briefcase,
+    const icons: Record<string, string> = {
+        bank: 'account_balance',
+        cash: 'payments',
+        wallet: 'account_balance_wallet',
+        investment: 'trending_up',
+        other: 'briefcase',
     };
-    return icons[type] || Briefcase;
+    return icons[type] || 'briefcase';
+};
+
+const getTypeBadgeStyle = (type: string) => {
+    const styles: Record<string, string> = {
+        bank: 'bg-[#ffe089] text-[#241a00]',
+        cash: 'bg-[#51fac1] text-[#007152]',
+        wallet: 'bg-[#ffd23f] text-[#574500]',
+        investment: 'bg-[#ffc9d0] text-[#ad2c4f]',
+        other: 'bg-[#eae8e2] text-[#4d4634]',
+    };
+    return styles[type] || 'bg-[#eae8e2] text-[#4d4634]';
 };
 
 // Dialog state
@@ -214,38 +225,48 @@ const totalBalance = computed(() => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <Head title="Saldo Akun" />
 
-        <div class="bg-background flex h-full flex-1 flex-col gap-4 md:gap-6 overflow-hidden p-4 md:p-6">
+        <div class="bg-white dark:bg-[#23231f] flex h-full flex-1 flex-col gap-4 md:gap-6 overflow-hidden p-4 md:p-6 font-['Plus_Jakarta_Sans',sans-serif]">
             <!-- Header -->
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div class="flex-1">
-                    <h2 class="text-xl md:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        <Wallet class="w-6 h-6 md:w-7 md:h-7 text-emerald-600" />
+                    <h2 class="text-xl md:text-2xl font-bold text-[#1b1c19] flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#ffd23f] text-2xl md:text-3xl">account_balance_wallet</span>
                         Saldo Akun
                     </h2>
-                    <p class="text-xs md:text-sm text-gray-500 mt-1">
+                    <p class="text-xs md:text-sm text-[#4d4634]/60 mt-1">
                         Kelola saldo akun bank, cash, dan dompet digital Anda
                     </p>
                 </div>
                 <button 
                     @click="openDialog()" 
-                    class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-emerald-500/20 bg-emerald-600 hover:bg-emerald-700 transition-all w-full md:w-auto"
+                    class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-[#725a00] bg-[#ffd23f] hover:bg-[#ffe089] transition-all w-full md:w-auto"
                 >
-                    <Plus class="w-4 h-4" />
+                    <span class="material-symbols-outlined text-lg">add</span>
                     Tambah Saldo Akun
                 </button>
             </div>
 
             <!-- Total Balance Card -->
-            <div class="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-[13px] p-6 md:p-8 text-white border border-emerald-500/20">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-emerald-100">Total Saldo Keseluruhan</p>
-                        <h3 class="mt-2 text-3xl md:text-4xl font-bold tracking-tight">
-                            {{ formatCurrency(totalBalance) }}
-                        </h3>
+            <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-[#23231f] p-5 border border-[#eae8e2] dark:border-white/10 flex flex-col justify-between font-['Plus_Jakarta_Sans',sans-serif] transition-all duration-300">
+                <div class="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-[#ffd23f]/30 blur-2xl pointer-events-none"></div>
+                <div class="absolute -left-10 -bottom-10 w-40 h-40 rounded-full bg-[#51fac1]/40 blur-2xl pointer-events-none"></div>
+                <div class="relative flex flex-col gap-3.5">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-[#ffd23f] text-[#574500]">
+                                <span class="material-symbols-outlined text-[18px]">account_balance_wallet</span>
+                            </span>
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-[#4d4634] dark:text-[#b0ad9e]">Total Saldo Keseluruhan</span>
+                        </div>
+                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#51fac1] text-[#007152] text-[10px] font-extrabold">
+                            <span class="material-symbols-outlined text-[14px]">account_balance_wallet</span>
+                            {{ activeBalances.length }} Dompet
+                        </span>
                     </div>
-                    <div class="rounded-xl bg-white/10 backdrop-blur-sm p-3 md:p-4 border border-white/20">
-                        <Coins class="w-6 h-6 md:w-8 md:h-8 text-white" />
+                    <div class="flex flex-wrap items-baseline gap-2.5">
+                        <span class="text-3xl md:text-[40px] font-extrabold tracking-tight text-[#1b1c19] dark:text-white leading-none">
+                            {{ formatCurrency(totalBalance) }}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -255,55 +276,55 @@ const totalBalance = computed(() => {
                 <div
                     v-for="balance in activeBalances"
                     :key="balance.id"
-                    class="group relative overflow-hidden rounded-[13px] bg-card/60 backdrop-blur-2xl p-6 border border-gray-200/50 dark:border-gray-700/30 transition-all hover:bg-card/80"
-                    :class="{ 'ring-2 ring-emerald-500/30': balance.is_default }"
+                    class="group relative overflow-hidden rounded-2xl bg-white dark:bg-[#23231f] p-6 border border-[#eae8e2] dark:border-white/10 transition-all"
+                    :class="{ 'ring-2 ring-[#ffd23f]/50': balance.is_default }"
                 >
                     <div class="flex items-start justify-between mb-4">
                         <div class="flex items-center gap-3">
-                            <div class="w-12 h-12 rounded-xl bg-emerald-500/10 backdrop-blur-sm flex items-center justify-center border border-emerald-500/20">
-                                <component :is="getAccountTypeIcon(balance.account_type)" class="w-6 h-6 text-emerald-600" />
+                            <div :class="['w-12 h-12 rounded-xl flex items-center justify-center', getTypeBadgeStyle(balance.account_type)]">
+                                <span class="material-symbols-outlined text-2xl">{{ getAccountTypeIcon(balance.account_type) }}</span>
                             </div>
                             <div>
-                                <h3 class="font-bold text-gray-900 dark:text-white">{{ balance.account_name }}</h3>
-                                <p class="text-xs text-gray-500">{{ getAccountTypeLabel(balance.account_type) }}</p>
+                                <h3 class="font-bold text-[#1b1c19]">{{ balance.account_name }}</h3>
+                                <p class="text-xs text-[#4d4634]/60">{{ getAccountTypeLabel(balance.account_type) }}</p>
                             </div>
                         </div>
-                        <div v-if="balance.is_default" class="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                        <div v-if="balance.is_default" class="rounded-full bg-[#51fac1]/30 px-2.5 py-0.5 text-xs font-medium text-[#006c4f]">
                             Utama
                         </div>
                     </div>
                     
                     <div class="mb-4">
-                        <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ formatCurrency(balance.balance) }}</p>
-                        <p class="text-xs text-gray-400 mt-1">
+                        <p class="text-2xl font-bold text-[#1b1c19]">{{ formatCurrency(balance.balance) }}</p>
+                        <p class="text-xs text-[#4d4634]/50 mt-1">
                             {{ balance.account_number ? `No. ${balance.account_number} • ` : '' }} {{ balance.currency }}
                         </p>
                     </div>
 
-                    <div class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-gray-700">
-                        <p class="text-xs text-gray-400">Update: {{ formatDate(balance.balance_date) }}</p>
+                    <div class="flex items-center justify-between border-t border-[#eae8e2] pt-4">
+                        <p class="text-xs text-[#4d4634]/50">Update: {{ formatDate(balance.balance_date) }}</p>
                         <div class="flex gap-2">
                             <button 
                                 @click="openDialog(balance)"
-                                class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                                class="p-1.5 text-[#4d4634]/40 hover:text-[#725a00] hover:bg-[#f5f3ee] rounded-lg transition-colors"
                                 title="Edit"
                             >
-                                <Pencil class="w-4 h-4" />
+                                <span class="material-symbols-outlined text-lg">edit</span>
                             </button>
                             <button 
                                 v-if="!balance.is_default"
                                 @click="setDefaultBalance(balance)"
-                                class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-lg transition-colors"
+                                class="p-1.5 text-[#4d4634]/40 hover:text-[#725a00] hover:bg-[#f5f3ee] rounded-lg transition-colors"
                                 title="Jadikan Utama"
                             >
-                                <Check class="w-4 h-4" />
+                                <span class="material-symbols-outlined text-lg">check</span>
                             </button>
                             <button 
                                 @click="deleteBalance(balance)"
-                                class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                class="p-1.5 text-[#4d4634]/40 hover:text-[#ad2c4f] hover:bg-[#ffc9d0]/30 rounded-lg transition-colors"
                                 title="Hapus"
                             >
-                                <Trash2 class="w-4 h-4" />
+                                <span class="material-symbols-outlined text-lg">delete</span>
                             </button>
                         </div>
                     </div>
@@ -312,46 +333,46 @@ const totalBalance = computed(() => {
                 <!-- Add New Card Placeholder -->
                 <button
                     @click="openDialog()"
-                    class="group flex flex-col items-center justify-center rounded-[13px] border-2 border-dashed border-gray-200/50 dark:border-gray-700/30 bg-muted/10 backdrop-blur-sm p-6 transition-all hover:border-emerald-500 hover:bg-emerald-50/50 dark:hover:border-emerald-500/50 dark:hover:bg-emerald-900/10 h-full min-h-[200px]"
+                    class="group flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee]/50 dark:bg-white/5 p-6 transition-all hover:border-[#ffd23f] hover:bg-[#ffd23f]/10 h-full min-h-[200px]"
                 >
-                    <div class="mb-3 rounded-xl bg-white dark:bg-gray-800 p-4 shadow-sm group-hover:scale-110 transition-transform border border-gray-200/50 dark:border-gray-700/30">
-                        <Plus class="w-6 h-6 text-gray-400 group-hover:text-emerald-600 transition-colors" />
+                    <div class="mb-3 rounded-xl bg-white dark:bg-[#23231f] p-4 group-hover:scale-110 transition-transform border border-[#eae8e2] dark:border-white/10">
+                        <span class="material-symbols-outlined text-2xl text-[#4d4634]/40 group-hover:text-[#ffd23f] transition-colors">add</span>
                     </div>
-                    <p class="font-medium text-gray-600 group-hover:text-emerald-700 dark:text-gray-400 dark:group-hover:text-emerald-400">Tambah Akun Baru</p>
+                    <p class="font-medium text-[#4d4634]/60 group-hover:text-[#725a00]">Tambah Akun Baru</p>
                 </button>
             </div>
 
             <!-- Legacy soft-deactivated accounts (before permanent delete); can be removed or edited -->
             <div v-if="balances.filter(b => !b.is_active).length > 0" class="mt-8">
-                <h3 class="mb-4 text-lg font-bold text-gray-800 dark:text-white">Akun Nonaktif (data lama)</h3>
-                <p class="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                <h3 class="mb-4 text-lg font-bold text-[#1b1c19] dark:text-white">Akun Nonaktif (data lama)</h3>
+                <p class="mb-4 text-sm text-[#4d4634]/60 dark:text-white/50">
                     Akun yang sebelumnya dinonaktifkan. Anda bisa menghapus permanen atau mengaktifkan kembali lewat Edit.
                 </p>
                 <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                     <div
                         v-for="balance in balances.filter(b => !b.is_active)"
                         :key="balance.id"
-                        class="rounded-2xl border border-gray-200 bg-gray-50 p-6 opacity-75 dark:border-gray-700 dark:bg-gray-800/50"
+                        class="rounded-2xl border border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee] dark:bg-white/5 p-6 opacity-70"
                     >
                         <div class="flex items-center justify-between gap-2">
                             <div class="min-w-0 flex-1">
-                                <h4 class="font-semibold text-gray-700 dark:text-gray-300">{{ balance.account_name }}</h4>
-                                <p class="text-sm text-gray-500">{{ formatCurrency(balance.balance) }}</p>
+                                <h4 class="font-semibold text-[#4d4634] dark:text-white/70">{{ balance.account_name }}</h4>
+                                <p class="text-sm text-[#4d4634]/60 dark:text-white/50">{{ formatCurrency(balance.balance) }}</p>
                             </div>
                             <div class="flex shrink-0 gap-1">
                                 <button
                                     @click="openDialog(balance)"
-                                    class="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                                    class="rounded-lg bg-white dark:bg-[#23231f] px-3 py-1.5 text-xs font-medium text-[#4d4634] dark:text-white/70 hover:bg-[#f5f3ee] dark:hover:bg-white/10"
                                 >
                                     Edit
                                 </button>
                                 <button
                                     type="button"
                                     @click="deleteBalance(balance)"
-                                    class="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30"
+                                    class="rounded-lg p-1.5 text-[#4d4634]/40 hover:bg-[#ffc9d0]/30 hover:text-[#ad2c4f]"
                                     title="Hapus permanen"
                                 >
-                                    <Trash2 class="h-4 w-4" />
+                                    <span class="material-symbols-outlined text-lg">delete</span>
                                 </button>
                             </div>
                         </div>
@@ -362,10 +383,10 @@ const totalBalance = computed(() => {
 
         <!-- Dialog Form -->
         <Dialog v-model:open="isDialogOpen">
-            <DialogContent class="!max-w-[95vw] sm:!max-w-[500px] !max-h-[90vh] overflow-y-auto rounded-2xl p-0 gap-0 overflow-hidden bg-white dark:bg-gray-800">
+            <DialogContent class="!max-w-[95vw] sm:!max-w-[500px] !max-h-[90vh] overflow-y-auto rounded-2xl p-0 gap-0 overflow-hidden bg-white">
                 <DialogHeader class="p-6 pb-0">
-                    <DialogTitle class="text-xl font-bold text-gray-900 dark:text-white">{{ dialogTitle }}</DialogTitle>
-                    <DialogDescription class="text-sm text-gray-500">
+                    <DialogTitle class="text-xl font-bold text-[#1b1c19]">{{ dialogTitle }}</DialogTitle>
+                    <DialogDescription class="text-sm text-[#4d4634]/60">
                         {{ editingBalance ? 'Perbarui informasi saldo akun' : 'Tambahkan saldo akun baru' }}
                     </DialogDescription>
                 </DialogHeader>
@@ -373,38 +394,38 @@ const totalBalance = computed(() => {
                 <div class="p-6">
                     <form @submit.prevent="submitForm" class="space-y-4">
                         <div class="space-y-2">
-                            <Label for="account_name" class="text-sm font-medium text-gray-700 dark:text-gray-300">Nama Akun *</Label>
+                            <Label for="account_name" class="text-sm font-medium text-[#4d4634]">Nama Akun *</Label>
                             <Input
                                 id="account_name"
                                 v-model="form.account_name"
                                 placeholder="Contoh: Bank BCA, Cash, GoPay"
                                 required
-                                class="rounded-xl border-gray-200 bg-gray-50 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900"
+                                class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                             />
-                            <p v-if="form.errors.account_name" class="text-xs text-red-600">
+                            <p v-if="form.errors.account_name" class="text-xs text-[#ad2c4f]">
                                 {{ form.errors.account_name }}
                             </p>
                         </div>
 
                         <div class="space-y-2">
-                            <Label for="account_number" class="text-sm font-medium text-gray-700 dark:text-gray-300">Nomor Akun</Label>
+                            <Label for="account_number" class="text-sm font-medium text-[#4d4634]">Nomor Akun</Label>
                             <Input
                                 id="account_number"
                                 v-model="form.account_number"
                                 placeholder="Opsional: Nomor rekening"
-                                class="rounded-xl border-gray-200 bg-gray-50 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900"
+                                class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                             />
-                            <p v-if="form.errors.account_number" class="text-xs text-red-600">
+                            <p v-if="form.errors.account_number" class="text-xs text-[#ad2c4f]">
                                 {{ form.errors.account_number }}
                             </p>
                         </div>
 
                         <div class="space-y-2">
-                            <Label for="account_type" class="text-sm font-medium text-gray-700 dark:text-gray-300">Tipe Akun *</Label>
+                            <Label for="account_type" class="text-sm font-medium text-[#4d4634]">Tipe Akun *</Label>
                             <select
                                 id="account_type"
                                 v-model="form.account_type"
-                                class="w-full rounded-xl border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:border-green-500 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                                class="w-full rounded-xl border-[#eae8e2] bg-[#f5f3ee] px-3 py-2 text-sm focus:border-[#ffd23f] focus:ring-[#ffd23f] text-[#1b1c19]"
                                 required
                             >
                                 <option value="bank">Bank</option>
@@ -413,28 +434,28 @@ const totalBalance = computed(() => {
                                 <option value="investment">Investasi</option>
                                 <option value="other">Lainnya</option>
                             </select>
-                            <p v-if="form.errors.account_type" class="text-xs text-red-600">
+                            <p v-if="form.errors.account_type" class="text-xs text-[#ad2c4f]">
                                 {{ form.errors.account_type }}
                             </p>
                         </div>
 
                         <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-2">
-                                <Label for="currency" class="text-sm font-medium text-gray-700 dark:text-gray-300">Mata Uang</Label>
+                                <Label for="currency" class="text-sm font-medium text-[#4d4634]">Mata Uang</Label>
                                 <Input
                                     id="currency"
                                     v-model="form.currency"
                                     placeholder="IDR"
                                     maxlength="3"
-                                    class="rounded-xl border-gray-200 bg-gray-50 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900"
+                                    class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                                 />
-                                <p v-if="form.errors.currency" class="text-xs text-red-600">
+                                <p v-if="form.errors.currency" class="text-xs text-[#ad2c4f]">
                                     {{ form.errors.currency }}
                                 </p>
                             </div>
 
                             <div class="space-y-2">
-                                <Label for="balance" class="text-sm font-medium text-gray-700 dark:text-gray-300">Saldo *</Label>
+                                <Label for="balance" class="text-sm font-medium text-[#4d4634]">Saldo *</Label>
                                 <Input
                                     id="balance"
                                     v-model.number="form.balance"
@@ -443,40 +464,40 @@ const totalBalance = computed(() => {
                                     min="0"
                                     placeholder="0"
                                     required
-                                    class="rounded-xl border-gray-200 bg-gray-50 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900"
+                                    class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                                 />
-                                <p v-if="form.errors.balance" class="text-xs text-red-600">
+                                <p v-if="form.errors.balance" class="text-xs text-[#ad2c4f]">
                                     {{ form.errors.balance }}
                                 </p>
                             </div>
                         </div>
 
                         <div class="space-y-2">
-                            <Label for="balance_date" class="text-sm font-medium text-gray-700 dark:text-gray-300">Tanggal Update *</Label>
+                            <Label for="balance_date" class="text-sm font-medium text-[#4d4634]">Tanggal Update *</Label>
                             <Input
                                 id="balance_date"
                                 v-model="form.balance_date"
                                 type="date"
                                 required
-                                class="rounded-xl border-gray-200 bg-gray-50 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900"
+                                class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                             />
-                            <p v-if="form.errors.balance_date" class="text-xs text-red-600">
+                            <p v-if="form.errors.balance_date" class="text-xs text-[#ad2c4f]">
                                 {{ form.errors.balance_date }}
                             </p>
                         </div>
 
-                        <div class="flex items-center space-x-2 rounded-xl bg-gray-50 p-3 dark:bg-gray-900">
+                        <div class="flex items-center space-x-2 rounded-xl bg-[#f5f3ee] p-3">
                             <input
                                 id="is_default"
                                 v-model="form.is_default"
                                 type="checkbox"
-                                class="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                class="h-4 w-4 rounded border-[#eae8e2] text-[#ffd23f] focus:ring-[#ffd23f]"
                             />
                             <div class="flex flex-col">
-                                <Label for="is_default" class="text-sm font-medium text-gray-900 cursor-pointer dark:text-white">
+                                <Label for="is_default" class="text-sm font-medium text-[#1b1c19] cursor-pointer">
                                     Jadikan Dompet Utama
                                 </Label>
-                                <span class="text-xs text-gray-500">Digunakan untuk transaksi tanpa akun spesifik</span>
+                                <span class="text-xs text-[#4d4634]/60">Digunakan untuk transaksi tanpa akun spesifik</span>
                             </div>
                         </div>
 
@@ -484,15 +505,14 @@ const totalBalance = computed(() => {
                             <button
                                 type="button"
                                 @click="closeDialog"
-                                class="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 sm:order-1"
+                                class="w-full rounded-xl border border-[#eae8e2] bg-white px-4 py-2.5 text-sm font-semibold text-[#4d4634] shadow-sm hover:bg-[#f5f3ee] sm:order-1"
                             >
                                 Batal
                             </button>
                             <button
                                 type="submit"
                                 :disabled="form.processing"
-                                class="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-50 sm:order-2"
-                                style="background-color: oklch(0.65 0.19 137.46);"
+                                class="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-[#725a00] bg-[#ffd23f] hover:bg-[#ffe089] shadow-sm disabled:opacity-50 sm:order-2"
                             >
                                 {{ form.processing ? 'Menyimpan...' : 'Simpan' }}
                             </button>

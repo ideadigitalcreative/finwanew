@@ -19,6 +19,13 @@ class CheckDailyBudgetHealth extends Command
 
     public function handle(): int
     {
+        // Guard: reminder blast dimatikan via FINWA_REMINDER_BLASTS_ENABLED=false
+        if (! config('services.reminder_blasts.enabled', false)) {
+            $this->info('Reminder blasts dinonaktifkan (FINWA_REMINDER_BLASTS_ENABLED=false). Lewati.');
+
+            return Command::SUCCESS;
+        }
+
         $this->info('Starting Daily Budget Health Check...');
 
         $tenants = Tenant::where('is_active', true)->get();
@@ -120,7 +127,7 @@ class CheckDailyBudgetHealth extends Command
             }
 
             $formattedNumber = $this->formatPhoneNumber($phoneNumber);
-            $result = $whatsappService->sendMessage($sessionId, $formattedNumber, $message);
+            $result = $whatsappService->sendMessage($sessionId, $formattedNumber, $message, 'text', null, false);
 
             if ($result['success'] ?? false) {
                 Log::info('Budget health alert sent', [

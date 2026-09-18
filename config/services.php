@@ -38,13 +38,17 @@ return [
         'analytics_id' => env('GOOGLE_ANALYTICS_ID'),
     ],
 
-    'facebook' => [
-        'pixel_id' => env('FACEBOOK_PIXEL_ID'),
-    ],
-
     'whatsapp' => [
         'engine_url' => env('WHATSAPP_ENGINE_URL', 'http://localhost:3004'),
         'api_key' => env('WHATSAPP_ENGINE_API_KEY'), // No default - must be configured
+    ],
+
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'bot_username' => env('TELEGRAM_BOT_USERNAME'),
+        'webhook_url' => env('TELEGRAM_WEBHOOK_URL'),
+        'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
+        'admin_chat_id' => env('TELEGRAM_ADMIN_CHAT_ID'),
     ],
 
     'ai_processor' => [
@@ -84,6 +88,45 @@ return [
         'url' => env('FINWA_AI_URL', 'https://ai.finwa.web.id'),
         'timeout' => env('FINWA_AI_TIMEOUT', 30),
         'enabled' => env('FINWA_AI_ENABLED', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Weekly Digest (Ringkasan Mingguan WhatsApp)
+    |--------------------------------------------------------------------------
+    |
+    | Pesan ringkasan keuangan otomatis setiap Minggu. Matikan di level
+    | sistem dengan FINWA_WEEKLY_DIGEST_ENABLED=false (bukan per-user).
+    |
+    */
+    'weekly_digest' => [
+        'enabled' => env('FINWA_WEEKLY_DIGEST_ENABLED', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Reminder Blasts (Pengingat Massal WhatsApp)
+    |--------------------------------------------------------------------------
+    |
+    | Pengingat yang dikirim massal ke banyak user (bukan percakapan 1-on-1)
+    | yang berisiko membuat nomor bot WhatsApp kena restrict. Nonaktifkan di
+    | level sistem dengan FINWA_REMINDER_BLASTS_ENABLED=false.
+    |
+    | YANG TERMASUK (akan di-skip saat off):
+    |   - reminder:daily               (reminder harian, setiap 3 menit)
+    |   - finwa:send-reminders         (reminder custom user, setiap menit)
+    |   - digest:weekly                (ringkasan mingguan)
+    |   - cashflow:mid-month           (prediksi cashflow tengah bulan)
+    |   - reminder:morning-escalation  (eskalasi user inactive 2+ hari)
+    |   - budget:daily-health-check    (alert budget harian)
+    |
+    | YANG TETAP AKTIF meskipun off (kritis untuk bisnis):
+    |   - subscriptions:send-reminders (H-2/H-1 reminder masa aktif paket Pro)
+    |   - subscriptions:check-expired  (pengecekan subscription expired)
+    |
+    */
+    'reminder_blasts' => [
+        'enabled' => env('FINWA_REMINDER_BLASTS_ENABLED', false),
     ],
 
     /*

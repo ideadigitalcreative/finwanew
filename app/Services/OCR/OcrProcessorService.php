@@ -194,10 +194,12 @@ class OcrProcessorService
 
             $parsed = $gemini->extractReceiptData($dataUri);
 
-            // Gambar bukan struk atau tidak terbaca — tetap potong kuota, beri edukasi
-            if (! $parsed || empty($parsed['total_amount'])) {
-                Log::warning('Gemini Vision: bukan struk atau tidak terbaca', [
+            // Gambar bukan struk/transfer atau tidak terbaca — tetap potong kuota, beri edukasi
+            $documentType = $parsed['document_type'] ?? null;
+            if (! $parsed || empty($parsed['total_amount']) || $documentType === 'unknown') {
+                Log::warning('Gemini Vision: bukan struk/transfer atau tidak terbaca', [
                     'ocr_job_id' => $ocrJob->id,
+                    'document_type' => $documentType,
                     'parsed' => $parsed,
                 ]);
 
@@ -214,11 +216,12 @@ class OcrProcessorService
                 ]);
 
                 ($this->sendReplyCallback)(
-                    "⚠️ *Gambar Tidak Dikenali sebagai Struk*\n\n".
+                    "⚠️ *Gambar Tidak Dikenali*\n\n".
                     "AI tidak menemukan data transaksi pada gambar ini.\n\n".
-                    "💡 _Kuota scan Anda tetap terpotong meskipun gambar bukan struk atau buram._\n\n".
+                    "💡 _Kuota scan Anda tetap terpotong meskipun gambar bukan struk/bukti transfer atau buram._\n\n".
                     "Pastikan gambar yang dikirim:\n".
                     "✅ Foto struk belanja yang jelas\n".
+                    "✅ Bukti transfer bank (BCA, BNI, BRI, Mandiri, dll)\n".
                     "✅ Tidak buram atau terpotong\n".
                     '❌ Bukan foto selfie, screenshot chat, atau gambar lainnya'
                 );
@@ -226,11 +229,16 @@ class OcrProcessorService
                 return;
             }
 
+            $isBankTransfer = ($documentType === 'bank_transfer');
+
             Log::info('Gemini Vision extraction success', [
                 'ocr_job_id' => $ocrJob->id,
+                'document_type' => $documentType ?? 'receipt',
                 'merchant' => $parsed['merchant_name'] ?? 'N/A',
                 'total' => $parsed['total_amount'],
                 'items_count' => count($parsed['items'] ?? []),
+                'bank_name' => $parsed['bank_name'] ?? null,
+                'recipient_name' => $parsed['recipient_name'] ?? null,
             ]);
 
             $merchant = $parsed['merchant_name'] ?? null;
@@ -238,6 +246,173 @@ class OcrProcessorService
             $dateRaw = $parsed['date'] ?? null;
             $items = $parsed['items'] ?? [];
             $tax = (int) ($parsed['tax'] ?? 0);
+
+            // ── DATE VALIDATION ──────────────────────────────────────────────
+            if ($dateRaw) {
+                try {
+                    $parsedDate = \Carbon\Carbon::parse($dateRaw);
+                    $oneYearAgo = now()->subYear();
+                    $tomorrow = now()->addDay();
+
+                    if ($parsedDate->lt($oneYearAgo) || $parsedDate->gt($tomorrow)) {
+                        Log::warning('Gemini Vision: date looks invalid, falling back to today', [
+                            'ocr_job_id' => $ocrJob->id,
+                            'gemini_date' => $dateRaw,
+                            'parsed_as' => $parsedDate->toDateString(),
+                            'reason' => $parsedDate->lt($oneYearAgo) ? 'too_far_in_past' : 'in_future',
+                        ]);
+                        $dateRaw = now()->toDateString();
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Gemini Vision: date parse error, falling back to today', [
+                        'ocr_job_id' => $ocrJob->id,
+                        'gemini_date' => $dateRaw,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $dateRaw = now()->toDateString();
+                }
+            }
+
+            // Check for duplicate
+            $existingMeta = $ocrJob->metadata ?? [];
+            if (isset($existingMeta['receipt_transaction_id']) && is_numeric($existingMeta['receipt_transaction_id'])) {
+                Log::info('Gemini Vision: transaction already recorded, skipping create', [
+                    'ocr_job_id' => $ocrJob->id,
+                    'transaction_id' => $existingMeta['receipt_transaction_id'],
+                ]);
+
+                return;
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // FLOW: BUKTI TRANSFER BANK
+            // ══════════════════════════════════════════════════════════════════
+            if ($isBankTransfer) {
+                $bankName = $parsed['bank_name'] ?? null;
+                $recipientName = $parsed['recipient_name'] ?? $merchant;
+                $recipientAccount = $parsed['recipient_account'] ?? null;
+                $senderName = $parsed['sender_name'] ?? null;
+                $senderAccount = $parsed['sender_account'] ?? null;
+                $referenceNumber = $parsed['reference_number'] ?? null;
+                $transferNote = $parsed['transfer_note'] ?? null;
+
+                Log::info('Gemini Vision: bank transfer detected', [
+                    'ocr_job_id' => $ocrJob->id,
+                    'bank' => $bankName,
+                    'recipient' => $recipientName,
+                    'amount' => $total,
+                    'reference' => $referenceNumber,
+                    'note' => $transferNote,
+                ]);
+
+                // Build extracted text
+                $extractedText = 'Transfer';
+                if ($bankName) {
+                    $extractedText .= " {$bankName}";
+                }
+                if ($recipientName) {
+                    $extractedText .= " ke {$recipientName}";
+                }
+                $extractedText .= ' Rp '.number_format($total, 0, ',', '.');
+                if ($dateRaw) {
+                    $extractedText .= "\nTanggal: {$dateRaw}";
+                }
+                if ($transferNote) {
+                    $extractedText .= "\nBerita: {$transferNote}";
+                }
+
+                // Structured data
+                $structuredData = [
+                    'entities' => [
+                        'merchant' => $recipientName,
+                        'nominal' => $total,
+                        'items' => [],
+                        'tanggal' => $dateRaw,
+                        'tax' => 0,
+                        'bank_name' => $bankName,
+                        'recipient_name' => $recipientName,
+                        'recipient_account' => $recipientAccount,
+                        'sender_name' => $senderName,
+                        'sender_account' => $senderAccount,
+                        'reference_number' => $referenceNumber,
+                        'transfer_note' => $transferNote,
+                    ],
+                    'fields' => [
+                        'total' => $total,
+                        'merchant' => $recipientName,
+                        'date_raw' => $dateRaw,
+                    ],
+                    'items' => [],
+                ];
+
+                $ocrJob->update([
+                    'status' => 'completed',
+                    'extracted_text' => $extractedText,
+                    'metadata' => array_merge($existingMeta, [
+                        'ai_source' => 'gemini-vision',
+                        'confidence_score' => 0.95,
+                        'model' => config('services.gemini.model', 'gemini-2.5-flash'),
+                        'document_type' => 'bank_transfer',
+                        'entities' => $structuredData['entities'],
+                        'structured_data' => $structuredData,
+                        'raw_response' => $parsed,
+                    ]),
+                    'completed_at' => now(),
+                ]);
+
+                // Build description
+                $description = 'Transfer';
+                if ($recipientName) {
+                    $description = "Transfer ke {$recipientName}";
+                }
+                if ($bankName) {
+                    $description .= " ({$bankName})";
+                }
+                if ($transferNote) {
+                    $description .= " - {$transferNote}";
+                }
+
+                $txData = [
+                    'type' => 'expense',
+                    'amount' => $total,
+                    'category_type' => 'pengeluaran_transfer',
+                    'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw),
+                    'description' => mb_substr($description, 0, 255),
+                    'source' => 'transfer_ai',
+                    'confidence_score' => 0.95,
+                    'account_name' => null,
+                ];
+
+                $transaction = $this->transactionService->createTransaction($txData, false);
+                if (! $transaction) {
+                    ($this->sendReplyCallback)('⚠️ Gagal mencatat transaksi transfer. Silakan coba lagi.');
+
+                    return;
+                }
+
+                $ocrJob->update([
+                    'metadata' => array_merge($ocrJob->metadata ?? [], [
+                        'receipt_transaction_id' => $transaction->id,
+                    ]),
+                ]);
+
+                // Send transfer-specific confirmation
+                $this->confirmationService->sendTransferConfirmation(
+                    $transaction,
+                    $bankName,
+                    $recipientName,
+                    $recipientAccount,
+                    $senderAccount,
+                    $referenceNumber,
+                    $transferNote
+                );
+
+                return;
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // FLOW: STRUK BELANJA (existing logic)
+            // ══════════════════════════════════════════════════════════════════
             $items = array_values(array_filter(array_map(function ($item) {
                 if (! is_array($item)) {
                     return null;
@@ -266,35 +441,6 @@ class OcrProcessorService
                     'price' => $price,
                 ];
             }, $items), fn ($v) => $v !== null));
-
-            // ── DATE VALIDATION ──────────────────────────────────────────────
-            // Gemini kadang salah parse format DD-MM-YYYY jadi tahun yang aneh
-            // (misal: "01-05-2026" dibaca sebagai "2001-05-26").
-            // Validasi: tanggal tidak boleh >1 tahun lalu atau di masa depan >1 hari.
-            if ($dateRaw) {
-                try {
-                    $parsedDate = \Carbon\Carbon::parse($dateRaw);
-                    $oneYearAgo = now()->subYear();
-                    $tomorrow = now()->addDay();
-
-                    if ($parsedDate->lt($oneYearAgo) || $parsedDate->gt($tomorrow)) {
-                        Log::warning('Gemini Vision: date looks invalid, falling back to today', [
-                            'ocr_job_id' => $ocrJob->id,
-                            'gemini_date' => $dateRaw,
-                            'parsed_as' => $parsedDate->toDateString(),
-                            'reason' => $parsedDate->lt($oneYearAgo) ? 'too_far_in_past' : 'in_future',
-                        ]);
-                        $dateRaw = now()->toDateString();
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('Gemini Vision: date parse error, falling back to today', [
-                        'ocr_job_id' => $ocrJob->id,
-                        'gemini_date' => $dateRaw,
-                        'error' => $e->getMessage(),
-                    ]);
-                    $dateRaw = now()->toDateString();
-                }
-            }
 
             // Build extracted text for message content
             $extractedText = $merchant ? "Struk: {$merchant}" : 'Struk Belanja';
@@ -328,16 +474,6 @@ class OcrProcessorService
                 'items' => $items,
             ];
 
-            $existingMeta = $ocrJob->metadata ?? [];
-            if (isset($existingMeta['receipt_transaction_id']) && is_numeric($existingMeta['receipt_transaction_id'])) {
-                Log::info('Gemini Vision: receipt already recorded, skipping create', [
-                    'ocr_job_id' => $ocrJob->id,
-                    'transaction_id' => $existingMeta['receipt_transaction_id'],
-                ]);
-
-                return;
-            }
-
             $ocrJob->update([
                 'status' => 'completed',
                 'extracted_text' => $extractedText,
@@ -345,6 +481,7 @@ class OcrProcessorService
                     'ai_source' => 'gemini-vision',
                     'confidence_score' => 0.95,
                     'model' => config('services.gemini.model', 'gemini-2.5-flash'),
+                    'document_type' => 'receipt',
                     'entities' => $structuredData['entities'],
                     'structured_data' => $structuredData,
                     'raw_response' => $parsed,

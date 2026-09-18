@@ -6,8 +6,8 @@ module.exports = {
         script: 'php',
         args: 'artisan queue:work --tries=3 --timeout=300',
         cwd: path.resolve(__dirname),
-        instances: 3,  // Scale ke 3 instances untuk parallel processing
-        exec_mode: 'cluster',  // Cluster mode untuk parallel job processing
+        instances: 1,  // Single instance untuk Windows compatibility
+        exec_mode: 'fork',  // Fork mode untuk Windows
         autorestart: true,
         watch: false,
         max_memory_restart: '512M',

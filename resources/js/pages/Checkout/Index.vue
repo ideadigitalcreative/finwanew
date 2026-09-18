@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm, Form } from '@inertiajs/vue3';
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import InputError from '@/components/InputError.vue';
 import { useSweetAlert } from '@/composables/useSweetAlert';
-import { useFacebookPixel } from '@/composables/useFacebookPixel';
 import { login } from '@/routes';
 import BackgroundAccents from '@/components/Landing/BackgroundAccents.vue';
 import FooterSection from '@/components/Landing/FooterSection.vue';
@@ -41,16 +40,6 @@ interface Props {
 
 const props = defineProps<Props>();
 const { showError, showSuccess } = useSweetAlert();
-const { trackInitiateCheckout, trackCompleteRegistration, trackStartTrial, trackLead } = useFacebookPixel();
-
-// Track InitiateCheckout when page loads
-onMounted(() => {
-    trackInitiateCheckout({
-        content_name: props.planDetails.name,
-        currency: 'IDR',
-        value: props.isFreePlan ? 0 : props.planDetails.monthly_price,
-    });
-});
 
 const selectedDuration = ref<Duration>(props.durations[0]); // Default: 1 bulan
 const selectedPaymentMethod = ref<string>('qris'); // Default: QRIS
@@ -106,27 +95,9 @@ const handleRegister = () => {
     // Submit registration form to Fortify
     registerForm.post('/register', {
         onSuccess: () => {
-            // Track Facebook Pixel events
             if (props.isFreePlan) {
-                // Track as Lead/StartTrial for free plan
-                trackStartTrial({
-                    currency: 'IDR',
-                    value: 0,
-                });
-                trackLead({
-                    content_name: props.planDetails.name,
-                    currency: 'IDR',
-                    value: 0,
-                });
                                 showSuccess('Berhasil', 'Pendaftaran berhasil! Paket gratis Anda telah aktif.<br><br>Gabung Grup WhatsApp: <a href="https://chat.whatsapp.com/DAjG9zU2e9vAi8jiDp5jar" target="_blank" class="text-emerald-600 font-bold underline">Klik di Sini</a>');
             } else {
-                // Track as CompleteRegistration for paid plan
-                trackCompleteRegistration({
-                    content_name: props.planDetails.name,
-                    currency: 'IDR',
-                    value: total.value,
-                    status: true,
-                });
                 showSuccess('Berhasil', 'Pendaftaran berhasil! Silakan lanjutkan pembayaran.<br><br>Gabung Grup WhatsApp: <a href="https://chat.whatsapp.com/DAjG9zU2e9vAi8jiDp5jar" target="_blank" class="text-emerald-600 font-bold underline">Klik di Sini</a>');
             }
             // After registration, user will be redirected to dashboard

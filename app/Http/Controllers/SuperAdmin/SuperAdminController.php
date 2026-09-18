@@ -116,6 +116,18 @@ class SuperAdminController extends Controller
             ];
         }
 
+        // User growth data (last 6 months)
+        $userGrowth = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $month = now()->subMonths($i);
+            $userGrowth[] = [
+                'month' => $month->format('M Y'),
+                'users' => User::whereMonth('created_at', $month->month)
+                    ->whereYear('created_at', $month->year)
+                    ->count(),
+            ];
+        }
+
         // Get recent subscriptions
         $recentSubscriptions = Subscription::with('tenant')
             ->orderBy('created_at', 'desc')
@@ -160,6 +172,7 @@ class SuperAdminController extends Controller
             'pendingSubscriptions' => $pendingSubscriptions,
             'expiringSubscriptions' => $expiringSubscriptions,
             'monthlyRevenue' => $monthlyRevenue,
+            'userGrowth' => $userGrowth,
         ]);
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Channel;
 use App\Models\Subscription;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Models\UserWhatsAppNumber;
 use App\Services\SubscriptionLimitService;
 use App\Services\WhatsAppService;
@@ -45,7 +46,7 @@ class WhatsAppChannelController extends Controller
 
         // Daftar nomor admin yang tidak boleh ditampilkan di halaman user
         $adminNumbers = [
-            '6285762000079', // Nomor admin yang tidak boleh ditampilkan
+            '6285159205506', // Nomor admin yang tidak boleh ditampilkan
             '6285242766676', // Super admin number
         ];
 
@@ -243,34 +244,11 @@ class WhatsAppChannelController extends Controller
             ->get()
             ->filter(function ($number) {
                 // Hide LID numbers from user view
-                // LID format: long number that doesn't start with 62 (Indonesian format)
-                // Show only:
-                // 1. Primary numbers (always show)
-                // 2. Numbers starting with 62 (Indonesian phone numbers)
-                // 3. Numbers with less than 13 digits (normal phone numbers)
-
                 if ($number->is_primary) {
                     return true; // Always show primary number
                 }
 
-                $phoneNumber = $number->whatsapp_number;
-
-                // Check if it's a LID (long number, not Indonesian format)
-                // LID typically: 62363562709234 (starts with 623635... or similar non-standard prefix)
-                // Real Indonesian number: 628xxx (starts with 628)
-
-                // Hide if:
-                // - Starts with 62 but NOT 628 (likely LID)
-                // - OR has name containing "LID"
-                if (str_starts_with($phoneNumber, '62') && ! str_starts_with($phoneNumber, '628')) {
-                    return false; // Hide LID
-                }
-
-                if (str_contains(strtolower($number->name ?? ''), 'lid')) {
-                    return false; // Hide if name contains "LID"
-                }
-
-                return true; // Show normal numbers
+                return !$number->is_lid;
             })
             ->values() // Re-index array after filter
             ->map(function ($number) {
@@ -959,7 +937,7 @@ class WhatsAppChannelController extends Controller
                     "Atau ketik manual: *LINK {$linkToken->token}*\n\n".
                     '_Setelah itu, Anda akan mendapatkan konfirmasi bahwa akun sudah siap digunakan._';
 
-                $result = $this->whatsappService->sendMessage($sessionId, $phoneNumber, $message);
+                $result = $this->whatsappService->sendMessage($sessionId, $phoneNumber, $message, 'text', null, false);
 
                 if ($result['success'] ?? false) {
                     $welcomeMessageSent = true;
@@ -1218,5 +1196,56 @@ class WhatsAppChannelController extends Controller
         }
 
         return redirect()->back()->with('success', 'Nomor utama berhasil diubah');
+    }
+
+    /**
+     * Daftar transaksi milik satu nomor WhatsApp (detail per anggota)
+     */
+    public function numberTransactions(Request $request, UserWhatsAppNumber $userWhatsAppNumber): Response
+    {
+        $tenant = Tenant::findOrFail($request->tenant_id);
+        $user = $request->user();
+
+        // Verifikasi kepemilikan nomor
+        if ($userWhatsAppNumber->user_id !== $user->id || $userWhatsAppNumber->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized');
+        }
+
+        $query = Transaction::where('tenant_id', $tenant->id)
+            ->where('user_whatsapp_number_id', $userWhatsAppNumber->id)
+            ->with(['category']);
+
+        // Filter tipe (pemasukan/pengeluaran) bila diminta
+        if (in_array($request->input('type'), ['income', 'expense'], true)) {
+            $query->where('type', $request->input('type'));
+        }
+
+        // Total dihitung dari seluruh hasil filter (bukan hanya halaman aktif)
+        $totalIncome = (clone $query)->where('type', 'income')->sum('amount');
+        $totalExpense = (clone $query)->where('type', 'expense')->sum('amount');
+
+        $transactions = $query
+            ->orderByRaw('COALESCE(created_at, updated_at, NOW()) DESC')
+            ->orderBy('id', 'desc')
+            ->paginate(20)
+            ->withQueryString();
+
+        return Inertia::render('WhatsApp/NumberTransactions', [
+            'number' => [
+                'id' => $userWhatsAppNumber->id,
+                'whatsapp_number' => $userWhatsAppNumber->whatsapp_number,
+                'name' => $userWhatsAppNumber->name,
+                'is_primary' => $userWhatsAppNumber->is_primary,
+                'is_lid' => $userWhatsAppNumber->is_lid,
+            ],
+            'totals' => [
+                'total_income' => (float) $totalIncome,
+                'total_expense' => (float) $totalExpense,
+                'net' => (float) ($totalIncome - $totalExpense),
+                'count' => $transactions->total(),
+            ],
+            'transactions' => $transactions,
+            'filters' => ['type' => $request->input('type', '')],
+        ]);
     }
 }

@@ -148,7 +148,11 @@ class CategoryMappingService
 
         foreach ($keywordMap as $keyword => $category) {
             $keywordNormalized = self::normalizeText($keyword);
-            if (str_contains($textNormalized, $keywordNormalized)) {
+            if (empty($keywordNormalized)) {
+                continue;
+            }
+            $pattern = '/\b' . preg_quote($keywordNormalized, '/') . '\b/u';
+            if (preg_match($pattern, $textNormalized)) {
                 $len = mb_strlen($keywordNormalized);
                 if ($len > $bestLength) {
                     $bestLength = $len;
