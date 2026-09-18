@@ -1250,6 +1250,14 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
         
+        // 1.6af2.4: Ubah TIPE transaksi terakhir — "ganti jadi pemasukan", "ubah ke pengeluaran"
+        // Menangkap perintah ubah tipe TANPA nominal (misalnya dari chat log: "Ganti jadi 'pemasukan'")
+        if (preg_match('/^(?:ganti|ubah|edit|koreksi)\s+(?:jadi|ke|menjadi)\s*[\'"]?(pemasukan|pendapatan|income|uang masuk|pengeluaran|expense|uang keluar)[\'"]?\s*$/i', $textLower)) {
+            Log::info('Fast-path 1.6af2.4: Perintah ubah tipe transaksi terakhir', ['message' => $messageText]);
+            $this->transactionService->handleEditWithContext($messageText);
+            return;
+        }
+        
         // 1.6af2.5: Edit last transaction by context - "edit jadi 45rb", "edit terakhir jadi 45rb"
         if ($hasAmount && preg_match('/^(ubah|edit|ganti|koreksi)\s+(?:transaksi\s+)?(?:terakhir\s+)?(?:jadi|ke)\b/i', $textLower)) {
             $this->transactionService->handleEditWithContext($messageText);
