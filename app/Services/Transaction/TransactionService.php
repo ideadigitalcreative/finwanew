@@ -2169,6 +2169,24 @@ class TransactionService
     }
 
     /**
+     * Resolve transaksi terakhir untuk user/tenant saat ini.
+     *
+     * @return Transaction|null
+     */
+    protected function resolveLastTransaction(): ?Transaction
+    {
+        $transaction = Transaction::where('tenant_id', $this->message->tenant_id)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if ($transaction) {
+            $transaction->load('category');
+        }
+
+        return $transaction;
+    }
+
+    /**
      * Handle AMBIGUOUS edit command — ask user for clarification.
      *
      * Dipanggil oleh fast-path 1.6af2.6 saat user mengirim perintah
