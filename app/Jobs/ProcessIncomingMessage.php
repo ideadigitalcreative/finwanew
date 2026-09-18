@@ -1226,6 +1226,31 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
         
+        // ==========================================
+        // FAST-PATH: PRIORITY ORDER (HIGHEST FIRST)
+        // ==========================================
+        
+        // 1.6af0: JAWABAN ASK-BACK — Cek pending_edit SEBELUM fast-path lain
+        // Ini harus diposisikan PALING ATAS karena jawaban user ("Hiburan", "50rb", "pemasukan")
+        // tidak memiliki format perintah yang jelas dan akan tertangkap oleh AI fallback
+        // jika tidak dicek di sini.
+        if (! $hasAmount || strlen($messageText) < 60) {
+            $contextServiceForPending = new ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
+            $pendingEdit = $contextServiceForPending->getPendingEdit();
+            
+            if ($pendingEdit) {
+                Log::info('Fast-path 1.6af0: Pending edit ditemukan, proses sebagai jawaban ask-back', [
+                    'message'      => $messageText,
+                    'pending'      => $pendingEdit,
+                    'is_short'     => strlen($messageText) < 60,
+                    'no_amount'    => ! $hasAmount,
+                ]);
+                
+                $this->transactionService->handleEditWithContext($messageText);
+                return;
+            }
+        }
+        
         // 1.6af1: Multi-line hapus/edit commands - process each line
         // Check if message has multiple lines with hapus/edit commands
         $lines = preg_split('/[\r\n]+/', trim($messageText));
