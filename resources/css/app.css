@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+﻿@import 'tailwindcss';
 
 @import 'tw-animate-css';
 
@@ -161,9 +161,9 @@
     /* Sama dengan primary */
 
     /* Chart Colors */
-    --chart-income: hsl(142 71% 45%);
+    --chart-income: #0d9488; /* teal-600 â€” satu warna pemasukan di semua grafik */
     --chart-income-light: hsl(142 60% 55%);
-    --chart-expense: hsl(142 60% 55%);
+    --chart-expense: #e11d48; /* rose-600 â€” satu warna pengeluaran di semua grafik */
     --chart-space: hsl(142 50% 75%);
 
     /* Legacy chart variables for compatibility */
@@ -247,9 +247,9 @@
     --ring: hsl(145 63% 45%);
 
     /* Chart Colors (Updated) */
-    --chart-income: hsl(142 70% 50%);
+    --chart-income: #2dd4bf;
     --chart-income-light: hsl(142 60% 60%);
-    --chart-expense: hsl(142 55% 50%);
+    --chart-expense: #fb7185;
     --chart-space: hsl(142 45% 35%);
 
     /* Legacy chart variables for compatibility */
@@ -490,5 +490,74 @@ svg {
     body {
         -webkit-overflow-scrolling: touch;
         overscroll-behavior-y: contain;
+    }
+}
+
+/* ============================================================
+   Transisi tema terang/gelap — View Transitions API
+   Ripple clip-path dua arah dari titik klik tombol:
+   - ke mode terang : lapisan baru mengembang menutupi layar
+   - ke mode gelap  : lapisan lama menciut, menyingkap tema gelap
+   Koordinat --click-x/--click-y diset di useAppearance.ts.
+   ============================================================ */
+:root {
+    --click-x: 50%;
+    --click-y: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation: none;
+        mix-blend-mode: normal;
+    }
+
+    ::view-transition-old(root) {
+        z-index: 1;
+    }
+
+    ::view-transition-new(root) {
+        z-index: 9999;
+        animation: finwa-circle-in 0.7s forwards cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Saat berpindah ke mode gelap, yang dianimasikan adalah lapisan lama. */
+    .dark::view-transition-old(root) {
+        z-index: 9999;
+        animation: finwa-circle-out 0.7s forwards cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .dark::view-transition-new(root) {
+        z-index: 1;
+        animation: none;
+    }
+
+    @keyframes finwa-circle-in {
+        from {
+            clip-path: circle(0% at var(--click-x) var(--click-y));
+        }
+
+        to {
+            clip-path: circle(150% at var(--click-x) var(--click-y));
+        }
+    }
+
+    @keyframes finwa-circle-out {
+        from {
+            clip-path: circle(150% at var(--click-x) var(--click-y));
+        }
+
+        to {
+            clip-path: circle(0% at var(--click-x) var(--click-y));
+        }
+    }
+}
+
+/* Tanpa animasi bila pengguna meminta gerak minimal. */
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation: none !important;
+        mix-blend-mode: normal;
     }
 }

@@ -58,7 +58,6 @@ const iconMap: Record<string, string> = {
     '⛱️': 'beach_access',
     '❤️': 'favorite',
     '💖': 'favorite',
-    '🎓': 'school',
 };
 
 const getIcon = (icon?: string) => {
@@ -77,9 +76,9 @@ const getIcon = (icon?: string) => {
                     <span class="material-symbols-outlined text-base">savings</span>
                 </div>
                 <span class="text-sm font-bold text-[#1b1c19] dark:text-foreground whitespace-nowrap truncate">Celengan Impian</span>
-                <span v-if="period" class="text-[9px] text-[#4d4634] dark:text-muted-foreground font-semibold whitespace-nowrap shrink-0">({{ period }})</span>
+                <span v-if="period" class="text-xs text-[#4d4634] dark:text-muted-foreground font-semibold whitespace-nowrap shrink-0">({{ period }})</span>
             </div>
-            <a href="/tabungan" class="text-[10px] text-[#006c4f] dark:text-emerald-400 hover:underline font-bold flex items-center gap-0.5 shrink-0 whitespace-nowrap">
+            <a href="/tabungan" class="text-xs text-[#006c4f] dark:text-emerald-400 hover:underline font-bold flex items-center gap-0.5 shrink-0 whitespace-nowrap">
                 <span>Lihat Semua ({{ goals.length || 1 }})</span>
                 <span class="material-symbols-outlined text-[13px]">chevron_right</span>
             </a>
@@ -98,7 +97,7 @@ const getIcon = (icon?: string) => {
                 <div class="flex-1 min-w-0 flex flex-col gap-1">
                     <div class="flex items-center justify-between gap-2">
                         <span class="text-xs font-bold text-[#1b1c19] dark:text-foreground truncate">{{ goal.label }}</span>
-                        <span class="text-[9px] font-extrabold text-[#006c4f] dark:text-emerald-400 shrink-0">{{ getProgress(goal.current, goal.target) }}% Siap</span>
+                        <span class="text-xs font-extrabold text-[#006c4f] dark:text-emerald-400 shrink-0">{{ getProgress(goal.current, goal.target) }}% Siap</span>
                     </div>
                     <div class="w-full h-1.5 bg-[#f0eee8] dark:bg-muted rounded-full overflow-hidden">
                         <div
@@ -108,8 +107,8 @@ const getIcon = (icon?: string) => {
                         ></div>
                     </div>
                     <div class="flex items-baseline justify-between gap-2">
-                        <span class="text-[10px] font-extrabold text-[#006c4f] dark:text-emerald-400">{{ formatCurrency(goal.current) }}</span>
-                        <span class="text-[9px] text-[#4d4634]/60 dark:text-muted-foreground font-medium truncate">dari {{ formatCurrency(goal.target) }}</span>
+                        <span class="text-xs font-extrabold text-[#006c4f] dark:text-emerald-400">{{ formatCurrency(goal.current) }}</span>
+                        <span class="text-xs text-[#4d4634]/60 dark:text-muted-foreground font-medium truncate">dari {{ formatCurrency(goal.target) }}</span>
                     </div>
                 </div>
             </div>
@@ -118,7 +117,7 @@ const getIcon = (icon?: string) => {
         <!-- Empty state (compact) -->
         <div v-else class="p-3 rounded-xl bg-[#fbf9f3] dark:bg-muted/30 border border-dashed border-[#eae8e2] dark:border-border/40 flex items-center justify-between gap-2">
             <span class="text-xs text-[#4d4634] dark:text-muted-foreground font-medium">Belum ada tabungan</span>
-            <a href="/tabungan" class="h-7 px-2.5 rounded-lg bg-[#ffd23f] text-[#725a00] text-[10px] font-bold flex items-center gap-0.5 shadow-sm active:scale-95 transition-transform shrink-0">
+            <a href="/tabungan" class="h-7 px-2.5 rounded-lg bg-[#ffd23f] text-[#725a00] text-xs font-bold flex items-center gap-0.5 shadow-sm active:scale-95 transition-transform shrink-0">
                 <span class="material-symbols-outlined text-[13px]">add</span>
                 <span>Buat</span>
             </a>

@@ -112,12 +112,26 @@ class BatchTransactionService
         $lines = preg_split('/[\r\n]+/', trim($messageText));
         if (count($lines) < 2) {
             // Check for single line batch (multiple amounts in one line)
+            // Satu transaksi dengan 2 angka: kembalian / harusnya / potong / "3jt 400rb"
+            if (\App\Support\AmountParser::composite($messageText) !== null) {
+                return false;
+            }
             $amounts = \App\Helpers\BatchTransactionHelper::extractAllAmounts($messageText);
-            if (count($amounts) >= 2) {
-                return true;
+            if (count($amounts) < 2) {
+                return false;
             }
 
-            return false;
+            // Setiap potongan sesudah yang pertama harus punya keterangan sendiri
+            // ("bensin 20rb parkir 5rb" ✓, "makan 25rb, 5rb" ✗)
+            foreach (array_slice($this->splitSingleBatchLine(\App\Support\AmountParser::normalize($messageText)), 1) as $chunk) {
+                $words = trim((string) preg_replace('/\d+(?:[.,]\d+)*\s*(?:rb|ribu|rebu|k|jt|juta)?\b|\brp\.?|[^\p{L}\s]/iu', ' ', $chunk));
+                $words = trim((string) preg_replace('/^(?:dan|sama|plus|terus|lalu|juga|kemudian|trus|sm)\b/iu', '', $words));
+                if (mb_strlen($words) < 3) {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         // ── FAST DETECT: "Pemasukan AMOUNT\nPengeluaran AMOUNT" (2-line in/out format)
@@ -127,7 +141,7 @@ class BatchTransactionService
         $hasFastIncome = false;
         $hasFastExpense = false;
         foreach ($lines as $l) {
-            $lt = trim($l);
+            $lt = self::stripDates(trim($l));
             if (preg_match($fastIncomeExpensePattern, $lt)) {
                 $hasFastIncome = true;
             }
@@ -142,7 +156,7 @@ class BatchTransactionService
         // If ALL lines match either income or expense pattern (at least 2 lines) → batch
         $allFastMatch = 0;
         foreach ($lines as $l) {
-            $lt = trim($l);
+            $lt = self::stripDates(trim($l));
             if (empty($lt)) {
                 continue;
             }
@@ -337,11 +351,20 @@ class BatchTransactionService
         }
 
         // Handle Single Line Batch (Split horizontally)
+        // "Pemasukan tanggal 28 September 360rb, 5 Oktober 500rb, 12 Oktober 440rb"
+        $isSingleLineSplit = false;
+        $singleLineIsIncome = null; // jenis dari kalimat pembuka, diwariskan ke potongan berikutnya
         if (count($lines) < 2) {
             $amounts = \App\Helpers\BatchTransactionHelper::extractAllAmounts($messageText);
             if (count($amounts) >= 2) {
                 $lines = $this->splitSingleBatchLine($messageText);
-                Log::info('Single line batch split', ['count' => count($lines), 'lines' => $lines]);
+                $isSingleLineSplit = count($lines) >= 2;
+                if (preg_match('/\b(pemasukan|pendapatan|terima|diterima|dapat|dapet|gaji|bonus|honor|uang\s+masuk|transfer\s+masuk)\b/iu', $messageText)) {
+                    $singleLineIsIncome = true;
+                } elseif (preg_match('/\b(pengeluaran|belanja|bayar|beli|biaya|uang\s+keluar)\b/iu', $messageText)) {
+                    $singleLineIsIncome = false;
+                }
+                Log::info('Single line batch split', ['count' => count($lines)]);
             }
         }
 
@@ -362,30 +385,38 @@ class BatchTransactionService
         $simpleTypeAmountPattern = '/^(pemasukan|pengeluaran|pendapatan|belanja|bayar)\s+[\d., ]+/i';
         $amountFirstPatternFirstLine = '/^\d[\d., ]*\s*(rb|ribu|k|jt|juta)?\s+.+/i';
         $simpleNameAmountPattern = '/^[A-Za-z][A-Za-z\s]*\s+\d+\s*(rb|ribu|k|jt|juta)?$/i';
-        $simpleNamePlainAmountPattern = '/^[A-Za-z][A-Za-z\s]*\s+\d+[\.,]?\d*$/i';
+        $simpleNamePlainAmountPattern = '/^[A-Za-z][A-Za-z\s]*\s+\d[\d\.,]*$/i';
         // Receipt/struk format: "PRODUCT NAME (keterangan) Rp 24.000" or "FITTI PANTS XL 40 Rp 133.000"
         // Simple check: line contains "Rp" followed by a number (amount at end)
         $receiptLinePatternFirstLine = '/\bRp\.?\s*[\d\.,]+\s*$/i';
 
-        if (preg_match($simpleTypeAmountPattern, $headerLine)) {
+        // Tanggal di judul BUKAN nominal: "Pengeluaran 22 Oktober 2026" dulu terbaca
+        // transaksi ("22"/"2026" dianggap nominal) → tanggal judul diabaikan.
+        $headerForMatch = self::stripDates($headerLine);
+
+        if (preg_match($simpleTypeAmountPattern, $headerForMatch)) {
             // "Pemasukan 21.851" or "Pengeluaran 6.500" as first line → it IS a transaction
             $firstLineIsTransaction = true;
-        } elseif (preg_match($receiptLinePatternFirstLine, $headerLine)) {
+        } elseif (preg_match($receiptLinePatternFirstLine, $headerForMatch)) {
             // Receipt/struk format: "DETTOL BW ORIGINAL 370M (Sabun mandi) Rp 24.000"
             // IMPORTANT: Must be checked BEFORE actionAmountPattern because that pattern is too
             // broad and matches lines like "FITTI PANTS XL 40 Rp 133.000" where "FITTI" is not
             // an action keyword, causing the elseif chain to skip this receipt check entirely.
             $firstLineIsTransaction = true;
-        } elseif (preg_match($actionAmountPattern, $headerLine, $matches)) {
-            $firstWord = strtolower($matches[1]);
-            if (in_array($firstWord, $allActionKeywords)) {
-                $firstLineIsTransaction = true;
-            }
-        } elseif (preg_match($amountFirstPatternFirstLine, $headerLine)) {
+        } elseif (preg_match($actionAmountPattern, $headerForMatch, $matches)
+            && in_array(strtolower($matches[1]), $allActionKeywords)) {
+            $firstLineIsTransaction = true;
+        } elseif (preg_match($amountFirstPatternFirstLine, $headerForMatch)) {
             // Amount-first format: "20rb maxim dari JGC ke Callia"
             $firstLineIsTransaction = true;
-        } elseif (preg_match($simpleNameAmountPattern, $headerLine) || preg_match($simpleNamePlainAmountPattern, $headerLine)) {
+        } elseif (preg_match($simpleNameAmountPattern, $headerForMatch) || preg_match($simpleNamePlainAmountPattern, $headerForMatch)) {
             // Simple "Description Amount" format: "Sayur 45 k" or "Sayur 45000"
+            $firstLineIsTransaction = true;
+        } elseif ($isSingleLineSplit || self::lineHasTrailingAmount($headerForMatch)) {
+            // Baris pertama yang DIAKHIRI nominal adalah transaksi, bukan judul:
+            // "amplop untuk 2x undangan 300rb" (dulu dibuang karena "amplop" bukan
+            // kata kerja & "2x" mengandung angka). Potongan kalimat satu baris
+            // juga selalu transaksi (setiap potongan berakhir di nominal).
             $firstLineIsTransaction = true;
         }
 
@@ -425,6 +456,14 @@ class BatchTransactionService
             $cleanLine = preg_replace('/^[\-\•\*]\s*/', '', $cleanLine); // Remove "- " or "• " or "* "
             $cleanLine = trim($cleanLine);
 
+            // Potongan kalimat satu baris diawali penghubung: ", 5 Oktober 500rb"
+            $cleanLine = trim((string) preg_replace('/^[\s,;:.\-–—&]+|^(?:dan|sama|serta|lalu|terus)\s+/iu', '', $cleanLine));
+
+            // Tanggal per item ("28 September", "5 Oktober", "tgl 12") → tanggal
+            // transaksi itu sendiri; dihapus dari teks SEBELUM baca nominal supaya
+            // angka tanggal tidak terbaca sebagai nominal / masuk ke keterangan.
+            $lineDate = $this->extractInlineDate($cleanLine);
+
             if (empty($cleanLine)) {
                 continue;
             }
@@ -432,7 +471,7 @@ class BatchTransactionService
             // Extract amount from the line
             $amount = $this->extractAmountFromText($cleanLine);
 
-            Log::info('DEBUG Batch: Processing line', [
+            Log::debug('Batch: Processing line', [
                 'line_index' => $i,
                 'original_line' => $line,
                 'clean_line' => $cleanLine,
@@ -441,7 +480,7 @@ class BatchTransactionService
 
             if ($amount && $amount > 0) {
                 // Get description (text before the amount)
-                $description = $this->extractDescriptionFromLine($cleanLine);
+                $description = self::cleanBatchDescription($this->extractDescriptionFromLine($cleanLine));
                 $descLower = strtolower($description);
 
                 // Determine type per-line based on keywords in THIS line
@@ -462,10 +501,15 @@ class BatchTransactionService
                     $isExplicitExpense = in_array($firstWord, ['pengeluaran', 'belanja', 'bayar', 'beli'])
                         || preg_match('/^(pengeluaran|belanja|bayar|beli)/i', $descLower);
 
-                    $isIncome = ! $isExplicitExpense && (
-                        in_array($firstWord, $incomeActionKeywords) ||
-                        preg_match('/^(pemasukan|pendapatan|dari|terima|dapat|dapet|gaji|bonus|honor|masuk|uang\\s+masuk|dikasih|dikasi|hadiah|kado|angpao)/i', $descLower)
-                    );
+                    $isExplicitIncome = in_array($firstWord, $incomeActionKeywords) ||
+                        preg_match('/^(pemasukan|pendapatan|dari|terima|dapat|dapet|gaji|bonus|honor|masuk|uang\\s+masuk|dikasih|dikasi|hadiah|kado|angpao)/i', $descLower);
+
+                    if ($isSingleLineSplit && ! $isExplicitExpense && ! $isExplicitIncome && $singleLineIsIncome !== null) {
+                        // ", 5 Oktober 500rb" tidak punya kata jenis → ikut kalimat pembuka
+                        $isIncome = $singleLineIsIncome;
+                    } else {
+                        $isIncome = ! $isExplicitExpense && $isExplicitIncome;
+                    }
                 } else {
                     $isIncome = $isIncomeDefault;
                 }
@@ -475,7 +519,7 @@ class BatchTransactionService
                 // E.g.: "Pemasukan 21.851" → description = "Pemasukan"
                 //        "Pengeluaran 6.500" → description = "Pengeluaran"
                 $genericPrefixWords = ['pemasukan', 'pendapatan', 'pengeluaran', 'belanja', 'bayar'];
-                if (in_array(strtolower(trim($description)), $genericPrefixWords)) {
+                if (trim($description) === '' || in_array(strtolower(trim($description)), $genericPrefixWords)) {
                     $description = $isIncome ? 'Pemasukan' : 'Pengeluaran';
                 }
 
@@ -504,10 +548,10 @@ class BatchTransactionService
                     'amount' => $amount,
                     'category_type' => $categoryType,
                     'type' => $isIncome ? 'income' : 'expense',
-                    'transaction_date' => $transactionDate,
+                    'transaction_date' => $lineDate ?? $transactionDate,
                 ];
 
-                Log::info('DEBUG Batch: Transaction added to array', [
+                Log::debug('Batch: Transaction added to array', [
                     'transaction_count' => count($transactions),
                     'description' => $description,
                     'amount' => $amount,
@@ -563,6 +607,7 @@ class BatchTransactionService
                     'amount' => $txData['amount'],
                     'type' => $txData['type'],
                     'category' => $transaction->category->name ?? 'Lainnya',
+                    'date' => $txData['transaction_date'],
                 ];
             }
         }
@@ -571,9 +616,13 @@ class BatchTransactionService
         if ($createdCount > 0) {
             $hasIncome = $totalIncomeAmount > 0;
             $hasExpense = $totalExpenseAmount > 0;
+            $distinctDates = array_values(array_unique(array_column($createdTransactions, 'date')));
+            $sameDate = count($distinctDates) === 1;
 
             $reply = "✅ *{$createdCount} Transaksi Berhasil Dicatat!*\n";
-            $reply .= '📅 Tanggal: '.Carbon::parse($transactionDate)->translatedFormat('d F Y')."\n";
+            if ($sameDate) {
+                $reply .= '📅 Tanggal: '.Carbon::parse($distinctDates[0])->translatedFormat('d F Y')."\n";
+            }
             $reply .= "━━━━━━━━━━━━━━━\n\n";
 
             foreach ($createdTransactions as $idx => $tx) {
@@ -582,6 +631,9 @@ class BatchTransactionService
                 $typeEmoji = $tx['type'] === 'income' ? '💵' : '💸';
                 $reply .= "{$num}. {$tx['description']}\n";
                 $reply .= "   {$typeEmoji} Rp {$amount} • {$tx['category']}\n";
+                if (! $sameDate) {
+                    $reply .= '   📅 '.Carbon::parse($tx['date'])->translatedFormat('d F Y')."\n";
+                }
             }
 
             $reply .= "\n━━━━━━━━━━━━━━━\n";
@@ -666,6 +718,96 @@ class BatchTransactionService
         return now()->toDateString();
     }
 
+    private const MONTH_PATTERN = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agu|agt|ags|aug|sep|sept|okt|oct|nov|des|dec';
+
+    private const MONTH_MAP = [
+        'januari' => 1, 'jan' => 1, 'februari' => 2, 'feb' => 2, 'maret' => 3, 'mar' => 3,
+        'april' => 4, 'apr' => 4, 'mei' => 5, 'juni' => 6, 'jun' => 6, 'juli' => 7, 'jul' => 7,
+        'agustus' => 8, 'agu' => 8, 'agt' => 8, 'ags' => 8, 'aug' => 8,
+        'september' => 9, 'sep' => 9, 'sept' => 9, 'oktober' => 10, 'okt' => 10, 'oct' => 10,
+        'november' => 11, 'nov' => 11, 'desember' => 12, 'des' => 12, 'dec' => 12,
+    ];
+
+    /**
+     * Hapus tanggal ("22 Oktober 2026", "5 Okt", "22/09/2026") dari baris supaya
+     * angka tanggal tidak terbaca nominal saat menilai judul vs transaksi.
+     */
+    public static function stripDates(string $line): string
+    {
+        $line = (string) preg_replace('/\b\d{1,2}\s*(?:'.self::MONTH_PATTERN.')\b(?:\s+(?:19|20)\d{2}\b)?/iu', ' ', $line);
+        $line = (string) preg_replace('/\b\d{1,2}[\/\-]\d{1,2}(?:[\/\-](?:19|20)?\d{2})?\b/u', ' ', $line);
+
+        return trim((string) preg_replace('/\s{2,}/', ' ', $line));
+    }
+
+    /**
+     * Baris diakhiri nominal uang ("… 300rb", "… 25.000", "… 15000")?
+     * Tahun setelah nama bulan ("Desember 2025") BUKAN nominal → judul tetap judul.
+     */
+    public static function lineHasTrailingAmount(string $line): bool
+    {
+        $t = mb_strtolower(trim($line));
+        $t = (string) preg_replace('/\b(?:'.self::MONTH_PATTERN.')\s+(?:19|20)\d{2}\b/u', '', $t);
+
+        return (bool) preg_match(
+            '/(?:\d+(?:[.,]\d+)?\s*(?:rb|ribu|rebu|k|jt|juta)|\d{1,3}(?:\.\d{3})+|\d{4,})\s*[.,;!:-]*\s*$/iu',
+            $t
+        );
+    }
+
+    /**
+     * Ambil & hapus tanggal di dalam satu item: "28 September", "tanggal 5 Oktober 2026",
+     * "tgl 12", "tgl 5/10". Tanpa tahun → tahun ini; bila jadi tanggal di masa depan
+     * (> besok) → tahun lalu ("28 Desember" yang dikirim Januari).
+     *
+     * @return string|null Y-m-d, atau null bila tidak ada tanggal
+     */
+    protected function extractInlineDate(string &$line): ?string
+    {
+        $day = $month = $year = null;
+
+        if (preg_match('/(?:\b(?:tanggal|tgl)\.?\s*)?\b(\d{1,2})\s+('.self::MONTH_PATTERN.')\b(?:\s+((?:19|20)\d{2}))?/iu', $line, $m)) {
+            [$day, $month, $year] = [(int) $m[1], self::MONTH_MAP[mb_strtolower($m[2])] ?? null, isset($m[3]) ? (int) $m[3] : null];
+        } elseif (preg_match('/\b(?:tanggal|tgl)\.?\s*(\d{1,2})[\/\-](\d{1,2})(?:[\/\-]((?:19|20)?\d{2}))?\b/iu', $line, $m)) {
+            [$day, $month] = [(int) $m[1], (int) $m[2]];
+            $year = isset($m[3]) && $m[3] !== '' ? (int) $m[3] : null;
+            if ($year !== null && $year < 100) {
+                $year += 2000;
+            }
+        } elseif (preg_match('/\b(?:tanggal|tgl)\.?\s*(\d{1,2})\b(?!\s*(?:rb|ribu|k|jt|juta|[.,]\d))/iu', $line, $m)) {
+            [$day, $month] = [(int) $m[1], (int) now()->month];
+        }
+
+        if (! $day || ! $month || $day > 31 || $month > 12 || ! checkdate($month, $day, $year ?? (int) now()->year)) {
+            return null;
+        }
+
+        $date = Carbon::create($year ?? (int) now()->year, $month, $day)->startOfDay();
+        if ($year === null && $date->gt(now()->addDay())) {
+            $date->subYear();
+        }
+
+        $line = trim((string) preg_replace('/\s{2,}/', ' ', str_replace($m[0], ' ', $line)));
+
+        return $date->toDateString();
+    }
+
+    /**
+     * Bersihkan keterangan item batch dari kata pengantar & pengisi:
+     * "tolong di catat juga dong Pemasukan sebesar" → "Pemasukan".
+     */
+    public static function cleanBatchDescription(string $description): string
+    {
+        $d = trim($description);
+        $d = (string) preg_replace('/^[\s,;:.\-–—&]+/u', '', $d);
+        $d = (string) preg_replace('/^(?:(?:tolong|mohon|minta|coba)\s+)?(?:di\s*)?catat(?:kan|in)?\s+(?:(?:juga|ya|dong|donk|nih|kak|min|sekalian)\s+)*/iu', '', $d);
+        $d = (string) preg_replace('/\s+(?:sebesar|senilai|sejumlah|seharga|nominal|total|rp\.?)\s*$/iu', '', $d);
+        $d = (string) preg_replace('/^(?:sebesar|senilai|sejumlah)\s+/iu', '', $d);
+        $d = (string) preg_replace('/\s+(?:dan|sama|serta|,)\s*$/iu', '', $d);
+
+        return trim($d, " \t,;:.-");
+    }
+
     /**
      * Split a single line containing multiple transactions into multiple lines
      */
@@ -679,6 +821,11 @@ class BatchTransactionService
 
         if (preg_match_all($amountPattern, $text, $matches, PREG_OFFSET_CAPTURE)) {
             foreach ($matches[0] as $match) {
+                // Tahun setelah nama bulan ("28 September 2026") bukan nominal → jangan dipotong di sini
+                if (preg_match('/^(?:19|20)\d{2}$/', $match[0])
+                    && preg_match('/(?:'.self::MONTH_PATTERN.')\s*$/iu', substr($text, 0, $match[1]))) {
+                    continue;
+                }
                 $amountOffset = $match[1];
                 $amountLen = strlen($match[0]);
 
@@ -686,7 +833,13 @@ class BatchTransactionService
 
                 $chunk = substr($text, $offset, $endPos - $offset);
                 if (trim($chunk) !== '') {
-                    $lines[] = trim($chunk);
+                    $chunk = trim($chunk);
+                    // Buang kata penghubung yang tertinggal dari split sebelumnya
+                    // ("Beli rokok 24000 | sama jajan 6000" → "jajan 6000")
+                    $chunk = preg_replace('/^(?:sama|dan|&|plus|terus|lalu|juga|kemudian)\s+/iu', '', $chunk);
+                    if ($chunk !== '') {
+                        $lines[] = $chunk;
+                    }
                 }
 
                 $offset = $endPos;

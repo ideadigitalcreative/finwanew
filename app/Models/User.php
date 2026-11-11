@@ -30,11 +30,14 @@ class User extends Authenticatable
         'telegram_chat_id',
         'tenant_id',
         'role_id',
-        'is_super_admin',
+        // 'is_super_admin' sengaja TIDAK fillable (cegah eskalasi hak akses
+        // lewat mass assignment). Set eksplisit via forceFill()/property.
         'google_id',
         'current_tenant_id',
         'telegram_link_token',
         'telegram_link_token_created_at',
+        'push_enabled',
+        'push_hide_amount',
     ];
 
     /**
@@ -62,7 +65,17 @@ class User extends Authenticatable
             'two_factor_confirmed_at' => 'datetime',
             'is_super_admin' => 'boolean',
             'telegram_link_token_created_at' => 'datetime',
+            'push_enabled' => 'boolean',
+            'push_hide_amount' => 'boolean',
         ];
+    }
+
+    /**
+     * Token FCM perangkat Android (push notification).
+     */
+    public function deviceTokens()
+    {
+        return $this->hasMany(DeviceToken::class);
     }
 
     /**

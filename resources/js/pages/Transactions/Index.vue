@@ -145,7 +145,6 @@ const showExportModal = ref(false);
 const showImportModal = ref(false);
 const showEditModal = ref(false);
 const showMobileMonthPicker = ref(false);
-const showMobileWalletPicker = ref(false);
 const showMobileCategoryPicker = ref(false);
 const selectedTransaction = ref<any>(null);
 
@@ -529,22 +528,22 @@ const categoryIconMap: Record<string, string> = {
 };
 
 const categoryBgMap: Record<string, { bg: string; text: string }> = {
-    'Makanan': { bg: 'bg-[#ffc9d0]/50', text: 'text-[#ad2c4f]' },
-    'Kopi': { bg: 'bg-[#ffd23f]/40', text: 'text-[#725a00]' },
-    'Kopi & Jajan': { bg: 'bg-[#ffd23f]/40', text: 'text-[#725a00]' },
-    'Transport': { bg: 'bg-[#ffd23f]/30', text: 'text-[#745c00]' },
-    'Transportasi': { bg: 'bg-[#ffd23f]/30', text: 'text-[#745c00]' },
-    'Gaji': { bg: 'bg-[#51fac1]/40', text: 'text-[#006c4f]' },
-    'Pendapatan': { bg: 'bg-[#51fac1]/40', text: 'text-[#006c4f]' },
-    'Bonus': { bg: 'bg-[#51fac1]/40', text: 'text-[#006c4f]' },
-    'Langganan': { bg: 'bg-[#eae8e2]', text: 'text-[#4d4634]' },
+    'Makanan': { bg: 'bg-[#ffc9d0]/50', text: 'text-[#ad2c4f] dark:text-[#ffc9d0]' },
+    'Kopi': { bg: 'bg-[#ffd23f]/40', text: 'text-[#725a00] dark:text-[#ffd23f]' },
+    'Kopi & Jajan': { bg: 'bg-[#ffd23f]/40', text: 'text-[#725a00] dark:text-[#ffd23f]' },
+    'Transport': { bg: 'bg-[#ffd23f]/30', text: 'text-[#745c00] dark:text-[#ffd23f]' },
+    'Transportasi': { bg: 'bg-[#ffd23f]/30', text: 'text-[#745c00] dark:text-[#ffd23f]' },
+    'Gaji': { bg: 'bg-[#51fac1]/40', text: 'text-[#006c4f] dark:text-[#51fac1]' },
+    'Pendapatan': { bg: 'bg-[#51fac1]/40', text: 'text-[#006c4f] dark:text-[#51fac1]' },
+    'Bonus': { bg: 'bg-[#51fac1]/40', text: 'text-[#006c4f] dark:text-[#51fac1]' },
+    'Langganan': { bg: 'bg-[#eae8e2] dark:bg-muted', text: 'text-[#4d4634] dark:text-muted-foreground' },
 };
 
 const getCategoryIcon = (catName: string) => categoryIconMap[catName] || 'receipt_long';
-const getCategoryStyles = (catName: string) => categoryBgMap[catName] || { bg: 'bg-[#eae8e2]', text: 'text-[#4d4634]' };
+const getCategoryStyles = (catName: string) => categoryBgMap[catName] || { bg: 'bg-[#eae8e2] dark:bg-muted', text: 'text-[#4d4634] dark:text-muted-foreground' };
 const getCategoryBadgeStyles = (catType: string) => catType === 'income'
-    ? 'bg-[#51fac1]/30 text-[#006c4f]'
-    : 'bg-[#ffc9d0]/30 text-[#ad2c4f]';
+    ? 'bg-[#51fac1]/30 text-[#006c4f] dark:text-[#51fac1]'
+    : 'bg-[#ffc9d0]/30 text-[#ad2c4f] dark:text-[#ffc9d0]';
 
 const formatTime = (dateStr: string) => {
     if (!dateStr) return '';
@@ -617,12 +616,12 @@ onBeforeUnmount(() => {
                 <div class="flex items-center justify-between gap-3 pt-1">
                     <div class="flex flex-col min-w-0">
                         <div class="flex items-center gap-1.5">
-                            <h1 class="text-[26px] leading-[34px] font-[700] tracking-tight text-[#1b1c19] truncate">
+                            <h1 class="text-[26px] leading-[34px] font-[700] tracking-tight text-[#1b1c19] dark:text-foreground truncate">
                                 Riwayat Transaksi
                             </h1>
                             <span class="material-symbols-outlined text-xl select-none">receipt_long</span>
                         </div>
-                        <p class="text-xs font-[500] text-[#4d4634] line-clamp-1 mt-0.5">
+                        <p class="text-xs font-[500] text-[#4d4634] dark:text-muted-foreground line-clamp-1 mt-0.5">
                             Pantau arus cuan &amp; kebiasaan jajanmu!
                         </p>
                     </div>
@@ -638,11 +637,11 @@ onBeforeUnmount(() => {
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-1.5">
                             <span class="w-2 h-2 rounded-full bg-[#006c4f]"></span>
-                            <span class="text-[10px] font-[800] uppercase tracking-wider text-[#4d4634]">Arus Kas • {{ currentMonthLabel }}</span>
+                            <span class="text-[10px] font-[800] uppercase tracking-wider text-[#4d4634] dark:text-muted-foreground">Arus Kas • {{ currentMonthLabel }}</span>
                         </div>
                         <button
                             @click="showExportModal = true"
-                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#f5f3ee] text-[#4d4634] text-[10px] font-[700] active:bg-[#eae8e2] transition-colors"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#f5f3ee] dark:bg-muted text-[#4d4634] dark:text-muted-foreground text-[10px] font-[700] active:bg-[#eae8e2] dark:active:bg-white/10 transition-colors"
                             title="Unduh Rekap Laporan Bulanan"
                         >
                             <span class="material-symbols-outlined text-[15px]">file_download</span>
@@ -651,20 +650,20 @@ onBeforeUnmount(() => {
                     </div>
                     <div class="grid grid-cols-2 gap-2.5">
                         <div class="flex flex-col p-2.5 rounded-xl bg-[#51fac1]/25">
-                            <div class="flex items-center gap-1 text-[#006c4f] text-[10px] font-[800] uppercase tracking-wider">
+                            <div class="flex items-center gap-1 text-[#006c4f] dark:text-[#51fac1] text-[10px] font-[800] uppercase tracking-wider">
                                 <span class="material-symbols-outlined text-[16px]">arrow_downward_alt</span>
                                 <span>Pemasukan</span>
                             </div>
-                            <span class="text-[18px] font-[700] text-[#006c4f] font-extrabold mt-0.5 tracking-tight truncate">
+                            <span class="text-[18px] font-[700] text-[#006c4f] dark:text-[#51fac1] font-extrabold mt-0.5 tracking-tight truncate">
                                 +{{ formatCurrency(totalIncome) }}
                             </span>
                         </div>
                         <div class="flex flex-col p-2.5 rounded-xl bg-[#ffc9d0]/30">
-                            <div class="flex items-center gap-1 text-[#ad2c4f] text-[10px] font-[800] uppercase tracking-wider">
+                            <div class="flex items-center gap-1 text-[#ad2c4f] dark:text-[#ffc9d0] text-[10px] font-[800] uppercase tracking-wider">
                                 <span class="material-symbols-outlined text-[16px]">arrow_upward_alt</span>
                                 <span>Pengeluaran</span>
                             </div>
-                            <span class="text-[18px] font-[700] text-[#ad2c4f] font-extrabold mt-0.5 tracking-tight truncate">
+                            <span class="text-[18px] font-[700] text-[#ad2c4f] dark:text-[#ffc9d0] font-extrabold mt-0.5 tracking-tight truncate">
                                 -{{ formatCurrency(totalExpense) }}
                             </span>
                         </div>
@@ -673,58 +672,49 @@ onBeforeUnmount(() => {
 
                 <!-- 3. Search & Filter Controls -->
                 <div class="flex flex-col space-y-2.5">
+                    <!-- Anggota pills (di atas pencarian) -->
+                    <div v-if="memberOptions.length" class="flex flex-wrap gap-1.5">
+                        <button @click="form.number_id = ''; applyFilters()" :class="['px-3 py-1 rounded-full text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 transition-colors', form.number_id === '' ? 'bg-[#ffd23f] text-[#725a00] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground']">Semua</button>
+                        <button v-for="n in memberOptions" :key="n.id" @click="form.number_id = String(n.id); applyFilters()" :class="['px-3 py-1 rounded-full text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 transition-colors', form.number_id === String(n.id) ? 'bg-[#ffd23f] text-[#725a00] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground']">{{ memberLabel(n) }}</button>
+                    </div>
+
                     <!-- Instant Search Bar -->
                     <div class="relative w-full">
-                        <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#4d4634]/60 text-[20px]">search</span>
+                        <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#4d4634]/60 dark:text-muted-foreground/60 text-[20px]">search</span>
                         <input
                             v-model="form.search"
                             type="text"
                             placeholder="Cari transaksi, merchant, dompet..."
-                            class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-card text-[#1b1c19] dark:text-foreground text-xs placeholder:text-[#4d4634]/50 dark:placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-[#ffd23f] border border-[#eae8e2] dark:border-border/60 transition-all"
+                            class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-card text-[#1b1c19] dark:text-foreground text-xs placeholder:text-[#4d4634]/5 dark:placeholder:text-muted-foreground/50 dark:placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-[#ffd23f] border border-[#eae8e2] dark:border-border/60 transition-all"
                             @keyup.enter="applyFilters"
                         />
                     </div>
 
-                    <!-- Filter Pills Row: Bulan + Dompet -->
+                    <!-- Filter Pills Row: Bulan + Kategori -->
                     <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-nowrap scrollbar-none">
                         <button
                             @click="showMobileMonthPicker = !showMobileMonthPicker"
-                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white dark:bg-card text-[#1b1c19] dark:text-foreground text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 active:bg-[#f5f3ee] transition-colors"
+                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white dark:bg-card text-[#1b1c19] dark:text-foreground text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 active:bg-[#f5f3ee] dark:active:bg-white/5 transition-colors"
                         >
                             <span class="material-symbols-outlined text-[16px]">calendar_today</span>
                             <span>{{ currentMonthLabel }}</span>
-                            <span class="material-symbols-outlined text-[16px] text-[#4d4634]">expand_more</span>
-                        </button>
-                        <button
-                            v-if="memberOptions.length"
-                            @click="showMobileWalletPicker = !showMobileWalletPicker"
-                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white dark:bg-card text-[#1b1c19] dark:text-foreground text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 active:bg-[#f5f3ee] transition-colors"
-                        >
-                            <span class="material-symbols-outlined text-[16px]">wallet</span>
-                            <span>{{ form.number_id ? (memberOptions.find(n => String(n.id) === form.number_id)?.name || 'Dompet') : 'Semua Dompet' }}</span>
-                            <span class="material-symbols-outlined text-[16px] text-[#4d4634]">expand_more</span>
+                            <span class="material-symbols-outlined text-[16px] text-[#4d4634] dark:text-muted-foreground">expand_more</span>
                         </button>
                         <button
                             @click="showMobileCategoryPicker = !showMobileCategoryPicker"
-                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white dark:bg-card text-[#1b1c19] dark:text-foreground text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 active:bg-[#f5f3ee] transition-colors"
+                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white dark:bg-card text-[#1b1c19] dark:text-foreground text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 active:bg-[#f5f3ee] dark:active:bg-white/5 transition-colors"
                         >
                             <span class="material-symbols-outlined text-[16px]">label</span>
                             <span>{{ form.category_id ? (categories.find(c => String(c.id) === form.category_id)?.name || 'Kategori') : 'Kategori' }}</span>
-                            <span class="material-symbols-outlined text-[16px] text-[#4d4634]">expand_more</span>
+                            <span class="material-symbols-outlined text-[16px] text-[#4d4634] dark:text-muted-foreground">expand_more</span>
                         </button>
                     </div>
 
                     <!-- Mobile Date Range (hidden by default) -->
                     <div v-if="showMobileMonthPicker" class="flex items-center gap-2 px-1">
                         <input v-model="form.start_date" type="date" @change="applyFilters" class="flex-1 rounded-xl bg-white dark:bg-card px-3 py-2 text-xs text-[#1b1c19] dark:text-foreground border border-[#eae8e2] dark:border-border/60 focus:outline-none focus:ring-2 focus:ring-[#ffd23f]" />
-                        <span class="text-[10px] font-bold text-[#4d4634]">—</span>
+                        <span class="text-[10px] font-bold text-[#4d4634] dark:text-muted-foreground">—</span>
                         <input v-model="form.end_date" type="date" @change="applyFilters" class="flex-1 rounded-xl bg-white dark:bg-card px-3 py-2 text-xs text-[#1b1c19] dark:text-foreground border border-[#eae8e2] dark:border-border/60 focus:outline-none focus:ring-2 focus:ring-[#ffd23f]" />
-                    </div>
-
-                    <!-- Mobile Wallet Picker Dropdown -->
-                    <div v-if="showMobileWalletPicker && memberOptions.length" class="flex flex-wrap gap-1.5 px-1">
-                        <button @click="form.number_id = ''; applyFilters()" :class="['px-3 py-1 rounded-full text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 transition-colors', form.number_id === '' ? 'bg-[#ffd23f] text-[#725a00] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground']">Semua</button>
-                        <button v-for="n in memberOptions" :key="n.id" @click="form.number_id = String(n.id); applyFilters()" :class="['px-3 py-1 rounded-full text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 transition-colors', form.number_id === String(n.id) ? 'bg-[#ffd23f] text-[#725a00] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground']">{{ memberLabel(n) }}</button>
                     </div>
 
                     <!-- Mobile Category Picker Dropdown -->
@@ -736,7 +726,7 @@ onBeforeUnmount(() => {
                     <!-- Filter Type Pills + Sort -->
                     <div class="flex items-center justify-between pt-1">
                         <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-nowrap">
-                            <button @click="form.type = ''" :class="['px-3.5 py-1 rounded-full text-xs font-bold border border-[#eae8e2] dark:border-border/60 transition-colors', form.type === '' ? 'bg-[#ffd23f] text-[#725a00] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground active:bg-[#f5f3ee]']">
+                            <button @click="form.type = ''" :class="['px-3.5 py-1 rounded-full text-xs font-bold border border-[#eae8e2] dark:border-border/60 transition-colors', form.type === '' ? 'bg-[#ffd23f] text-[#725a00] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground active:bg-[#f5f3ee] dark:active:bg-white/5']">
                                 Semua ({{ transactions.meta?.total || 0 }})
                             </button>
                             <button @click="form.type = 'income'" :class="['px-3 py-1 rounded-full text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 transition-colors', form.type === 'income' ? 'bg-[#51fac1] text-[#007152] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground active:bg-[#51fac1]/30']">
@@ -745,11 +735,11 @@ onBeforeUnmount(() => {
                             <button @click="form.type = 'expense'" :class="['px-3 py-1 rounded-full text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 transition-colors', form.type === 'expense' ? 'bg-[#ffc9d0] text-[#ad2c4f] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground active:bg-[#ffc9d0]/30']">
                                 Pengeluaran
                             </button>
-                            <button @click="form.type = 'debit_internal'" :class="['px-3 py-1 rounded-full text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 transition-colors', form.type === 'debit_internal' ? 'bg-[#eae8e2] text-[#4d4634] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground active:bg-[#eae8e2]']">
+                            <button @click="form.type = 'debit_internal'" :class="['px-3 py-1 rounded-full text-[10px] font-[700] border border-[#eae8e2] dark:border-border/60 transition-colors', form.type === 'debit_internal' ? 'bg-[#eae8e2] dark:bg-muted text-[#4d4634] dark:text-muted-foreground border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground active:bg-[#eae8e2] dark:active:bg-white/10']">
                                 Transfer
                             </button>
                         </div>
-                        <button @click="resetFilters" class="flex-shrink-0 inline-flex items-center text-[#4d4634] text-[10px] font-[700] pl-2">
+                        <button @click="resetFilters" class="flex-shrink-0 inline-flex items-center text-[#4d4634] dark:text-muted-foreground text-[10px] font-[700] pl-2">
                             <span>Reset</span>
                             <span class="material-symbols-outlined text-[16px]">swap_vert</span>
                         </button>
@@ -762,76 +752,87 @@ onBeforeUnmount(() => {
                         <div v-for="group in groupedTransactions" :key="group.key" class="flex flex-col space-y-2">
                             <!-- Group Header -->
                             <div class="flex items-center justify-between px-1">
-                                <span class="text-[10px] font-[800] uppercase tracking-wider text-[#4d4634]">
+                                <span class="text-[10px] font-[800] uppercase tracking-wider text-[#4d4634] dark:text-muted-foreground">
                                     {{ group.label }}
                                 </span>
-                                <span class="text-[10px] font-bold" :class="group.net >= 0 ? 'text-[#006c4f]' : 'text-[#ad2c4f]'">
+                                <span class="text-[10px] font-bold" :class="group.net >= 0 ? 'text-[#006c4f] dark:text-[#51fac1]' : 'text-[#ad2c4f] dark:text-[#ffc9d0]'">
                                     {{ group.net >= 0 ? '+' : '' }}{{ formatCurrency(Math.abs(group.net)) }}
                                 </span>
                             </div>
-                            <!-- Transaction Items -->
+                            <!-- Transaction Items (kartu = link ke detail + tombol hapus; di mobile tidak ada hover) -->
                             <div
                                 v-for="tx in group.transactions"
                                 :key="tx.id"
-                                class="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-card border border-[#eae8e2] dark:border-border/60 active:bg-[#f5f3ee] dark:active:bg-muted transition-colors"
+                                class="flex items-stretch rounded-2xl bg-white dark:bg-card border border-[#eae8e2] dark:border-border/60 overflow-hidden"
                             >
-                                <div class="flex items-center gap-3 min-w-0">
-                                    <div :class="['w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0', getCategoryStyles(tx.category?.name || '').bg, getCategoryStyles(tx.category?.name || '').text]">
-                                        <span class="material-symbols-outlined text-[22px]">{{ getCategoryIcon(tx.category?.name || '') }}</span>
-                                    </div>
-                                    <div class="flex flex-col min-w-0">
-                                        <Link
-                                            :href="`/transactions/${tx.id}`"
-                                            class="text-sm font-bold text-[#1b1c19] truncate max-w-[180px]"
-                                        >
-                                            {{ tx.description }}
-                                        </Link>
-                                        <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                            <span v-if="tx.whatsappNumber" class="px-2 py-0.5 rounded-full bg-[#f5f3ee] text-[10px] font-[700] text-[#4d4634]">{{ tx.whatsappNumber.name || 'WA' }}</span>
-                                            <span v-if="tx.source" class="text-[10px] text-[#4d4634] truncate max-w-[120px]">"{{ tx.source }}"</span>
+                                <Link
+                                    :href="`/transactions/${tx.id}`"
+                                    class="flex flex-1 min-w-0 items-center justify-between p-3 active:bg-[#f5f3ee] dark:active:bg-muted transition-colors"
+                                >
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <div :class="['w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0', getCategoryStyles(tx.category?.name || '').bg, getCategoryStyles(tx.category?.name || '').text]">
+                                            <span class="material-symbols-outlined text-[22px]">{{ getCategoryIcon(tx.category?.name || '') }}</span>
+                                        </div>
+                                        <div class="flex flex-col min-w-0">
+                                            <span class="text-sm font-bold text-[#1b1c19] dark:text-foreground truncate max-w-[150px]">
+                                                {{ tx.description }}
+                                            </span>
+                                            <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                <span v-if="tx.whatsappNumber" class="px-2 py-0.5 rounded-full bg-[#f5f3ee] dark:bg-muted text-[10px] font-[700] text-[#4d4634] dark:text-muted-foreground">{{ tx.whatsappNumber.name || 'WA' }}</span>
+                                                <span v-if="tx.source" class="text-[10px] text-[#4d4634] dark:text-muted-foreground truncate max-w-[120px]">"{{ tx.source }}"</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="flex flex-col items-end flex-shrink-0 pl-2">
-                                    <span class="text-sm font-bold tracking-tight" :class="isIncome(tx.type) ? 'text-[#006c4f]' : 'text-[#ad2c4f]'">
-                                        {{ isIncome(tx.type) ? '+' : '-' }}{{ formatCurrency(tx.amount) }}
-                                    </span>
-                                    <span v-if="tx.category?.name" :class="['px-1.5 py-0.5 rounded-md text-[10px] font-[700] mt-0.5', getCategoryBadgeStyles(tx.category.type)]">
-                                        {{ tx.category.name }}
-                                    </span>
-                                </div>
+                                    <div class="flex flex-col items-end flex-shrink-0 pl-2">
+                                        <span class="text-sm font-bold tracking-tight" :class="isIncome(tx.type) ? 'text-[#006c4f] dark:text-[#51fac1]' : 'text-[#ad2c4f] dark:text-[#ffc9d0]'">
+                                            {{ isIncome(tx.type) ? '+' : '-' }}{{ formatCurrency(tx.amount) }}
+                                        </span>
+                                        <span v-if="tx.category?.name" :class="['px-1.5 py-0.5 rounded-md text-[10px] font-[700] mt-0.5', getCategoryBadgeStyles(tx.category.type)]">
+                                            {{ tx.category.name }}
+                                        </span>
+                                    </div>
+                                </Link>
+                                <button
+                                    type="button"
+                                    @click="deleteTransaction(tx.id, tx.description)"
+                                    class="flex items-center justify-center w-11 flex-shrink-0 border-l border-[#eae8e2] dark:border-border/60 text-[#ad2c4f] dark:text-[#ffc9d0] active:bg-[#ffc9d0]/40 transition-colors"
+                                    title="Hapus"
+                                    aria-label="Hapus transaksi"
+                                >
+                                    <Trash2 class="w-4 h-4" />
+                                </button>
                             </div>
                         </div>
                     </template>
 
                     <!-- Empty State -->
                     <div v-else class="flex flex-col items-center justify-center py-8">
-                        <div class="mb-3 rounded-full bg-[#f5f3ee] p-4">
-                            <span class="material-symbols-outlined text-[32px] text-[#b0ad9e]">receipt_long</span>
+                        <div class="mb-3 rounded-full bg-[#f5f3ee] dark:bg-muted p-4">
+                            <span class="material-symbols-outlined text-[32px] text-[#b0ad9e] dark:text-muted-foreground">receipt_long</span>
                         </div>
-                        <p class="text-sm font-bold text-[#4d4634]">Belum ada transaksi</p>
-                        <p class="text-[10px] text-[#b0ad9e] mt-1">Coba ubah filter atau tambah transaksi baru</p>
+                        <p class="text-sm font-bold text-[#4d4634] dark:text-muted-foreground">Belum ada transaksi</p>
+                        <p class="text-[10px] text-[#b0ad9e] dark:text-muted-foreground mt-1">Coba ubah filter atau tambah transaksi baru</p>
 
                         <!-- Transaksi Terakhir -->
                         <div v-if="props.latestTransactions && props.latestTransactions.length > 0" class="w-full mt-5">
-                            <p class="text-[10px] font-[800] uppercase tracking-wider text-[#4d4634] mb-2 px-1">Transaksi Terakhir</p>
+                            <p class="text-[10px] font-[800] uppercase tracking-wider text-[#4d4634] dark:text-muted-foreground mb-2 px-1">Transaksi Terakhir</p>
                             <div class="flex flex-col gap-2">
                                 <Link
                                     v-for="tx in props.latestTransactions"
                                     :key="tx.id"
                                     :href="`/transactions/${tx.id}`"
-                                    class="flex items-center justify-between p-3 rounded-2xl bg-white active:bg-[#f5f3ee] transition-colors"
+                                    class="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-card active:bg-[#f5f3ee] dark:active:bg-white/5 transition-colors"
                                 >
                                     <div class="flex items-center gap-3 min-w-0">
                                         <div :class="['w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0', getCategoryStyles(tx.category?.name || '').bg, getCategoryStyles(tx.category?.name || '').text]">
                                             <span class="material-symbols-outlined text-[20px]">{{ getCategoryIcon(tx.category?.name || '') }}</span>
                                         </div>
                                         <div class="flex flex-col min-w-0">
-                                            <span class="text-sm font-bold text-[#1b1c19] truncate max-w-[160px]">{{ tx.description }}</span>
-                                            <span class="text-[10px] text-[#b0ad9e]">{{ tx.transaction_date ? formatShortDate(tx.transaction_date) : '' }}</span>
+                                            <span class="text-sm font-bold text-[#1b1c19] dark:text-foreground truncate max-w-[160px]">{{ tx.description }}</span>
+                                            <span class="text-[10px] text-[#b0ad9e] dark:text-muted-foreground">{{ tx.transaction_date ? formatShortDate(tx.transaction_date) : '' }}</span>
                                         </div>
                                     </div>
-                                    <span class="text-sm font-bold flex-shrink-0 pl-2" :class="isIncome(tx.type) ? 'text-[#006c4f]' : 'text-[#ad2c4f]'">
+                                    <span class="text-sm font-bold flex-shrink-0 pl-2" :class="isIncome(tx.type) ? 'text-[#006c4f] dark:text-[#51fac1]' : 'text-[#ad2c4f] dark:text-[#ffc9d0]'">
                                         {{ isIncome(tx.type) ? '+' : '-' }}{{ formatCurrency(tx.amount) }}
                                     </span>
                                 </Link>
@@ -842,21 +843,21 @@ onBeforeUnmount(() => {
 
                 <!-- 5. Pagination & End of List (Mobile) -->
                 <div v-if="transactions.links && transactions.links.length > 3" class="flex flex-col items-center justify-center pt-3 pb-2 space-y-3">
-                    <p class="text-[10px] text-[#b0ad9e] uppercase tracking-wider font-bold">
+                    <p class="text-[10px] text-[#b0ad9e] dark:text-muted-foreground uppercase tracking-wider font-bold">
                         Menampilkan {{ transactions.meta?.from || 0 }} — {{ transactions.meta?.to || 0 }} dari {{ transactions.meta?.total || 0 }} transaksi
                     </p>
                     <div class="flex items-center gap-2 w-full">
                         <Link
                             :href="transactions.links[0]?.url || '#'"
-                            :class="['flex-1 py-3 rounded-2xl bg-[#f5f3ee] dark:bg-card border border-[#eae8e2] dark:border-border/60 text-[#4d4634] dark:text-foreground text-xs font-bold flex items-center justify-center gap-1.5 active:bg-[#eae8e2] transition-colors', !transactions.links[0]?.url ? 'opacity-40 pointer-events-none' : '']"
+                            :class="['flex-1 py-3 rounded-2xl bg-[#f5f3ee] dark:bg-card border border-[#eae8e2] dark:border-border/60 text-[#4d4634] dark:text-foreground text-xs font-bold flex items-center justify-center gap-1.5 active:bg-[#eae8e2] dark:active:bg-white/10 transition-colors', !transactions.links[0]?.url ? 'opacity-40 pointer-events-none' : '']"
                         >
                             <span class="material-symbols-outlined text-[16px]">chevron_left</span>
                             Prev
                         </Link>
-                        <span class="text-[10px] font-bold text-[#b0ad9e]">{{ transactions.meta?.current_page }}/{{ transactions.meta?.last_page }}</span>
+                        <span class="text-[10px] font-bold text-[#b0ad9e] dark:text-muted-foreground">{{ transactions.meta?.current_page }}/{{ transactions.meta?.last_page }}</span>
                         <Link
                             :href="transactions.links[transactions.links.length - 1]?.url || '#'"
-                            :class="['flex-1 py-3 rounded-2xl bg-[#f5f3ee] dark:bg-card border border-[#eae8e2] dark:border-border/60 text-[#4d4634] dark:text-foreground text-xs font-bold flex items-center justify-center gap-1.5 active:bg-[#eae8e2] transition-colors', !transactions.links[transactions.links.length - 1]?.url ? 'opacity-40 pointer-events-none' : '']"
+                            :class="['flex-1 py-3 rounded-2xl bg-[#f5f3ee] dark:bg-card border border-[#eae8e2] dark:border-border/60 text-[#4d4634] dark:text-foreground text-xs font-bold flex items-center justify-center gap-1.5 active:bg-[#eae8e2] dark:active:bg-white/10 transition-colors', !transactions.links[transactions.links.length - 1]?.url ? 'opacity-40 pointer-events-none' : '']"
                         >
                             Next
                             <span class="material-symbols-outlined text-[16px]">chevron_right</span>
@@ -872,13 +873,13 @@ onBeforeUnmount(() => {
                 <div class="flex items-center justify-between gap-4 pt-1">
                     <div class="flex flex-col min-w-0">
                         <div class="flex items-center gap-2">
-                            <h1 class="text-2xl font-bold tracking-tight text-[#1b1c19]">Riwayat Transaksi</h1>
-                            <span class="material-symbols-outlined text-xl select-none text-[#4d4634]">receipt_long</span>
+                            <h1 class="text-2xl font-bold tracking-tight text-[#1b1c19] dark:text-foreground">Riwayat Transaksi</h1>
+                            <span class="material-symbols-outlined text-xl select-none text-[#4d4634] dark:text-muted-foreground">receipt_long</span>
                         </div>
-                        <p class="text-xs font-medium text-[#4d4634] mt-0.5">Pantau arus keuangan & kelola semua transaksi</p>
+                        <p class="text-xs font-medium text-[#4d4634] dark:text-muted-foreground mt-0.5">Pantau arus keuangan & kelola semua transaksi</p>
                     </div>
                     <div class="flex items-center gap-2">
-                        <button @click="showImportModal = true" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-card border border-[#eae8e2] dark:border-border/60 text-[#4d4634] dark:text-foreground text-sm font-semibold hover:bg-[#f5f3ee] transition-colors">
+                        <button @click="showImportModal = true" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-card border border-[#eae8e2] dark:border-border/60 text-[#4d4634] dark:text-foreground text-sm font-semibold hover:bg-[#f5f3ee] dark:hover:bg-white/5 transition-colors">
                             <Upload class="w-4 h-4" /> Import
                         </button>
                         <button @click="showExportModal = true" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#ffd23f] text-[#725a00] text-sm font-bold hover:bg-[#ffd23f]/90 transition-colors">
@@ -892,44 +893,52 @@ onBeforeUnmount(() => {
                     <div class="flex items-center justify-between mb-3">
                         <div class="flex items-center gap-1.5">
                             <span class="w-2 h-2 rounded-full bg-[#006c4f]"></span>
-                            <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#4d4634]">Arus Kas • {{ currentMonthLabel }}</span>
+                            <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#4d4634] dark:text-muted-foreground">Arus Kas • {{ currentMonthLabel }}</span>
                         </div>
-                        <span class="text-xs text-[#b0ad9e]">{{ transactions.meta?.total || 0 }} transaksi</span>
+                        <span class="text-xs text-[#b0ad9e] dark:text-muted-foreground">{{ transactions.meta?.total || 0 }} transaksi</span>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div class="flex flex-col p-3 rounded-xl bg-[#51fac1]/25">
-                            <div class="flex items-center gap-1 text-[#006c4f] text-[11px] font-extrabold uppercase tracking-wider">
+                            <div class="flex items-center gap-1 text-[#006c4f] dark:text-[#51fac1] text-[11px] font-extrabold uppercase tracking-wider">
                                 <span class="material-symbols-outlined text-[16px]">arrow_downward_alt</span>
                                 <span>Pemasukan</span>
                             </div>
-                            <span class="text-xl font-extrabold text-[#006c4f] mt-0.5 tracking-tight">+{{ formatCurrency(totalIncome) }}</span>
+                            <span class="text-xl font-extrabold text-[#006c4f] dark:text-[#51fac1] mt-0.5 tracking-tight">+{{ formatCurrency(totalIncome) }}</span>
                         </div>
                         <div class="flex flex-col p-3 rounded-xl bg-[#ffc9d0]/30">
-                            <div class="flex items-center gap-1 text-[#ad2c4f] text-[11px] font-extrabold uppercase tracking-wider">
+                            <div class="flex items-center gap-1 text-[#ad2c4f] dark:text-[#ffc9d0] text-[11px] font-extrabold uppercase tracking-wider">
                                 <span class="material-symbols-outlined text-[16px]">arrow_upward_alt</span>
                                 <span>Pengeluaran</span>
                             </div>
-                            <span class="text-xl font-extrabold text-[#ad2c4f] mt-0.5 tracking-tight">-{{ formatCurrency(totalExpense) }}</span>
+                            <span class="text-xl font-extrabold text-[#ad2c4f] dark:text-[#ffc9d0] mt-0.5 tracking-tight">-{{ formatCurrency(totalExpense) }}</span>
                         </div>
                     </div>
                 </div>
 
                 <!-- Filters Card -->
                 <div class="bg-white dark:bg-card rounded-2xl p-5 border border-[#eae8e2] dark:border-border/60 space-y-4">
+                    <!-- Anggota pills (di atas pencarian) -->
+                    <template v-if="memberOptions.length">
+                        <div class="flex flex-wrap gap-1.5">
+                            <button @click="form.number_id = ''" :class="['px-3 py-1.5 rounded-full text-xs font-bold transition-colors', form.number_id === '' ? 'bg-[#ffd23f] text-[#725a00]' : 'bg-[#f5f3ee] dark:bg-muted text-[#4d4634] dark:text-muted-foreground hover:bg-[#eae8e2] dark:hover:bg-white/10']">Semua</button>
+                            <button v-for="number in memberOptions" :key="number.id" @click="form.number_id = String(number.id)" :title="number.whatsapp_number" :class="['px-3 py-1.5 rounded-full text-xs font-bold transition-colors', form.number_id === String(number.id) ? 'bg-[#ffd23f] text-[#725a00]' : 'bg-[#f5f3ee] dark:bg-muted text-[#4d4634] dark:text-muted-foreground hover:bg-[#eae8e2] dark:hover:bg-white/10']">{{ memberLabel(number) }}</button>
+                        </div>
+                    </template>
+
                     <!-- Row 1: Search + Date + Status -->
                     <div class="grid grid-cols-5 gap-3">
                         <div class="col-span-2 relative">
-                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#4d4634]/50 text-[18px]">search</span>
-                            <input v-model="form.search" type="text" placeholder="Cari transaksi, merchant..." class="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#f5f3ee] text-[#1b1c19] text-sm placeholder:text-[#4d4634]/40 focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all" @keyup.enter="applyFilters" />
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#4d4634]/50 dark:text-muted-foreground/50 text-[18px]">search</span>
+                            <input v-model="form.search" type="text" placeholder="Cari transaksi, merchant..." class="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#f5f3ee] dark:bg-muted text-[#1b1c19] dark:text-foreground text-sm placeholder:text-[#4d4634]/40 dark:placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all" @keyup.enter="applyFilters" />
                         </div>
                         <div>
-                            <input v-model="form.start_date" type="date" @change="applyFilters" class="w-full px-3 py-2.5 rounded-xl bg-[#f5f3ee] text-[#1b1c19] text-sm focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all" />
+                            <input v-model="form.start_date" type="date" @change="applyFilters" class="w-full px-3 py-2.5 rounded-xl bg-[#f5f3ee] dark:bg-muted text-[#1b1c19] dark:text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all" />
                         </div>
                         <div>
-                            <input v-model="form.end_date" type="date" @change="applyFilters" class="w-full px-3 py-2.5 rounded-xl bg-[#f5f3ee] text-[#1b1c19] text-sm focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all" />
+                            <input v-model="form.end_date" type="date" @change="applyFilters" class="w-full px-3 py-2.5 rounded-xl bg-[#f5f3ee] dark:bg-muted text-[#1b1c19] dark:text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all" />
                         </div>
                         <div>
-                            <select v-model="form.status" class="w-full px-3 py-2.5 rounded-xl bg-[#f5f3ee] text-[#1b1c19] text-sm focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all">
+                            <select v-model="form.status" class="w-full px-3 py-2.5 rounded-xl bg-[#f5f3ee] dark:bg-muted text-[#1b1c19] dark:text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all">
                                 <option value="">Semua Status</option>
                                 <option value="confirmed">Confirmed</option>
                                 <option value="rejected">Rejected</option>
@@ -937,35 +946,25 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
 
-                    <!-- Row 2: Tipe pills + Kategori + Anggota + Reset -->
+                    <!-- Row 2: Tipe pills + Kategori + Reset -->
                     <div class="flex items-center gap-3 flex-wrap">
                         <!-- Tipe pills -->
                         <div class="flex items-center gap-1.5">
-                            <button @click="form.type = ''" :class="['px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors', form.type === '' ? 'bg-[#ffd23f] text-[#725a00]' : 'bg-[#f5f3ee] text-[#4d4634] hover:bg-[#eae8e2]']">Semua</button>
-                            <button @click="form.type = 'income'" :class="['px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors', form.type === 'income' ? 'bg-[#51fac1] text-[#006c4f]' : 'bg-[#f5f3ee] text-[#4d4634] hover:bg-[#eae8e2]']">Pemasukan</button>
-                            <button @click="form.type = 'expense'" :class="['px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors', form.type === 'expense' ? 'bg-[#ffc9d0] text-[#ad2c4f]' : 'bg-[#f5f3ee] text-[#4d4634] hover:bg-[#eae8e2]']">Pengeluaran</button>
-                            <button @click="form.type = 'debit_internal'" :class="['px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors', form.type === 'debit_internal' ? 'bg-[#eae8e2] text-[#4d4634]' : 'bg-[#f5f3ee] text-[#4d4634] hover:bg-[#eae8e2]']">Transfer</button>
+                            <button @click="form.type = ''" :class="['px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors', form.type === '' ? 'bg-[#ffd23f] text-[#725a00]' : 'bg-[#f5f3ee] dark:bg-muted text-[#4d4634] dark:text-muted-foreground hover:bg-[#eae8e2] dark:hover:bg-white/10']">Semua</button>
+                            <button @click="form.type = 'income'" :class="['px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors', form.type === 'income' ? 'bg-[#51fac1] text-[#006c4f]' : 'bg-[#f5f3ee] dark:bg-muted text-[#4d4634] dark:text-muted-foreground hover:bg-[#eae8e2] dark:hover:bg-white/10']">Pemasukan</button>
+                            <button @click="form.type = 'expense'" :class="['px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors', form.type === 'expense' ? 'bg-[#ffc9d0] text-[#ad2c4f]' : 'bg-[#f5f3ee] dark:bg-muted text-[#4d4634] dark:text-muted-foreground hover:bg-[#eae8e2] dark:hover:bg-white/10']">Pengeluaran</button>
+                            <button @click="form.type = 'debit_internal'" :class="['px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors', form.type === 'debit_internal' ? 'bg-[#eae8e2] dark:bg-muted text-[#4d4634] dark:text-muted-foreground' : 'bg-[#f5f3ee] dark:bg-muted text-[#4d4634] dark:text-muted-foreground hover:bg-[#eae8e2] dark:hover:bg-white/10']">Transfer</button>
                         </div>
 
-                        <div class="w-px h-5 bg-[#eae8e2]"></div>
+                        <div class="w-px h-5 bg-[#eae8e2] dark:bg-muted"></div>
 
                         <!-- Kategori -->
-                        <select v-model="form.category_id" class="px-3 py-1.5 rounded-xl bg-[#f5f3ee] text-[#1b1c19] text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all">
+                        <select v-model="form.category_id" class="px-3 py-1.5 rounded-xl bg-[#f5f3ee] dark:bg-muted text-[#1b1c19] dark:text-foreground text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#ffd23f] transition-all">
                             <option value="">Semua Kategori</option>
                             <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
                         </select>
 
-                        <!-- Anggota pills -->
-                        <template v-if="memberOptions.length">
-                            <div class="w-px h-5 bg-[#eae8e2]"></div>
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#4d4634]">Anggota:</span>
-                                <button @click="form.number_id = ''" :class="['px-3 py-1.5 rounded-full text-xs font-bold transition-colors', form.number_id === '' ? 'bg-[#ffd23f] text-[#725a00]' : 'bg-[#f5f3ee] text-[#4d4634] hover:bg-[#eae8e2]']">Semua</button>
-                                <button v-for="number in memberOptions" :key="number.id" @click="form.number_id = String(number.id)" :title="number.whatsapp_number" :class="['px-3 py-1.5 rounded-full text-xs font-bold transition-colors', form.number_id === String(number.id) ? 'bg-[#ffd23f] text-[#725a00]' : 'bg-[#f5f3ee] text-[#4d4634] hover:bg-[#eae8e2]']">{{ memberLabel(number) }}</button>
-                            </div>
-                        </template>
-
-                        <button @click="resetFilters" class="ml-auto text-xs font-bold text-[#4d4634] hover:text-[#1b1c19] flex items-center gap-1 transition-colors">
+                        <button @click="resetFilters" class="ml-auto text-xs font-bold text-[#4d4634] dark:text-muted-foreground hover:text-[#1b1c19] dark:hover:text-foreground flex items-center gap-1 transition-colors">
                             <span class="material-symbols-outlined text-[16px]">restart_alt</span> Reset
                         </button>
                     </div>
@@ -977,14 +976,14 @@ onBeforeUnmount(() => {
                         <div v-for="group in groupedTransactions" :key="group.key" class="flex flex-col gap-2">
                             <!-- Group Header -->
                             <div class="flex items-center justify-between px-1">
-                                <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#4d4634]">{{ group.label }}</span>
-                                <span class="text-xs font-bold" :class="group.net >= 0 ? 'text-[#006c4f]' : 'text-[#ad2c4f]'">
+                                <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#4d4634] dark:text-muted-foreground">{{ group.label }}</span>
+                                <span class="text-xs font-bold" :class="group.net >= 0 ? 'text-[#006c4f] dark:text-[#51fac1]' : 'text-[#ad2c4f] dark:text-[#ffc9d0]'">
                                     {{ group.net >= 0 ? '+' : '' }}{{ formatCurrency(Math.abs(group.net)) }}
                                 </span>
                             </div>
                             <!-- Transaction Rows -->
                             <div class="bg-white dark:bg-card rounded-2xl border border-[#eae8e2] dark:border-border/60 overflow-hidden divide-y divide-[#f5f3ee] dark:divide-border/40">
-                                <div v-for="tx in group.transactions" :key="tx.id" class="flex items-center gap-4 px-5 py-3.5 hover:bg-[#f5f3ee]/60 transition-colors group">
+                                <div v-for="tx in group.transactions" :key="tx.id" class="flex items-center gap-4 px-5 py-3.5 hover:bg-[#f5f3ee]/60 dark:hover:bg-white/5 transition-colors group">
                                     <!-- Icon -->
                                     <div :class="['w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', getCategoryStyles(tx.category?.name || '').bg, getCategoryStyles(tx.category?.name || '').text]">
                                         <span class="material-symbols-outlined text-[20px]">{{ getCategoryIcon(tx.category?.name || '') }}</span>
@@ -992,28 +991,28 @@ onBeforeUnmount(() => {
                                     <!-- Description + meta -->
                                     <div class="flex flex-col min-w-0 flex-1">
                                         <div class="flex items-center gap-1.5">
-                                            <Link :href="`/transactions/${tx.id}`" class="text-sm font-bold text-[#1b1c19] truncate max-w-xs hover:text-[#006c4f] transition-colors">{{ tx.description }}</Link>
-                                            <Paperclip v-if="tx.metadata?.attachment_path || tx.message?.ocr_job?.file_path" class="w-3 h-3 text-[#006c4f] shrink-0" title="Ada lampiran" />
+                                            <Link :href="`/transactions/${tx.id}`" class="text-sm font-bold text-[#1b1c19] dark:text-foreground truncate max-w-xs hover:text-[#006c4f] dark:hover:text-[#51fac1] transition-colors">{{ tx.description }}</Link>
+                                            <Paperclip v-if="tx.metadata?.attachment_path || tx.message?.ocr_job?.file_path" class="w-3 h-3 text-[#006c4f] dark:text-[#51fac1] shrink-0" title="Ada lampiran" />
                                         </div>
                                         <div class="flex items-center gap-2 mt-0.5 flex-wrap">
-                                            <span class="text-[11px] text-[#b0ad9e]">{{ tx.category?.name || '-' }}</span>
-                                            <span v-if="tx.source" class="text-[11px] text-[#b0ad9e]">• {{ tx.source }}</span>
-                                            <span v-if="tx.whatsappNumber" class="px-2 py-0.5 rounded-full bg-[#f5f3ee] text-[10px] font-bold text-[#4d4634]">{{ tx.whatsappNumber.name || tx.whatsappNumber.whatsapp_number }}</span>
+                                            <span class="text-[11px] text-[#b0ad9e] dark:text-muted-foreground">{{ tx.category?.name || '-' }}</span>
+                                            <span v-if="tx.source" class="text-[11px] text-[#b0ad9e] dark:text-muted-foreground">• {{ tx.source }}</span>
+                                            <span v-if="tx.whatsappNumber" class="px-2 py-0.5 rounded-full bg-[#f5f3ee] dark:bg-muted text-[10px] font-bold text-[#4d4634] dark:text-muted-foreground">{{ tx.whatsappNumber.name || tx.whatsappNumber.whatsapp_number }}</span>
                                         </div>
                                     </div>
                                     <!-- Status badge -->
                                     <span class="hidden xl:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0"
-                                        :class="tx.status === 'confirmed' ? 'bg-[#51fac1]/30 text-[#006c4f]' : 'bg-[#ffc9d0]/40 text-[#ad2c4f]'">
+                                        :class="tx.status === 'confirmed' ? 'bg-[#51fac1]/30 text-[#006c4f] dark:text-[#51fac1]' : 'bg-[#ffc9d0]/40 text-[#ad2c4f] dark:text-[#ffc9d0]'">
                                         {{ tx.status === 'confirmed' ? 'Confirmed' : 'Rejected' }}
                                     </span>
                                     <!-- Amount -->
-                                    <span class="text-sm font-extrabold tracking-tight flex-shrink-0 w-36 text-right" :class="isIncome(tx.type) ? 'text-[#006c4f]' : 'text-[#ad2c4f]'">
+                                    <span class="text-sm font-extrabold tracking-tight flex-shrink-0 w-36 text-right" :class="isIncome(tx.type) ? 'text-[#006c4f] dark:text-[#51fac1]' : 'text-[#ad2c4f] dark:text-[#ffc9d0]'">
                                         {{ isIncome(tx.type) ? '+' : '-' }}{{ formatCurrency(tx.amount) }}
                                     </span>
                                     <!-- Actions -->
                                     <div class="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button @click="openEditModal(tx)" class="p-1.5 rounded-lg text-[#4d4634] hover:bg-[#eae8e2] hover:text-[#1b1c19] transition-colors" title="Edit"><Pencil class="w-3.5 h-3.5" /></button>
-                                        <button @click="deleteTransaction(tx.id, tx.description)" class="p-1.5 rounded-lg text-[#4d4634] hover:bg-[#ffc9d0]/40 hover:text-[#ad2c4f] transition-colors" title="Hapus"><Trash2 class="w-3.5 h-3.5" /></button>
+                                        <button @click="openEditModal(tx)" class="p-1.5 rounded-lg text-[#4d4634] dark:text-muted-foreground hover:bg-[#eae8e2] dark:hover:bg-white/10 hover:text-[#1b1c19] dark:hover:text-foreground transition-colors" title="Edit"><Pencil class="w-3.5 h-3.5" /></button>
+                                        <button @click="deleteTransaction(tx.id, tx.description)" class="p-1.5 rounded-lg text-[#4d4634] dark:text-muted-foreground hover:bg-[#ffc9d0]/40 hover:text-[#ad2c4f] dark:hover:text-[#ffc9d0] transition-colors" title="Hapus"><Trash2 class="w-3.5 h-3.5" /></button>
                                     </div>
                                 </div>
                             </div>
@@ -1023,22 +1022,22 @@ onBeforeUnmount(() => {
                     <!-- Empty State -->
                     <div v-else class="flex flex-col items-center justify-center py-16 bg-white dark:bg-card rounded-2xl border border-[#eae8e2] dark:border-border/60">
                         <div class="mb-3 rounded-full bg-[#f5f3ee] dark:bg-muted p-5">
-                            <span class="material-symbols-outlined text-[36px] text-[#b0ad9e]">receipt_long</span>
+                            <span class="material-symbols-outlined text-[36px] text-[#b0ad9e] dark:text-muted-foreground">receipt_long</span>
                         </div>
                         <p class="text-sm font-bold text-[#4d4634] dark:text-foreground">Belum ada transaksi</p>
-                        <p class="text-xs text-[#b0ad9e] mt-1">Coba ubah filter atau tambah transaksi baru</p>
+                        <p class="text-xs text-[#b0ad9e] dark:text-muted-foreground mt-1">Coba ubah filter atau tambah transaksi baru</p>
                     </div>
                 </div>
 
                 <!-- Desktop Pagination -->
                 <div v-if="transactions.links && transactions.links.length > 3" class="flex items-center justify-between px-1">
-                    <p class="text-xs text-[#b0ad9e] font-bold uppercase tracking-wider">
+                    <p class="text-xs text-[#b0ad9e] dark:text-muted-foreground font-bold uppercase tracking-wider">
                         Menampilkan {{ transactions.meta?.from || 0 }}–{{ transactions.meta?.to || 0 }} dari {{ transactions.meta?.total || 0 }} transaksi
                     </p>
                     <div class="flex items-center gap-1.5">
                         <Link v-for="link in (transactions.links || [])" :key="link.label" :href="link.url || '#'"
                             :class="['px-3 py-1.5 rounded-xl text-xs font-bold border border-[#eae8e2] dark:border-border/60 transition-colors',
-                                link.active ? 'bg-[#ffd23f] text-[#725a00] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground hover:bg-[#f5f3ee]',
+                                link.active ? 'bg-[#ffd23f] text-[#725a00] border-transparent' : 'bg-white dark:bg-card text-[#4d4634] dark:text-foreground hover:bg-[#f5f3ee] dark:hover:bg-white/5',
                                 !link.url ? 'opacity-40 pointer-events-none' : '']">
                             <span v-html="link.label" />
                         </Link>
@@ -1188,7 +1187,7 @@ onBeforeUnmount(() => {
                                     <input
                                         v-model="importForm.skip_header"
                                         type="checkbox"
-                                        class="rounded border-[#eae8e2] text-[#ffd23f] focus:ring-[#ffd23f]"
+                                        class="rounded border-[#eae8e2] dark:border-border/60 text-[#ffd23f] focus:ring-[#ffd23f]"
                                     />
                                     <span class="text-xs font-medium text-[#4d4634] dark:text-foreground">Lewati baris header pertama</span>
                                 </label>
@@ -1344,7 +1343,7 @@ onBeforeUnmount(() => {
                                     @change="onEditAttachmentChange"
                                     class="w-full text-xs text-[#4d4634] dark:text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#ffd23f]/30 file:text-[#725a00] hover:file:bg-[#ffd23f]/50"
                                 />
-                                <p class="text-[10px] text-[#4d4634]/60 dark:text-muted-foreground mt-1">Mendukung JPG, PNG, WebP, PDF (Maks. 5MB)</p>
+                                <p class="text-[10px] text-[#4d4634]/6 dark:text-muted-foreground/60 dark:text-muted-foreground mt-1">Mendukung JPG, PNG, WebP, PDF (Maks. 5MB)</p>
                             </div>
                         </div>
                         

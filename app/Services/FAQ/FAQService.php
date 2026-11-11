@@ -54,83 +54,8 @@ class FAQService
 
         // GUARD: Skip FAQ for financial education topics → let Groq LLM handle these dynamically
         // This prevents generic patterns like "bagaimana cara" from catching financial questions
-        $financialEducationTopics = [
-            'nabung',
-            'menabung',
-            'tabungan',
-            'saving',
-            'investasi',
-            'invest',
-            'reksadana',
-            'reksa dana',
-            'saham',
-            'obligasi',
-            'deposito',
-            'hemat',
-            'menghemat',
-            'penghematan',
-            'irit',
-            'berhemat',
-            'hutang',
-            'utang',
-            'pinjaman',
-            'kredit',
-            'cicilan',
-            'kpr',
-            'asuransi',
-            'insurance',
-            'premi',
-            'pajak',
-            'tax',
-            'npwp',
-            'inflasi',
-            'deflasi',
-            'suku bunga',
-            'bunga bank',
-            'financial freedom',
-            'bebas finansial',
-            'kebebasan finansial',
-            'dana darurat',
-            'emergency fund',
-            'cash flow',
-            'cashflow',
-            'arus kas',
-            'kelola uang',
-            'kelola keuangan',
-            'manage keuangan',
-            'manajemen keuangan',
-            'tips keuangan',
-            'tips finansial',
-            'tips uang',
-            'side hustle',
-            'penghasilan tambahan',
-            'passive income',
-            'pendapatan pasif',
-            'konsisten',
-            'disiplin keuangan',
-            'kebiasaan keuangan',
-            'umkm',
-            'usaha',
-            'bisnis',
-            'modal',
-            'untung',
-            'rugi',
-            'margin',
-            'omset',
-            'omzet',
-            'gaji',
-            'penghasilan',
-            'income',
-            'pengeluaran berlebih',
-            'boros',
-            'pemborosan',
-            'impulsive buying',
-            'belanja impulsif',
-            'rencana keuangan',
-            'perencanaan keuangan',
-            'financial plan',
-            'financial planning',
-        ];
+        // Satu sumber dengan aturan Chat LLM di ProcessIncomingMessage
+        $financialEducationTopics = config('finwa_query.finance_topics', []);
 
         $isFinancialEducation = false;
         foreach ($financialEducationTopics as $topic) {
@@ -490,6 +415,8 @@ class FAQService
                 'answer' => $this->getFAQExport(),
             ],
             // ========== LIMIT/BATASAN ==========
+            // Jawaban dibungkus closure: isinya membaca paket & pemakaian dari DB,
+            // jadi hanya dihitung saat polanya benar-benar cocok.
             [
                 'patterns' => [
                     'ada limit',
@@ -497,8 +424,30 @@ class FAQService
                     'maksimal transaksi',
                     'limit transaksi',
                     'batas',
+                    // "Pengeluaran hanya di batasi 50 kali/bulan ya?" — bentuk pasif
+                    // tidak tertangkap 'batas' (word boundary) maupun 'batasan'.
+                    'dibatasi',
+                    'di batasi',
+                    'dibatasin',
+                    'di batasin',
+                    'ada batasnya',
+                    'ada limitnya',
+                    'ada limit nya',
+                    'limitnya berapa',
+                    'limit nya berapa',
+                    'batasnya berapa',
+                    'batas nya berapa',
+                    'kali/bulan',
+                    'kali per bulan',
+                    'kali sebulan',
+                    'kali perbulan',
+                    'maksimal berapa',
+                    'maks berapa',
+                    'kuota transaksi',
+                    'sisa kuota',
+                    'unlimited',
                 ],
-                'answer' => $this->getFAQLimits(),
+                'answer' => fn (): string => $this->getFAQLimits(),
             ],
             // ========== CARA CATAT TRANSAKSI ==========
             [
@@ -552,7 +501,8 @@ class FAQService
                         'pattern' => $pattern,
                     ]);
 
-                    $this->sendReply($faq['answer']);
+                    $answer = $faq['answer'];
+                    $this->sendReply($answer instanceof \Closure ? $answer() : $answer);
 
                     return true;
                 }
@@ -617,9 +567,12 @@ class FAQService
     public function getFAQGroupFeature(): string
     {
         return "👥 *Fitur Multi-User & Pasangan*\n\n".
-            "*📱 Grup WhatsApp:*\n".
-            "Saat ini FinWa belum mendukung di grup WA.\n".
-            "FinWa dirancang untuk chat 1-on-1.\n\n".
+            "*📱 Grup WhatsApp (Paket Pro):*\n".
+            "1. Masukkan nomor FinWa ke grup Anda\n".
+            "2. Pemilik akun ketik *#aktifkan finwa* di grup\n".
+            "3. Anggota yang nomornya terdaftar di akun mencatat dengan awalan *#*\n".
+            "   contoh: _#beli sayur 50rb_\n".
+            "Info saldo & ringkasan dikirim lewat chat pribadi.\n\n".
             "*💑 Fitur Pasangan (Premium):*\n".
             "Dengan paket Premium, Anda bisa:\n".
             "✅ Tambah nomor WA pasangan\n".
@@ -721,7 +674,8 @@ class FAQService
             "• Export PDF/Excel\n".
             "• Dashboard web lengkap\n\n".
             "*⏰ Pengingat*\n".
-            "• Reminder tagihan\n\n".
+            "• Reminder tagihan (_ingatkan bayar listrik tgl 20_)\n".
+            "• Pengingat harian catat keuangan (_aktifkan reminder_)\n\n".
             'Ketik *help* untuk panduan lengkap!';
     }
 
@@ -837,27 +791,42 @@ class FAQService
     /**
      * FAQ: Limits
      *
-     * MOVED FROM: ProcessIncomingMessage::getFAQLimits()
-     * LINES: 9289-9309
-     * MODIFICATION: None
+     * Angka dibaca langsung dari SubscriptionLimitService + pemakaian tenant,
+     * bukan ditulis tangan. Teks lama menjanjikan "transaksi unlimited" dan
+     * "trial 3 hari" yang tidak ada di kode — paket Gratis nyatanya 50/bulan,
+     * sehingga user yang bertanya soal batas justru mendapat jawaban keliru.
      */
     public function getFAQLimits(): string
     {
-        return "📊 *Batasan & Limit FinWa*\n\n".
-            "*🆓 Trial Gratis (3 hari):*\n".
-            "• Transaksi: Unlimited\n".
-            "• OCR Struk: Unlimited\n".
-            "• Dompet: Unlimited\n".
-            "• Export: Unlimited\n\n".
-            "*💎 Paket Berbayar:*\n".
-            "• Transaksi & Dompet: Unlimited\n".
-            "• Scan Struk: Sesuai kuota paket (100/300 per bulan)\n\n".
-            "*⚠️ Batasan Teknis:*\n".
-            "• Foto struk: Max 10MB\n".
-            "• Maks 1 foto per pesan\n".
-            "• Format foto: JPG, PNG, WEBP\n".
-            "• Input batch: Max 20 item/pesan\n\n".
-            '💡 Tidak ada limit jumlah transaksi per hari!';
+        $limitService = app(\App\Services\SubscriptionLimitService::class);
+        $tx = $limitService->canCreateTransaction($this->message->tenant_id);
+        $plan = (string) $tx['plan'];
+        $canOcr = $limitService->canUseOcr($plan);
+        $scanLimit = $limitService->getMonthlyScanLimit($plan);
+
+        $msg = "📊 *Batasan & Limit FinWa*\n\n";
+
+        if ($tx['is_unlimited']) {
+            $msg .= '*Paket Anda: '.ucfirst($plan)."*\n".
+                "• Catat transaksi: *tanpa batas*\n".
+                "• Dompet: tanpa batas\n".
+                '• Scan struk: '.($canOcr ? "{$scanLimit} per bulan" : 'tidak tersedia')."\n\n";
+        } else {
+            $msg .= "*Paket Anda: Gratis*\n".
+                "• Catat transaksi: *{$tx['limit']} per bulan*\n".
+                "• Terpakai bulan ini: {$tx['current']}/{$tx['limit']} _(sisa {$tx['remaining']})_\n".
+                "• Scan struk: belum tersedia\n\n".
+                "_Hitungan direset otomatis setiap awal bulan._\n\n".
+                "🚀 *Paket berbayar:* transaksi tanpa batas + scan struk.\n".
+                '👉 '.config('app.url')."/subscriptions\n\n";
+        }
+
+        $msg .= "*⚙️ Batasan teknis (semua paket):*\n".
+            "• Foto struk maks 10MB, 1 foto per pesan\n".
+            "• Format foto: JPG, PNG, WEBP\n\n".
+            '💡 Tidak ada batas per hari — yang dihitung total transaksi sebulan.';
+
+        return $msg;
     }
 
     /**

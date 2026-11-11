@@ -121,8 +121,8 @@ class UserManagementController extends Controller
             'password' => Hash::make($validated['password']),
             'whatsapp_number' => $validated['whatsapp_number'] ?? null,
             'tenant_id' => $tenantId,
-            'is_super_admin' => $validated['is_super_admin'] ?? false,
         ]);
+        $user->forceFill(['is_super_admin' => $validated['is_super_admin'] ?? false])->save();
 
         return redirect()->route('superadmin.users.index')
             ->with('success', 'User berhasil dibuat');
@@ -153,8 +153,8 @@ class UserManagementController extends Controller
             'email' => $validated['email'],
             'whatsapp_number' => $validated['whatsapp_number'] ?? null,
             'tenant_id' => $validated['tenant_id'] ?? null,
-            'is_super_admin' => $validated['is_super_admin'] ?? false,
         ]);
+        $user->forceFill(['is_super_admin' => $validated['is_super_admin'] ?? false])->save();
 
         if (! empty($validated['password'])) {
             $user->update([

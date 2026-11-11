@@ -242,9 +242,9 @@ class BalanceService
 
                 // Calculate new balance
                 if ($transaction->type === 'income' || $transaction->type === 'kredit_internal') {
-                    $balance->balance += $transaction->amount;
+                    $balance->adjustBalance($transaction->amount);
                 } elseif ($transaction->type === 'expense' || $transaction->type === 'debit_internal') {
-                    $balance->balance -= $transaction->amount;
+                    $balance->adjustBalance(-($transaction->amount));
                 }
 
                 // Ensure balance doesn't go negative (optional check)
@@ -299,9 +299,9 @@ class BalanceService
 
                 // Reverse the transaction
                 if ($transaction->type === 'income' || $transaction->type === 'kredit_internal') {
-                    $balance->balance -= $transaction->amount;
+                    $balance->adjustBalance(-($transaction->amount));
                 } elseif ($transaction->type === 'expense' || $transaction->type === 'debit_internal') {
-                    $balance->balance += $transaction->amount;
+                    $balance->adjustBalance($transaction->amount);
                 }
 
                 $balance->save();

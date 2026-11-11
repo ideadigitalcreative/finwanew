@@ -53,9 +53,19 @@ const updateMobileStatus = () => {
     isMobile.value = window.innerWidth < 768;
 };
 
+// Warna masuk/keluar diambil dari token tema (--chart-income / --chart-expense di app.css)
+// supaya sama dengan grafik lain.
+const readToken = (name: string, fallback: string) =>
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+
 const updateTheme = () => {
     const isDark = document.documentElement.classList.contains('dark');
-    colors.value = isDark ? chartColors.dark : chartColors.light;
+    const base = isDark ? chartColors.dark : chartColors.light;
+    colors.value = {
+        ...base,
+        primary: readToken('--chart-income', base.primary),
+        expense: readToken('--chart-expense', base.expense),
+    };
 };
 
 onMounted(() => {
@@ -257,7 +267,7 @@ const chartOptions = computed(() => {
 </script>
 
 <template>
-    <div class="bg-gradient-to-br from-[#fffdfa] via-white to-[#f4fbf7] dark:from-[#1f201c] dark:via-[#23231f] dark:to-[#1a2520] rounded-2xl p-3 md:p-5 border border-[#eae8e2] dark:border-white/10 shadow-sm transition-all duration-500 h-full flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
+    <div class="bg-white dark:bg-[#23231f] rounded-2xl p-3 md:p-5 border border-[#eae8e2] dark:border-white/10 shadow-sm transition-all duration-500 h-full flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
         <!-- Header -->
         <div class="flex items-center justify-between gap-3 mb-4 md:mb-6">
             <h3 class="text-sm md:text-base font-extrabold text-[#1b1c19] dark:text-foreground flex items-center gap-1.5">

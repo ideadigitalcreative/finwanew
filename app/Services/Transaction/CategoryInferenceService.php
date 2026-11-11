@@ -77,7 +77,7 @@ class CategoryInferenceService
         ]);
     }
 
-    public function infer(string $messageText, ?bool $isIncomeHint = null): array
+    public function infer(string $messageText, ?bool $isIncomeHint = null, ?int $tenantId = null): array
     {
         $this->ensureLoaded();
         $this->messageText = $messageText;
@@ -88,6 +88,30 @@ class CategoryInferenceService
         ];
 
         $intentType = $this->detectIntentType($isIncomeHint);
+
+        // Step 0: Koreksi kategori yang sudah direkam user ("dipelajari sistem")
+        // menang atas keyword config — inilah loop feedback yang menjanjikan
+        // "Perubahan ini akan dipelajari oleh sistem."
+        if ($tenantId !== null) {
+            $learned = app(\App\Services\Category\CategoryCorrectionService::class)
+                ->getLearnedCategory($tenantId, $this->messageLower);
+            $learnedPrefix = $intentType === 'income' ? 'pendapatan_' : 'pengeluaran_';
+
+            if ($learned !== null
+                && str_starts_with($learned, $learnedPrefix)
+                && isset($this->categoryMap[$learned])
+            ) {
+                $result = $this->buildResult($learned, 0.95, 'learned_correction');
+
+                Log::info('CategoryInference: Learned correction applied', [
+                    'tenant_id' => $tenantId,
+                    'message' => $messageText,
+                    'category' => $learned,
+                ]);
+
+                return $result;
+            }
+        }
 
         $this->matchKeywords($intentType);
 

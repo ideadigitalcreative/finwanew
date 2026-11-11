@@ -155,6 +155,8 @@ const handleLeave = () => { hoveredIndex.value = null; };
                 <!-- Toggle Harian / Bulanan -->
                 <div class="flex items-center flex-shrink-0 rounded-full bg-[#f0eee8] dark:bg-white/10 p-0.5 border border-[#eae8e2] dark:border-white/10">
                     <button
+                        type="button"
+                        :aria-pressed="viewMode === 'daily'"
                         @click="viewMode = 'daily'"
                         :class="[
                             'px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-200',
@@ -166,6 +168,8 @@ const handleLeave = () => { hoveredIndex.value = null; };
                         Harian
                     </button>
                     <button
+                        type="button"
+                        :aria-pressed="viewMode === 'monthly'"
                         @click="viewMode = 'monthly'"
                         :class="[
                             'px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-200',
@@ -180,7 +184,7 @@ const handleLeave = () => { hoveredIndex.value = null; };
             </div>
 
             <!-- Sub-label periode -->
-            <p class="mt-1.5 text-[11px] text-[#9ca3af]">{{ periodLabel }}</p>
+            <p class="mt-1.5 text-xs text-[#6b7280] dark:text-muted-foreground">{{ periodLabel }}</p>
         </div>
 
         <!-- Chart -->
@@ -193,22 +197,12 @@ const handleLeave = () => { hoveredIndex.value = null; };
                 >
                     <defs>
                         <linearGradient :id="`${uid}-${viewMode}-incomeGrad`" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stop-color="#0d9488" stop-opacity="0.3" />
-                            <stop offset="100%" stop-color="#0d9488" stop-opacity="0" />
+                            <stop offset="0%" style="stop-color: var(--color-chart-income)" stop-opacity="0.3" />
+                            <stop offset="100%" style="stop-color: var(--color-chart-income)" stop-opacity="0" />
                         </linearGradient>
                         <linearGradient :id="`${uid}-${viewMode}-expenseGrad`" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stop-color="#e11d48" stop-opacity="0.25" />
-                            <stop offset="100%" stop-color="#e11d48" stop-opacity="0" />
-                        </linearGradient>
-                        <linearGradient :id="`${uid}-${viewMode}-incomeLineGrad`" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stop-color="#5eead4" />
-                            <stop offset="50%" stop-color="#14b8a6" />
-                            <stop offset="100%" stop-color="#0f766e" />
-                        </linearGradient>
-                        <linearGradient :id="`${uid}-${viewMode}-expenseLineGrad`" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stop-color="#fda4af" />
-                            <stop offset="50%" stop-color="#f43f5e" />
-                            <stop offset="100%" stop-color="#be123c" />
+                            <stop offset="0%" style="stop-color: var(--color-chart-expense)" stop-opacity="0.25" />
+                            <stop offset="100%" style="stop-color: var(--color-chart-expense)" stop-opacity="0" />
                         </linearGradient>
                     </defs>
 
@@ -237,7 +231,7 @@ const handleLeave = () => { hoveredIndex.value = null; };
                             :x="padding.left - 8"
                             :y="getY(tick) + 4"
                             text-anchor="end"
-                            class="text-[10px] fill-gray-400"
+                            class="text-[14px] fill-gray-500 dark:fill-gray-400"
                         >{{ formatYAxis(tick) }}</text>
                     </g>
 
@@ -249,7 +243,7 @@ const handleLeave = () => { hoveredIndex.value = null; };
                             :x="getX(i)"
                             :y="chartHeight - 8"
                             text-anchor="middle"
-                            class="text-[10px] fill-gray-400"
+                            class="text-[14px] fill-gray-500 dark:fill-gray-400"
                         >{{ d.day }}</text>
                     </g>
 
@@ -274,12 +268,11 @@ const handleLeave = () => { hoveredIndex.value = null; };
                         :key="`income-line-${viewMode}`"
                         :d="incomePath"
                         fill="none"
-                        :stroke="`url(#${uid}-${viewMode}-incomeLineGrad)`"
                         stroke-width="2"
                         stroke-linecap="round"
                         stroke-linejoin="round"
                         vector-effect="non-scaling-stroke"
-                        class="animate-draw-line"
+                        class="stroke-chart-income animate-draw-line"
                     />
 
                     <!-- Expense line -->
@@ -287,12 +280,11 @@ const handleLeave = () => { hoveredIndex.value = null; };
                         :key="`expense-line-${viewMode}`"
                         :d="expensePath"
                         fill="none"
-                        :stroke="`url(#${uid}-${viewMode}-expenseLineGrad)`"
                         stroke-width="2"
                         stroke-linecap="round"
                         stroke-linejoin="round"
                         vector-effect="non-scaling-stroke"
-                        class="animate-draw-line"
+                        class="stroke-chart-expense animate-draw-line"
                         style="animation-delay: 0.3s"
                     />
 
@@ -303,11 +295,9 @@ const handleLeave = () => { hoveredIndex.value = null; };
                         :cx="getPointPosition(i, 'income').x"
                         :cy="getPointPosition(i, 'income').y"
                         r="4"
-                        fill="white"
-                        stroke="#0d9488"
                         stroke-width="2"
                         vector-effect="non-scaling-stroke"
-                        :class="['cursor-pointer transition-all duration-200 animate-pop-in', hoveredIndex === i ? 'r-6' : '']"
+                        :class="['fill-white dark:fill-[#23231f] stroke-chart-income cursor-pointer transition-all duration-200 animate-pop-in', hoveredIndex === i ? 'r-6' : '']"
                         :style="`animation-delay: ${0.8 + i * 0.08}s`"
                         @mouseenter="handleHover(i)"
                         @mouseleave="handleLeave"
@@ -322,11 +312,9 @@ const handleLeave = () => { hoveredIndex.value = null; };
                         :cx="getPointPosition(i, 'expense').x"
                         :cy="getPointPosition(i, 'expense').y"
                         r="4"
-                        fill="white"
-                        stroke="#f97316"
                         stroke-width="2"
                         vector-effect="non-scaling-stroke"
-                        :class="['cursor-pointer transition-all duration-200 animate-pop-in', hoveredIndex === i ? 'r-6' : '']"
+                        :class="['fill-white dark:fill-[#23231f] stroke-chart-expense cursor-pointer transition-all duration-200 animate-pop-in', hoveredIndex === i ? 'r-6' : '']"
                         :style="`animation-delay: ${1.1 + i * 0.08}s`"
                         @mouseenter="handleHover(i)"
                         @mouseleave="handleLeave"
@@ -364,12 +352,12 @@ const handleLeave = () => { hoveredIndex.value = null; };
                     >
                         <div class="font-bold mb-1.5 text-gray-200">{{ tooltipData.day }}</div>
                         <div class="flex items-center gap-2 mb-1">
-                            <span class="w-2 h-2 rounded-full bg-[#14b8a6] flex-shrink-0"></span>
-                            <span class="text-[#5eead4]">{{ formatCurrency(tooltipData.income) }}</span>
+                            <span class="w-2 h-2 rounded-full bg-chart-income flex-shrink-0"></span>
+                            <span>Pemasukan: {{ formatCurrency(tooltipData.income) }}</span>
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-[#f43f5e] flex-shrink-0"></span>
-                            <span class="text-[#fda4af]">{{ formatCurrency(tooltipData.expense) }}</span>
+                            <span class="w-2 h-2 rounded-full bg-chart-expense flex-shrink-0"></span>
+                            <span>Pengeluaran: {{ formatCurrency(tooltipData.expense) }}</span>
                         </div>
                     </div>
                 </Transition>
@@ -377,11 +365,11 @@ const handleLeave = () => { hoveredIndex.value = null; };
                 <!-- Legend -->
                 <div class="flex items-center justify-center gap-5 mt-2">
                     <div class="flex items-center gap-1.5">
-                        <div class="w-5 h-1 rounded-full bg-[#51fac1]"></div>
+                        <div class="w-5 h-1 rounded-full bg-chart-income"></div>
                         <span class="text-xs text-[#4d4634] dark:text-muted-foreground">Pemasukan</span>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <div class="w-5 h-1 rounded-full bg-[#ffc9d0]"></div>
+                        <div class="w-5 h-1 rounded-full bg-chart-expense"></div>
                         <span class="text-xs text-[#4d4634] dark:text-muted-foreground">Pengeluaran</span>
                     </div>
                 </div>

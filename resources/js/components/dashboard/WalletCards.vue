@@ -4,10 +4,30 @@ import { Eye, EyeOff } from 'lucide-vue-next';
 
 interface Wallet {
     account_name: string;
+    account_type?: string;
+    is_default?: boolean;
     balance: number;
     currency: string;
     balance_date: string;
+    updated_at?: string | null;
 }
+
+const ACCOUNT_TYPES: Record<string, { label: string; icon: string; iconClass: string }> = {
+    bank:       { label: 'Bank',      icon: 'account_balance',         iconClass: 'bg-[#ffe089] text-[#241a00] dark:bg-amber-400/20 dark:text-amber-200' },
+    wallet:     { label: 'E-Wallet',  icon: 'qr_code_scanner',         iconClass: 'bg-[#51fac1] text-[#00513a] dark:bg-emerald-400/20 dark:text-emerald-200' },
+    cash:       { label: 'Tunai',     icon: 'payments',                iconClass: 'bg-[#bbf7d0] text-[#14532d] dark:bg-green-400/20 dark:text-green-200' },
+    investment: { label: 'Investasi', icon: 'trending_up',             iconClass: 'bg-[#e9d5ff] text-[#581c87] dark:bg-purple-400/20 dark:text-purple-200' },
+    other:      { label: 'Lainnya',   icon: 'account_balance_wallet',  iconClass: 'bg-[#f0eee8] text-[#4d4634] dark:bg-white/10 dark:text-foreground' },
+};
+const typeMeta = (wallet: Wallet) => ACCOUNT_TYPES[wallet.account_type ?? ''] ?? ACCOUNT_TYPES.other;
+
+const lastUpdatedLabel = computed(() => {
+    const times = props.wallets
+        .map(w => (w.updated_at ? new Date(w.updated_at).getTime() : NaN))
+        .filter(t => !isNaN(t));
+    if (times.length === 0) return null;
+    return new Date(Math.max(...times)).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+});
 
 interface Props {
     wallets: Wallet[];
@@ -246,12 +266,12 @@ const getCardStyles = (index: number) => {
         <div class="flex items-center justify-between font-['Plus_Jakarta_Sans',sans-serif]">
             <div class="flex items-center gap-1.5">
                 <span class="text-sm md:text-base font-bold text-[#1b1c19] dark:text-foreground">Kantong Aktif</span>
-                <span class="w-5 h-5 rounded-full bg-[#eae8e2] dark:bg-muted text-[#4d4634] dark:text-muted-foreground text-[10px] font-extrabold flex items-center justify-center">
+                <span class="w-5 h-5 rounded-full bg-[#eae8e2] dark:bg-muted text-[#4d4634] dark:text-muted-foreground text-xs font-extrabold flex items-center justify-center">
                     {{ wallets.length }}
                 </span>
             </div>
-            <span class="text-[10px] font-bold text-[#4d4634] dark:text-muted-foreground flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-[#006c4f]"></span> Sinkron 2m lalu
+            <span v-if="lastUpdatedLabel" class="text-xs font-semibold text-[#4d4634] dark:text-muted-foreground">
+                Diperbarui {{ lastUpdatedLabel }}
             </span>
         </div>
 
@@ -263,44 +283,21 @@ const getCardStyles = (index: number) => {
                 class="snap-start flex-shrink-0 w-44 p-3.5 rounded-2xl bg-white dark:bg-card border border-[#eae8e2] dark:border-border/60 flex flex-col justify-between gap-3 transition-all active:scale-[0.98]"
             >
                 <div class="flex items-center justify-between">
-                    <div 
+                    <div
                         class="w-8 h-8 rounded-xl flex items-center justify-center shadow-xs"
-                        :class="[
-                            index % 3 === 0 ? 'bg-[#ffe089] text-[#241a00]' : 
-                            index % 3 === 1 ? 'bg-[#51fac1] text-[#007152]' : 
-                            'bg-[#edc22e] text-[#574500]'
-                        ]"
+                        :class="typeMeta(wallet).iconClass"
+                        aria-hidden="true"
                     >
-                        <span class="material-symbols-outlined text-[18px]">
-                            {{ 
-                                wallet.account_name.toLowerCase().includes('gopay') || wallet.account_name.toLowerCase().includes('ovo') || wallet.account_name.toLowerCase().includes('dana') 
-                                    ? 'qr_code_scanner' 
-                                    : wallet.account_name.toLowerCase().includes('emas') || wallet.account_name.toLowerCase().includes('invest') 
-                                        ? 'stars' 
-                                        : 'account_balance' 
-                            }}
-                        </span>
+                        <span class="material-symbols-outlined text-[18px]">{{ typeMeta(wallet).icon }}</span>
                     </div>
-                    <span 
-                        class="px-2 py-0.5 rounded-full text-[10px] font-bold"
-                        :class="[
-                            index % 3 === 0 ? 'bg-[#f0eee8] text-[#4d4634]' : 
-                            index % 3 === 1 ? 'bg-[#51fac1]/30 text-[#007152]' : 
-                            'bg-[#ffe089]/40 text-[#574500]'
-                        ]"
-                    >
-                        {{ 
-                            wallet.account_name.toLowerCase().includes('gopay') || wallet.account_name.toLowerCase().includes('ovo') || wallet.account_name.toLowerCase().includes('dana') 
-                                ? 'E-Wallet' 
-                                : wallet.account_name.toLowerCase().includes('emas') || wallet.account_name.toLowerCase().includes('invest') 
-                                    ? 'Investasi' 
-                                    : 'Harian' 
-                        }}
+                    <!-- Label dari jenis rekening yang tersimpan (account_type), bukan tebakan nama -->
+                    <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-[#f0eee8] text-[#4d4634] dark:bg-white/10 dark:text-foreground">
+                        {{ wallet.is_default ? 'Utama' : typeMeta(wallet).label }}
                     </span>
                 </div>
 
                 <div>
-                    <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground font-semibold block truncate">{{ wallet.account_name }}</span>
+                    <span class="text-xs text-[#4d4634] dark:text-muted-foreground font-semibold block truncate">{{ wallet.account_name }}</span>
                     <span class="text-base font-extrabold text-[#1b1c19] dark:text-foreground block mt-0.5 truncate tracking-tight">
                         <span v-if="!balanceHidden">{{ formatCurrency(wallet.balance) }}</span>
                         <span v-else class="tracking-widest">Rp ••••••••</span>
@@ -309,7 +306,7 @@ const getCardStyles = (index: number) => {
             </div>
 
             <!-- Empty State if no wallets -->
-            <div v-if="wallets.length === 0" class="w-full p-4 rounded-2xl bg-white dark:bg-card border border-dashed border-[#eae8e2] text-center text-[#4d4634] text-xs">
+            <div v-if="wallets.length === 0" class="w-full p-4 rounded-2xl bg-white dark:bg-card border border-dashed border-[#eae8e2] dark:border-border/60 text-center text-[#4d4634] dark:text-muted-foreground text-xs">
                 Belum ada data kantong aktif
             </div>
         </div>

@@ -40,21 +40,24 @@ class TelegramWebhookController extends Controller
      */
     public function handleWebhook(Request $request)
     {
-        // SKIP secret token validation - Telegram already verifies via /setWebhook
-        // The webhook URL itself acts as the authentication mechanism
-        // if ($this->webhookSecret) {
-        //     $secret = $request->header('X-Telegram-Bot-Api-Secret');
-        //     if ($secret !== $this->webhookSecret) {
-        //         Log::warning('Telegram webhook: Invalid secret token', [
-        //             'provided_secret' => $secret,
-        //             'expected' => $this->webhookSecret,
-        //         ]);
-        //         return response()->json([
-        //             'success' => false,
-        //             'error' => 'Invalid secret token',
-        //         ], 403);
-        //     }
-        // }
+        // Validasi secret token. Telegram mengirim secret (yang diset via
+        // `php artisan app:telegram-setup-webhook`) di header
+        // X-Telegram-Bot-Api-Secret-Token. Versi lama memeriksa header yang
+        // salah (X-Telegram-Bot-Api-Secret) sehingga selalu gagal lalu dimatikan.
+        if ($this->webhookSecret) {
+            $secret = (string) $request->header('X-Telegram-Bot-Api-Secret-Token', '');
+            if (! hash_equals($this->webhookSecret, $secret)) {
+                Log::warning('Telegram webhook: Invalid secret token', [
+                    'ip' => $request->ip(),
+                    'has_header' => $secret !== '',
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invalid secret token',
+                ], 403);
+            }
+        }
 
         try {
             $update = $request->all();

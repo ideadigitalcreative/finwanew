@@ -23,7 +23,6 @@ const daysList = [
 
 const isActiveDay = (key: string) => props.activeDays.includes(key);
 const activeCount = computed(() => props.activeDays.length);
-const peaceIndex = computed(() => Math.min(100, Math.round((activeCount.value / 7) * 100)));
 </script>
 
 <template>
@@ -38,14 +37,14 @@ const peaceIndex = computed(() => Math.min(100, Math.round((activeCount.value / 
                         <span class="text-sm font-bold text-[#1b1c19] dark:text-foreground">
                             {{ streakDays }} Hari Tertib Nyatet!
                         </span>
-                        <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground font-semibold">
+                        <span class="text-xs text-[#4d4634] dark:text-muted-foreground font-semibold">
                             {{ activeCount > 0 ? `${activeCount} dari 7 hari minggu ini sudah dicatat` : 'Mulai catat hari ini untuk mulai streak!' }}
                         </span>
                     </div>
                 </div>
                 <span 
                     v-if="streakDays > 0"
-                    class="px-2.5 py-1 rounded-full bg-[#ffe089] text-[#241a00] text-[10px] font-extrabold shadow-xs"
+                    class="px-2.5 py-1 rounded-full bg-[#ffe089] text-[#241a00] text-xs font-extrabold shadow-xs"
                 >
                     +{{ Math.min(streakDays * 5, 100) }} XP
                 </span>
@@ -59,7 +58,7 @@ const peaceIndex = computed(() => Math.min(100, Math.round((activeCount.value / 
                     class="flex flex-col items-center gap-1"
                 >
                     <span 
-                        class="text-[10px] font-bold"
+                        class="text-xs font-bold"
                         :class="d.isSpecial && isActiveDay(d.key) ? 'text-[#745c00] dark:text-primary' : 'text-[#4d4634] dark:text-muted-foreground'"
                     >
                         {{ d.label }}
@@ -88,14 +87,14 @@ const peaceIndex = computed(() => Math.min(100, Math.round((activeCount.value / 
                 </div>
             </div>
 
-            <!-- Financial Peace Index Badge -->
+            <!-- Konsistensi mencatat (hari aktif minggu ini) — bukan skor kesehatan keuangan -->
             <div class="mt-1 pt-2.5 border-t-0 flex items-center justify-between bg-white dark:bg-muted/40 px-3 py-2 rounded-xl">
                 <div class="flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-[18px] text-[#006c4f]">sentiment_very_satisfied</span>
-                    <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground font-bold">Indeks Ketenangan Finansial:</span>
+                    <span class="material-symbols-outlined text-[18px] text-[#006c4f] dark:text-emerald-400">event_available</span>
+                    <span class="text-xs text-[#4d4634] dark:text-muted-foreground font-bold">Konsistensi mencatat minggu ini</span>
                 </div>
                 <span class="text-xs font-extrabold text-[#006c4f] dark:text-emerald-400">
-                    {{ peaceIndex }} / 100
+                    {{ activeCount }} / 7 hari
                 </span>
             </div>
         </div>

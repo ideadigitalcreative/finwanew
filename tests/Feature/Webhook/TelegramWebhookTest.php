@@ -7,6 +7,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 test('Telegram webhook rejects invalid secret token', function () {
+    config(['services.telegram.webhook_secret' => 'test-secret']);
+
     $response = $this->postJson('/api/webhooks/telegram/message', [
         'update_id' => 1,
         'message' => [
@@ -17,7 +19,7 @@ test('Telegram webhook rejects invalid secret token', function () {
             'text' => 'Hello',
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'invalid-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'invalid-secret',
     ]);
 
     $response->assertStatus(403);
@@ -40,7 +42,7 @@ test('Telegram webhook accepts valid secret token', function () {
             'text' => 'Hello',
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'test-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'test-secret',
     ]);
 
     $response->assertStatus(201);
@@ -74,7 +76,7 @@ test('Telegram webhook handles message with text content', function () {
             'entities' => [],
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'test-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'test-secret',
     ]);
 
     $response->assertStatus(201);
@@ -103,7 +105,7 @@ test('Telegram webhook handles callback query', function () {
             'data' => 'link_some_unique_token',
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'test-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'test-secret',
     ]);
 
     $response->assertStatus(200);
@@ -125,7 +127,7 @@ test('Telegram webhook handles edited message', function () {
             'text' => 'Edited message content',
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'test-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'test-secret',
     ]);
 
     $response->assertStatus(200);
@@ -161,7 +163,7 @@ test('Telegram webhook handles deep linking with token', function () {
             'text' => '/start link_testtoken123',
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'test-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'test-secret',
     ]);
 
     // Note: This test will fail until findUserByToken is implemented
@@ -174,12 +176,14 @@ test('Telegram webhook handles deep linking with token', function () {
 });
 
 test('Telegram webhook rejects request without update_id', function () {
+    config(['services.telegram.webhook_secret' => 'test-secret']);
+
     $response = $this->postJson('/api/webhooks/telegram/message', [
         'message' => [
             'text' => 'Hello',
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'test-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'test-secret',
     ]);
 
     $response->assertStatus(400);
@@ -214,7 +218,7 @@ test('Telegram webhook handles photo message', function () {
             ],
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'test-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'test-secret',
     ]);
 
     $response->assertStatus(201);
@@ -239,6 +243,6 @@ test('Telegram webhook logs webhook events', function () {
             'text' => 'Hello',
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'test-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'test-secret',
     ]);
 });

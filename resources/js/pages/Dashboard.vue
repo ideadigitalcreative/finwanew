@@ -5,11 +5,11 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
+import { useMediaQuery } from '@vueuse/core';
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 import CuanCeriaHabitGamification from '@/components/dashboard/CuanCeriaHabitGamification.vue';
 import CuanCeriaWeeklyChart from '@/components/dashboard/CuanCeriaWeeklyChart.vue';
-import CuanCeriaExpensePortion from '@/components/dashboard/CuanCeriaExpensePortion.vue';
 import IncomeCard from '@/components/dashboard/IncomeCard.vue';
 import ExpenseCard from '@/components/dashboard/ExpenseCard.vue';
 import BalanceCard from '@/components/dashboard/BalanceCard.vue';
@@ -34,9 +34,9 @@ interface Props {
         net_cashflow: number;
         period_start: string;
         period_end: string;
-        income_change?: number;
-        expense_change?: number;
-        net_change?: number;
+        income_change?: number | null;
+        expense_change?: number | null;
+        net_change?: number | null;
         health_status?: string;
     };
     recentTransactions?: Array<{
@@ -45,10 +45,12 @@ interface Props {
         amount: number;
         transaction_date: string;
         description: string;
+        balance_name?: string | null;
+        created_at?: string | null;
         category?: { name: string; type: string; } | null;
         status: string;
     }>;
-    balances?: Array<{ account_name: string; balance: number; currency: string; balance_date: string; }>;
+    balances?: Array<{ account_name: string; account_type?: string; is_default?: boolean; balance: number; currency: string; balance_date: string; updated_at?: string | null; }>;
     chartData?: Array<{ month: string; income: number; expense: number; net: number; }>;
     topCategories?: Array<{ category_name: string; total_income: number; total_expense: number; count: number; }>;
     memberSummary?: Array<{
@@ -150,16 +152,17 @@ const balanceData = computed(() => {
 const incomeData = computed(() => ({
     income: props.cashflow?.total_income || 0,
     period: props.period?.label || '',
-    changePercent: props.cashflow?.income_change || 0,
+    changePercent: props.cashflow?.income_change ?? null,
     gained: props.cashflow?.total_income || 0,
 }));
 
 const expenseData = computed(() => ({
     expense: props.cashflow?.total_expense || 0,
     period: props.period?.label || '',
-    changePercent: props.cashflow?.expense_change || 0,
+    changePercent: props.cashflow?.expense_change ?? null,
     saved: props.budgetSummary?.remaining || 0,
-    targetPercent: props.budgetSummary?.usagePercentage || 0
+    targetPercent: props.budgetSummary?.usagePercentage || 0,
+    hasBudget: (props.budgetSummary?.totalBudget || 0) > 0,
 }));
 
 // Expense categories for pie chart
@@ -279,11 +282,44 @@ const startTour = () => {
     driverObj.drive();
 };
 
-const closeWhatsAppModal = () => { showWhatsAppModal.value = false; startTour(); };
+// ─── Render satu versi layout saja (mobile ATAU desktop) ──────
+// Sebelum mount kedua versi dirender (aman untuk SSR, disembunyikan lewat CSS);
+// setelah mount hanya versi yang sesuai ukuran layar, sehingga grafik tidak dimuat dua kali.
+const isDesktopQuery = useMediaQuery('(min-width: 1024px)');
+const isMounted = ref(false);
+const showMobile = computed(() => !isMounted.value || !isDesktopQuery.value);
+const showDesktop = computed(() => !isMounted.value || isDesktopQuery.value);
+
+// ─── Pengingat WhatsApp ───────────────────────────────────────
+// Modal hanya sekali; setelah "Nanti Saja" cukup tampil banner ringan yang bisa ditutup.
+const WA_MODAL_DISMISSED_KEY = 'finwa_wa_modal_dismissed';
+const WA_BANNER_DISMISSED_KEY = 'finwa_wa_banner_dismissed';
+const safeGet = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
+const safeSet = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch { /* abaikan */ } };
+const showWhatsAppBanner = ref(false);
+
+const closeWhatsAppModal = () => {
+    showWhatsAppModal.value = false;
+    safeSet(WA_MODAL_DISMISSED_KEY, 'true');
+    showWhatsAppBanner.value = true;
+};
+const dismissWhatsAppBanner = () => {
+    showWhatsAppBanner.value = false;
+    safeSet(WA_BANNER_DISMISSED_KEY, 'true');
+};
 
 onMounted(() => {
+    isMounted.value = true;
     if (isSuperAdmin.value) { startTour(); return; }
-    if (!props.hasWhatsAppNumber) showWhatsAppModal.value = true; else startTour();
+    if (!props.hasWhatsAppNumber) {
+        if (!safeGet(WA_MODAL_DISMISSED_KEY)) {
+            // Jangan langsung menumpuk dengan tur onboarding di kunjungan yang sama
+            showWhatsAppModal.value = true;
+            return;
+        }
+        showWhatsAppBanner.value = !safeGet(WA_BANNER_DISMISSED_KEY);
+    }
+    startTour();
 });
 </script>
 
@@ -298,16 +334,17 @@ onMounted(() => {
                         <span class="text-base md:text-sm font-bold text-[#1b1c19] dark:text-foreground flex items-center gap-1.5 truncate">
                             {{ greeting }}{{ auth?.user?.name ? `, ${auth.user.name.split(' ')[0]}` : '' }}!
                         </span>
-                        <div class="flex items-center gap-1.5 mt-2.5">
-                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#ffe089] text-[#241a00] text-[10px] font-extrabold shadow-sm">
-                                <span class="material-symbols-outlined text-[12px]">{{ props.userLevel?.icon || 'military_tech' }}</span>
+                        <div class="flex items-center gap-1.5 mt-1.5">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#f0eee8] dark:bg-white/10 text-[#4d4634] dark:text-muted-foreground text-xs font-semibold">
+                                <span class="material-symbols-outlined text-[14px]" aria-hidden="true">{{ props.userLevel?.icon || 'military_tech' }}</span>
                                 Level {{ props.userLevel?.level || 1 }}: {{ props.userLevel?.title || 'Pemula Cuan' }}
                             </span>
                         </div>
                     </div>
                     <img
                         src="/maskot.png"
-                        alt="Maskot CuanCeria"
+                        alt=""
+                        aria-hidden="true"
                         class="flex-shrink-0 relative z-20 -mb-6 md:-mb-7 w-28 h-28 md:w-32 md:h-32 object-contain drop-shadow-md self-end"
                     />
                 </div>
@@ -325,9 +362,20 @@ onMounted(() => {
                         <p class="mb-6 text-sm text-gray-500 dark:text-gray-400">Daftarkan nomor WhatsApp untuk pencatatan otomatis.</p>
                         <div class="flex flex-col gap-3">
                             <Link href="/whatsapp" class="inline-flex w-full items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-all">Daftarkan Sekarang</Link>
-                            <button @click="closeWhatsAppModal" class="inline-flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">Nanti Saja</button>
+                            <button type="button" @click="closeWhatsAppModal" class="inline-flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">Nanti Saja</button>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Pengingat ringan WhatsApp (setelah modal pernah ditutup) -->
+            <div v-if="showWhatsAppBanner" class="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800/50 dark:bg-emerald-950/40 dark:text-emerald-200">
+                <span class="min-w-0">Hubungkan WhatsApp agar transaksi tercatat otomatis.</span>
+                <div class="flex shrink-0 items-center gap-1">
+                    <Link href="/whatsapp" class="rounded-lg px-2.5 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/40">Hubungkan</Link>
+                    <button type="button" @click="dismissWhatsAppBanner" aria-label="Tutup pengingat WhatsApp" class="inline-flex h-10 w-10 items-center justify-center rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40">
+                        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">close</span>
+                    </button>
                 </div>
             </div>
 
@@ -341,7 +389,7 @@ onMounted(() => {
                     <BalanceCard v-bind="balanceData" />
 
                     <!-- Wallet Cards (Mobile only - horizontal snap carousel) -->
-                    <div class="lg:hidden">
+                    <div v-if="showMobile" class="lg:hidden">
                         <WalletCards
                             :wallets="balances || []"
                             :period="period?.label || 'Bulan ini'"
@@ -349,18 +397,18 @@ onMounted(() => {
                     </div>
 
                     <!-- Income & Expense Cards (Mobile only - below wallet) -->
-                    <div class="lg:hidden grid grid-cols-2 gap-3">
+                    <div v-if="showMobile" class="lg:hidden grid grid-cols-2 gap-3">
                         <IncomeCard v-bind="incomeData" />
                         <ExpenseCard v-bind="expenseData" />
                     </div>
 
-                    <!-- Gamifikasi & Habit Highlights (Mobile only) -->
-                    <div class="lg:hidden">
-                        <CuanCeriaHabitGamification :streak-days="streakDays" :active-days="activeDays" />
+                    <!-- Transaksi terbaru (Mobile only, tepat setelah ringkasan) -->
+                    <div v-if="showMobile" class="lg:hidden">
+                        <TransactionHistory :transactions="searchQuery ? filteredTransactions : (recentTransactions || [])" />
                     </div>
 
                     <!-- Arus Kas Mingguan Dual-Bar Chart (Mobile only) -->
-                    <div class="lg:hidden">
+                    <div v-if="showMobile" class="lg:hidden">
                         <CuanCeriaWeeklyChart
                             :period-label="props.weeklyPeriodLabel || period?.label || '7 hari terakhir'"
                             :flow-data="props.weeklyFlowData || []"
@@ -368,45 +416,32 @@ onMounted(() => {
                         />
                     </div>
 
-                    <!-- Porsi Pengeluaran Segmented Track (Mobile only) -->
-                    <div class="lg:hidden">
-                        <CuanCeriaExpensePortion :categories="expenseCategoryData" :total-expense="cashflow?.total_expense || 0" />
-                    </div>
-
                     <!-- Celengan Impian Quick Glance (Mobile only) -->
-                    <div class="lg:hidden">
+                    <div v-if="showMobile" class="lg:hidden">
                         <GoalTrackerCard
                             :goals="savingsGoals"
                             :period="period?.label || 'Tahun ini'"
                         />
                     </div>
 
-                    <!-- Catatan Teranyar Live Activity (Mobile only) -->
-                    <div class="lg:hidden">
-                        <TransactionHistory :transactions="searchQuery ? filteredTransactions : (recentTransactions || [])" />
+                    <!-- Gamifikasi & kebiasaan mencatat (Mobile only, paling bawah agar tidak bersaing dengan data uang) -->
+                    <div v-if="showMobile" class="lg:hidden">
+                        <CuanCeriaHabitGamification :streak-days="streakDays" :active-days="activeDays" />
                     </div>
 
 
-                    <!-- Upgrade Banner -->
-                    <div v-if="subscription.plan === 'free' || subscription.plan === 'trial'" class="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-400 to-green-400 p-4 border border-emerald-400/20">
-                        <div class="absolute right-0 top-0 h-full w-1/2 overflow-hidden pointer-events-none">
-                            <div class="absolute -right-[20%] -top-[60%] h-[300px] w-[300px] rounded-full bg-white/5"></div>
-                            <div class="absolute -right-[15%] -top-[45%] h-[240px] w-[240px] rounded-full bg-white/10"></div>
-                        </div>
-                        <div class="relative z-10 flex items-center justify-between gap-3">
-                            <div class="flex items-center gap-3">
-                                <img src="/premium.png" alt="Premium" class="h-10 w-10 object-contain" />
-                                <div>
-                                    <span v-if="subscription.isOnTrial" class="inline-flex items-center rounded-full bg-white/20 px-2 py-0.5 text-xs font-bold text-white">Trial • {{ subscription.trialDaysRemaining }} hari</span>
-                                    <p class="text-sm font-bold text-white">Upgrade untuk fitur premium</p>
-                                </div>
-                            </div>
-                            <a href="/subscriptions" class="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-sm font-bold text-emerald-600 hover:bg-emerald-50 transition-all">Upgrade</a>
-                        </div>
+                    <!-- Upgrade Banner: hanya saat trial hampir habis (≤ 7 hari).
+                         Paket gratis sudah diingatkan lewat CTA sidebar & overlay fitur Pro. -->
+                    <div v-if="subscription.isOnTrial && (subscription.trialDaysRemaining ?? 0) <= 7" class="flex items-center justify-between gap-3 rounded-xl border border-[#eae8e2] dark:border-white/10 bg-white dark:bg-[#23231f] px-4 py-2.5">
+                        <p class="min-w-0 text-sm text-[#4d4634] dark:text-muted-foreground">
+                            <span class="font-bold text-[#1b1c19] dark:text-foreground">Trial berakhir dalam {{ subscription.trialDaysRemaining }} hari.</span>
+                            Upgrade agar fitur premium tetap aktif.
+                        </p>
+                        <a href="/subscriptions" class="shrink-0 rounded-lg bg-[#006c4f] px-3 py-1.5 text-sm font-bold text-white hover:bg-[#00593f] transition-colors">Upgrade</a>
                     </div>
 
                     <!-- Mini summary cards: Pemasukan & Pengeluaran (desktop, ringkas 2 kolom) -->
-                    <div class="hidden lg:grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5 emerald-fade-in">
+                    <div v-if="showDesktop" class="hidden lg:grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5 emerald-fade-in">
                         <IncomeCard v-bind="incomeData" class="flex-1" />
                         <ExpenseCard v-bind="expenseData" class="flex-1" />
                     </div>
@@ -435,7 +470,7 @@ onMounted(() => {
                             </div>
                             <div class="emerald-glass-card px-4 py-3 rounded-xl border border-white/20 scale-95 group-hover:scale-100 transition-transform duration-500">
                                 <h3 class="text-sm font-bold text-foreground mb-0.5">Arus Uang (Pro)</h3>
-                                <p class="text-muted-foreground text-[10px]">Visualisasi arus kas otomatis.</p>
+                                <p class="text-muted-foreground text-xs">Visualisasi arus kas otomatis.</p>
                             </div>
                         </div>
                     </div>
@@ -466,7 +501,7 @@ onMounted(() => {
                             </div>
                         </div>
                         <GoalTrackerCard
-                            class="hidden lg:flex"
+                            v-if="showDesktop" class="hidden lg:flex"
                             :goals="savingsGoals"
                             :period="period?.label || 'Tahun ini'"
                         />
@@ -492,7 +527,7 @@ onMounted(() => {
                             >
                                 <div class="mb-2 flex items-center justify-between gap-2">
                                     <p class="truncate text-sm font-semibold text-foreground" :title="member.whatsapp_number || ''">{{ member.name }}</p>
-                                    <span class="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{{ member.count }} transaksi</span>
+                                    <span class="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">{{ member.count }} transaksi</span>
                                 </div>
                                 <p class="text-sm font-bold text-green-600 dark:text-green-400">+{{ formatCurrency(member.total_income) }}</p>
                                 <p class="text-sm font-bold text-red-600 dark:text-red-400">-{{ formatCurrency(member.total_expense) }}</p>
@@ -506,9 +541,9 @@ onMounted(() => {
                         </div>
                     </div>
 
-                    <!-- Budget Overview — di bawah tren, hanya tampil di Desktop (lg ke atas) karena mobile sudah memiliki Porsi Pengeluaran di bagian atas -->
+                    <!-- Budget Overview — di bawah tren, hanya tampil di Desktop (lg ke atas); di mobile rincian kategori ada di kartu Kategori Pengeluaran (pie) -->
                     <BudgetOverviewCard
-                        class="hidden lg:flex"
+                        v-if="showDesktop" class="hidden lg:flex"
                         :total-budget="budgetSummary?.totalBudget || 0"
                         :total-spending="budgetSummary?.totalSpending || 0"
                         :remaining="budgetSummary?.remaining || 0"
@@ -525,7 +560,7 @@ onMounted(() => {
                     <div class="flex flex-col gap-4 md:gap-5">
                         <!-- Wallet Cards (Desktop only — mobile sudah ada di atas) -->
                         <WalletCards
-                            class="hidden lg:block"
+                            v-if="showDesktop" class="hidden lg:block"
                             :wallets="balances || []"
                             :period="period?.label || 'Bulan ini'"
                         />
@@ -540,14 +575,14 @@ onMounted(() => {
                         />
 
                         <!-- Week Calendar (Desktop only) -->
-                        <MobileWeekCalendar class="hidden lg:block" :transactions="monthlyTransactions" />
+                        <MobileWeekCalendar v-if="showDesktop" class="hidden lg:block" :transactions="monthlyTransactions" />
 
                         <!-- Quick Insight (tampil di semua ukuran layar, satu instance) -->
                         <QuickInsightCard :insights="insights || []" />
 
                         <!-- Recent Transactions (Desktop only — mobile sudah ada di atas) -->
                         <TransactionHistory
-                            class="hidden lg:block"
+                            v-if="showDesktop" class="hidden lg:block"
                             :transactions="recentTransactions || []"
                         />
                     </div>

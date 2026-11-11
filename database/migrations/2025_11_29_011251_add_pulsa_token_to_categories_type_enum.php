@@ -10,6 +10,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() !== 'mysql') {
+            return; // SQLite tidak membatasi ENUM
+        }
+
         // Alter the ENUM column to add 'pengeluaran_pulsa_token'
         DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
             'pendapatan_gaji',
@@ -40,6 +44,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::getDriverName() !== 'mysql') {
+            return; // SQLite tidak membatasi ENUM
+        }
+
         // Revert the ENUM column to remove 'pengeluaran_pulsa_token'
         DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
             'pendapatan_gaji',

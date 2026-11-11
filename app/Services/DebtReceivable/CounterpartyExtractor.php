@@ -43,6 +43,12 @@ class CounterpartyExtractor
             '/\b(?:dari|dr)\s+([^\d\n\r]{2,60}?)'.$lookaheadAmount.'/iu',
             '/\bke\s+([^\d\n\r]{2,60}?)'.$lookaheadAmount.'/iu',
             '/\bsama\s+([^\d\n\r]{2,60}?)'.$lookaheadAmount.'/iu',
+            // Nama di AKHIR kalimat tanpa nominal sesudahnya:
+            // "kasih pinjam uang 25rb ke baso" → "baso"
+            '/\b(?:ke|sama|dari|dr)\s+([A-Za-z][A-Za-z0-9\'\-]*(?:\s+[A-Za-z][A-Za-z0-9\'\-]*)?)\s*$/iu',
+            // Nama di AWAL kalimat diikuti kata kerja hutang/piutang:
+            // "Rani pinjam uang 500rb" → "Rani"
+            '/^([A-Za-z][A-Za-z0-9\'\-]*(?:\s+[A-Za-z][A-Za-z0-9\'\-]*)?)\s+(?:pinjam|pinjaman|minjem|membayar|melunasi)/iu',
         ];
 
         foreach ($patterns as $re) {
@@ -99,6 +105,12 @@ class CounterpartyExtractor
         $name = trim($name, " \t\n\r\0\x0B.,;:-");
 
         if ($name === '' || mb_strlen($name) < 2) {
+            return null;
+        }
+
+        // Tolak bila hanya kata filler (mis. "kasih pinjam uang 25rb ke baso"
+        // menangkap "uang") → biar pola berikutnya yang mengambil nama asli.
+        if (in_array(mb_strtolower($name), ['uang', 'duit', 'rekening', 'nya', 'yang', 'buat', 'sama', 'dari', 'ke'], true)) {
             return null;
         }
 

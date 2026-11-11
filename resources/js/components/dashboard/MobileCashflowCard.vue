@@ -47,7 +47,7 @@ const formatFull = (amount: number) => {
 
         <!-- Header -->
         <div class="flex items-center justify-between mb-4 relative z-10">
-            <span class="text-[10px] text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/30 backdrop-blur-sm px-2 py-0.5 rounded-full">{{ period }}</span>
+            <span class="text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/30 backdrop-blur-sm px-2 py-0.5 rounded-full">{{ period }}</span>
         </div>
 
         <!-- Income & Expense Row -->
@@ -56,7 +56,7 @@ const formatFull = (amount: number) => {
             <div class="flex-1">
                 <div class="flex items-center gap-1 mb-1">
                     <TrendingUp class="w-3 h-3 text-emerald-500" />
-                    <p class="text-[10px] text-muted-foreground">Pemasukan</p>
+                    <p class="text-[11px] text-muted-foreground">Pemasukan</p>
                 </div>
                 <p class="text-xl font-semibold text-emerald-600 dark:text-emerald-400">{{ formatFull(income) }}</p>
             </div>
@@ -67,7 +67,7 @@ const formatFull = (amount: number) => {
             <!-- Expense -->
             <div class="flex-1 text-right">
                 <div class="flex items-center justify-end gap-1 mb-1">
-                    <p class="text-[10px] text-muted-foreground">Pengeluaran</p>
+                    <p class="text-[11px] text-muted-foreground">Pengeluaran</p>
                     <TrendingDown class="w-3 h-3 text-rose-500" />
                 </div>
                 <p class="text-xl font-semibold text-rose-600 dark:text-rose-400">{{ formatFull(expense) }}</p>

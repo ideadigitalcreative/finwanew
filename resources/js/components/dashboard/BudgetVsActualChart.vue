@@ -175,15 +175,15 @@ onMounted(() => {
                 <!-- Summary -->
                 <div class="grid grid-cols-3 gap-3 pt-2 border-t border-[#eae8e2] dark:border-white/10">
                     <div class="text-center">
-                        <p class="text-[10px] text-[#4d4634] dark:text-gray-500 uppercase tracking-wide">Total Anggaran</p>
+                        <p class="text-[11px] text-[#4d4634] dark:text-gray-500 uppercase tracking-wide">Total Anggaran</p>
                         <p class="text-sm font-bold text-[#725a00] dark:text-[#ffe089]">{{ formatCurrency(totalBudget) }}</p>
                     </div>
                     <div class="text-center">
-                        <p class="text-[10px] text-[#4d4634] dark:text-gray-500 uppercase tracking-wide">Total Realisasi</p>
+                        <p class="text-[11px] text-[#4d4634] dark:text-gray-500 uppercase tracking-wide">Total Realisasi</p>
                         <p class="text-sm font-bold" :class="isOverAll ? 'text-[#93000a] dark:text-[#e36c8b]' : 'text-[#007152] dark:text-[#51fac1]'">{{ formatCurrency(totalActual) }}</p>
                     </div>
                     <div class="text-center">
-                        <p class="text-[10px] text-[#4d4634] dark:text-gray-500 uppercase tracking-wide">Selisih</p>
+                        <p class="text-[11px] text-[#4d4634] dark:text-gray-500 uppercase tracking-wide">Selisih</p>
                         <p class="text-sm font-bold" :class="totalDiff >= 0 ? 'text-[#007152] dark:text-[#51fac1]' : 'text-[#93000a] dark:text-[#e36c8b]'">
                             {{ totalDiff >= 0 ? '+' : '' }}{{ formatCurrency(totalDiff) }}
                         </p>

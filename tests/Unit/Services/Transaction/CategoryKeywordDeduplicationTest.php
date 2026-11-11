@@ -148,6 +148,44 @@ class CategoryKeywordDeduplicationTest extends TestCase
     }
 
     #[Test]
+    public function category_inference_classifies_baby_products_as_baby_category(): void
+    {
+        $service = new \App\Services\Transaction\CategoryInferenceService();
+
+        // Kata "baby" harus mengalahkan keyword umum seperti "sabun"
+        // (sebelumnya "sabun baby 80rb" → perawatan_diri karena seri skor)
+        $babyMessages = [
+            'sabun baby 80rb',
+            'beli susu baby 80rb',
+            'baby oil 30rb',
+        ];
+
+        foreach ($babyMessages as $message) {
+            $result = $service->infer($message);
+            $this->assertEquals(
+                'pengeluaran_baby',
+                $result['category_type'],
+                "Message '$message' should be classified as pengeluaran_baby but got '{$result['category_type']}'"
+            );
+        }
+
+        // Produk perawatan dewasa TANPA kata baby tetap perawatan diri
+        $selfCareMessages = [
+            'sabun mandi 15rb',
+            'shampoo 25rb',
+        ];
+
+        foreach ($selfCareMessages as $message) {
+            $result = $service->infer($message);
+            $this->assertEquals(
+                'pengeluaran_perawatan_diri',
+                $result['category_type'],
+                "Message '$message' should be classified as pengeluaran_perawatan_diri but got '{$result['category_type']}'"
+            );
+        }
+    }
+
+    #[Test]
     public function category_inference_classifies_finwa_payment_as_langganan(): void
     {
         $service = new \App\Services\Transaction\CategoryInferenceService();

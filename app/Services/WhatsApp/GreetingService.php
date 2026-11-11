@@ -81,10 +81,23 @@ class GreetingService
     {
         $this->sendReply(
             "📱 *Panduan FinWa*\n\n" .
+            "🆘 *Butuh bantuan atau aplikasi custom?*\n" .
+            "Hubungi kami via WhatsApp:\n" .
+            "https://wa.me/6285242766676\n\n" .
+            "📲 *Download aplikasi FinWa:*\n" .
+            "https://play.google.com/store/apps/details?id=com.idea.finwa\n\n" .
             "💸 *Catat Transaksi:*\n" .
             "_beli kopi 25rb_\n" .
             "_gaji bulan ini 8jt_\n" .
             "_kasih ortu 500rb_\n\n" .
+            "✏️ *Edit Transaksi:*\n" .
+            "_ubah jadi 30rb_ → transaksi terakhir\n" .
+            "_ubah beli kopi jadi 30rb_\n" .
+            "_lihat transaksi_ lalu _2 ubah jadi 50rb_\n\n" .
+            "🗑️ *Hapus Transaksi:*\n" .
+            "_hapus transaksi terakhir_ atau _batal_\n" .
+            "_hapus beli kopi_\n" .
+            "_kembalikan_ → pulihkan transaksi yang terhapus\n\n" .
             "📸 *Scan Struk:*\n" .
             "Kirim foto struk → otomatis terbaca\n\n" .
             "🎤 *Voice Note:*\n" .
@@ -111,9 +124,17 @@ class GreetingService
             "_set budget makan 500rb_\n" .
             "_set target 10jt untuk liburan_\n\n" .
             "🔔 *Pengingat:*\n" .
-            "_ingatkan bayar listrik 20 tiap bulan_\n\n" .
+            "_ingatkan bayar listrik 20 tiap bulan_\n" .
+            "_aktifkan reminder_ → pengingat harian catat keuangan (jam 20:00)\n" .
+            "_matikan reminder_ → hentikan pengingat harian\n\n" .
             "📄 *Laporan:*\n" .
             "_export pdf_ → PDF bulan ini\n\n" .
+            "👥 *Catat di Grup WhatsApp (Paket Pro):*\n" .
+            "1. Masukkan nomor FinWa ke grup\n" .
+            "2. Pemilik akun ketik _#aktifkan finwa_\n" .
+            "3. Anggota yang nomornya terdaftar catat dengan awalan *#*:\n" .
+            "   _#beli sayur 50rb_\n" .
+            "Info saldo & ringkasan dikirim lewat chat pribadi.\n\n" .
             "💡 Tips: 25rb=25ribu, 50k=50ribu"
         );
     }

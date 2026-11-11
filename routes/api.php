@@ -26,6 +26,10 @@ Route::prefix('auth')->middleware('throttle:api-auth')->group(function () {
         Route::post('/logout', [\App\Http\Controllers\Api\AuthController::class, 'logout']);
         Route::get('/user', [\App\Http\Controllers\Api\AuthController::class, 'user']);
 
+        // Token FCM (aplikasi native yang memakai Sanctum token)
+        Route::post('/device-tokens', [\App\Http\Controllers\DeviceTokenController::class, 'store']);
+        Route::delete('/device-tokens', [\App\Http\Controllers\DeviceTokenController::class, 'destroy']);
+
         // Protected by Subscription Check
         Route::middleware('subscription')->group(function () {
             // Dashboard
@@ -69,8 +73,8 @@ Route::prefix('webhooks/whatsapp')
         Route::post('/lid-resolve', [\App\Http\Controllers\Webhook\WhatsAppEngineWebhookController::class, 'handleLidResolve']);
     });
 
-// OCR & STT Job Routes
-Route::prefix('ocr-jobs')->group(function () {
+// OCR & STT Job Routes (callback dari worker, dilindungi API key worker)
+Route::prefix('ocr-jobs')->middleware('api.key:ocr')->group(function () {
     Route::post('/{id}/update', [\App\Http\Controllers\Api\OcrJobController::class, 'update']);
 });
 
@@ -86,7 +90,7 @@ Route::get('/files/{path}', [\App\Http\Controllers\Api\FileController::class, 's
     ->where('path', '.*')
     ->name('api.files.serve');
 
-Route::prefix('stt-jobs')->group(function () {
+Route::prefix('stt-jobs')->middleware('api.key:stt')->group(function () {
     Route::post('/{id}/update', [\App\Http\Controllers\Api\SttJobController::class, 'update']);
 });
 
@@ -99,13 +103,14 @@ Route::prefix('webhooks/telegram')->group(function () {
 Route::get('/health/telegram', [TelegramHealthController::class, 'check'])
     ->middleware('throttle:10,1'); // 10 requests per minute
 
-// Slack Webhook Routes
-Route::prefix('webhooks/slack')->group(function () {
+// Slack Webhook Routes (dipanggil slack-bot, dilindungi INTERNAL_API_KEY)
+Route::prefix('webhooks/slack')->middleware('api.key:internal')->group(function () {
     Route::post('/message', [\App\Http\Controllers\Webhook\SlackWebhookController::class, 'handleMessage']);
 });
 
-// Tenant API Routes
-Route::prefix('tenants/{tenant}')->group(function () {
+// Tenant API Routes (internal service-to-service, mis. slack-bot)
+// Tanpa API key, siapa pun bisa membaca/mengubah dompet tenant mana pun.
+Route::prefix('tenants/{tenant}')->middleware(['api.key:internal', 'throttle:60,1'])->group(function () {
     Route::get('/balances', [\App\Http\Controllers\Api\BalanceController::class, 'index']);
     Route::post('/balances', [\App\Http\Controllers\Api\BalanceController::class, 'store']);
     Route::put('/balances/{id}', [\App\Http\Controllers\Api\BalanceController::class, 'update']);
@@ -113,8 +118,8 @@ Route::prefix('tenants/{tenant}')->group(function () {
     Route::get('/cashflow', [\App\Http\Controllers\Api\CashflowController::class, 'index']);
 });
 
-// Channel Routes
-Route::prefix('channels')->group(function () {
+// Channel Routes (internal service-to-service)
+Route::prefix('channels')->middleware(['api.key:internal', 'throttle:60,1'])->group(function () {
     Route::get('/telegram/{chatId}', [\App\Http\Controllers\Api\ChannelController::class, 'getTelegramChannel']);
     Route::get('/slack/{teamId}', [\App\Http\Controllers\Api\ChannelController::class, 'getSlackChannel']);
     Route::post('/', [\App\Http\Controllers\Api\ChannelController::class, 'store']);

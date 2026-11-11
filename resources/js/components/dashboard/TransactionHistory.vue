@@ -17,6 +17,7 @@ interface Transaction {
     type: string;
     amount: number;
     status: string;
+    balance_name?: string | null;
     category?: { name: string } | null;
 }
 
@@ -30,35 +31,6 @@ const recentTransactions = computed(() => {
     return props.transactions.slice(0, 5);
 });
 
-const defaultTransactions: Transaction[] = [
-    {
-        id: 101,
-        description: 'Kopi Kenangan Mantan',
-        transaction_date: new Date().toISOString(),
-        type: 'expense',
-        amount: 28000,
-        status: 'completed',
-        category: { name: 'Jajan' }
-    },
-    {
-        id: 102,
-        description: 'Honor Desain Icon Pack',
-        transaction_date: new Date().toISOString(),
-        type: 'income',
-        amount: 1500000,
-        status: 'completed',
-        category: { name: 'Freelance' }
-    },
-    {
-        id: 103,
-        description: 'Belanja Superindo',
-        transaction_date: new Date().toISOString(),
-        type: 'expense',
-        amount: 342500,
-        status: 'completed',
-        category: { name: 'Kebutuhan' }
-    }
-];
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -70,20 +42,10 @@ const formatCurrency = (amount: number) => {
 
 const formatDate = (date: string) => {
     if (!date) return '-';
-    // Using string parts instead of new Date().getDate() directly to avoid timezone shifts
-    // But since we want to show localized date, the simplest safe way is:
-    const d = new Date(date);
+    // YYYY-MM-DD diparse sebagai tanggal lokal agar tidak bergeser zona waktu
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00`) : new Date(date);
     if (isNaN(d.getTime())) return date;
-    
-    // Check if it's a simple YYYY-MM-DD string
-    if (date.length === 10 && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        const [y, m, day] = date.split('-').map(Number);
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-        return `${day.toString().padStart(2, '0')} ${months[m - 1]} ${y}`;
-    }
-
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    return `${d.getDate().toString().padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+    return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 const formatTime = (date: string) => {
@@ -222,12 +184,17 @@ const editTransaction = async (transaction: Transaction) => {
     <section class="flex flex-col gap-2 font-['Plus_Jakarta_Sans',sans-serif]">
         <div class="flex items-center justify-between">
             <span class="text-sm md:text-base font-bold text-[#1b1c19] dark:text-foreground">Catatan Teranyar</span>
-            <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground font-semibold">Update Live</span>
+            <span v-if="recentTransactions.length > 0" class="text-xs text-[#4d4634] dark:text-muted-foreground font-semibold">{{ recentTransactions.length }} transaksi terakhir</span>
         </div>
 
-        <div class="flex flex-col gap-2">
+        <!-- Empty state: jangan tampilkan transaksi contoh yang bukan milik pengguna -->
+        <div v-if="recentTransactions.length === 0" class="p-4 rounded-2xl bg-white dark:bg-card border border-dashed border-[#eae8e2] dark:border-border/60 text-center text-xs text-[#4d4634] dark:text-muted-foreground">
+            Belum ada transaksi. Catat lewat WhatsApp atau tombol + untuk mulai.
+        </div>
+
+        <div v-else class="flex flex-col gap-2">
             <div
-                v-for="transaction in (recentTransactions.length > 0 ? recentTransactions : defaultTransactions)"
+                v-for="transaction in recentTransactions"
                 :key="transaction.id"
                 class="p-3.5 rounded-2xl bg-white dark:bg-card border border-[#eae8e2] dark:border-border/60 flex items-center justify-between gap-3 active:bg-[#f5f3ee] dark:active:bg-muted transition-colors group"
             >
@@ -239,19 +206,20 @@ const editTransaction = async (transaction: Transaction) => {
                             'bg-[#ffc9d0] text-[#ad2c4f]': transaction.type === 'expense' || transaction.type === 'debit_internal'
                         }"
                     >
-                        <span class="material-symbols-outlined text-[20px]">
-                            {{ 
-                                transaction.type === 'income' ? 'payments' : 
-                                transaction.description.toLowerCase().includes('kopi') || transaction.description.toLowerCase().includes('cafe') ? 'local_cafe' : 
-                                transaction.description.toLowerCase().includes('belanja') || transaction.description.toLowerCase().includes('super') ? 'shopping_cart' : 
-                                'local_cafe' 
+                        <span class="material-symbols-outlined text-[20px]" aria-hidden="true">
+                            {{
+                                transaction.type === 'income' ? 'payments' :
+                                transaction.description.toLowerCase().includes('kopi') || transaction.description.toLowerCase().includes('cafe') ? 'local_cafe' :
+                                transaction.description.toLowerCase().includes('belanja') || transaction.description.toLowerCase().includes('super') ? 'shopping_cart' :
+                                'receipt_long'
                             }}
                         </span>
                     </div>
                     <div class="flex flex-col min-w-0">
                         <span class="text-xs md:text-sm font-bold text-[#1b1c19] dark:text-foreground truncate">{{ transaction.description }}</span>
-                        <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
-                            <span>{{ transaction.type === 'income' ? 'Bank Utama' : 'GoPay Ceria' }}</span> • <span>{{ formatDate(transaction.transaction_date) }}</span>
+                        <span class="text-xs text-[#4d4634] dark:text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                            <template v-if="transaction.balance_name"><span class="truncate">{{ transaction.balance_name }}</span> •</template>
+                            <span class="shrink-0">{{ formatDate(transaction.transaction_date) }}</span>
                         </span>
                     </div>
                 </div>
@@ -266,11 +234,11 @@ const editTransaction = async (transaction: Transaction) => {
                     >
                         {{ transaction.type === 'income' || transaction.type === 'kredit_internal' ? '+' : '-' }}{{ formatCurrency(transaction.amount) }}
                     </span>
-                    <span 
-                        class="text-[10px] block font-semibold"
+                    <span
+                        class="text-xs block font-semibold"
                         :class="transaction.type === 'income' ? 'text-[#006c4f] dark:text-emerald-400' : 'text-[#4d4634] dark:text-muted-foreground'"
                     >
-                        {{ transaction.category?.name || (transaction.type === 'income' ? 'Freelance' : 'Jajan') }}
+                        {{ transaction.category?.name || 'Tanpa kategori' }}
                     </span>
                 </div>
             </div>

@@ -27,6 +27,10 @@ const sidebarNavItems: NavItem[] = [
         title: 'Appearance',
         href: editAppearance(),
     },
+    {
+        title: 'Notifikasi',
+        href: '/settings/notifications',
+    },
 ];
 
 const currentPath = typeof window !== undefined ? window.location.pathname : '';

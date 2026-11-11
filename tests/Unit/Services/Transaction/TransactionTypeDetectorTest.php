@@ -79,3 +79,87 @@ it('classifies "hutang ke budi 100rb" as income or expense (hutang/piutang punya
     $result = $detector->detect('hutang ke budi 100rb');
     expect($result)->toBeIn(['income', 'expense']);
 });
+
+// ============================================================================
+// TASK 3: Toleransi typo pada keyword income
+// ============================================================================
+
+it('classifies "pemasukann cash 150000" as income despite typo', function () {
+    // Bug log chat: "pemasukann" (double n) lolos match persis → jatuh ke expense.
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('pemasukann cash 150000'))->toBe('income');
+});
+
+it('classifies "pendapataan freelance 500rb" as income despite typo', function () {
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('pendapataan freelance 500rb'))->toBe('income');
+});
+
+it('classifies typo income keyword di tengah kalimat sebagai income', function () {
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('hari ini pemasukann cash 150000'))->toBe('income');
+});
+
+it('classifies "masukan data 50000" tetap expense (preservation)', function () {
+    // "masukan" ≠ typo "pemasukan" — sudah terdaftar sebagai test preservation
+    // (jarak 2) sehingga tidak boleh ditangkap fuzzy.
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('masukan data 50000'))->toBe('expense');
+});
+
+it('typo satu huruf pada kata expense tidak berubah jadi income', function () {
+    // "belii" tidak boleh mendekati keyword income mana pun.
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('belii obat 50rb'))->toBe('expense');
+});
+
+// ============================================================================
+// TASK 4: Deklarasi eksplisit di awal pesan (prioritas tertinggi)
+// ============================================================================
+
+it('classifies "Pengeluaran mengganti motor ... 3jt" sebagai expense (bug log chat)', function () {
+    // Bug: user menulis "Pengeluaran" di depan tapi kata "tf" → income override menang.
+    $detector = app(TransactionTypeDetector::class);
+    $text = 'Pengeluaran mengganti motor hilang punya anggota LBH 3jt di tf ke rekening BNI 2051038804 an. abd rohim anggota LBH.';
+    expect($detector->detect($text))->toBe('expense');
+});
+
+it('classifies "Pemasukan bonus 500rb" sebagai income', function () {
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('Pemasukan bonus 500rb'))->toBe('income');
+});
+
+it('deklarasi "Pengeluaran" menang atas income keyword "transfer masuk"', function () {
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('Pengeluaran transfer masuk ke BCA 500rb'))->toBe('expense');
+});
+
+it('deklarasi "Pemasukan" menang atas expense pattern "beli"', function () {
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('Pemasukan beli pulsa 50rb'))->toBe('income');
+});
+
+it('pesan TANPA deklarasi di depan tetap pakai aturan lama', function () {
+    // "mengganti motor ..." tanpa kata "Pengeluaran" → default expense (tanpa income keyword).
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('mengganti motor hilang 3jt'))->toBe('expense');
+});
+
+// ============================================================================
+// Sumbangan/donasi: memberi = pengeluaran, menerima = pemasukan
+// ============================================================================
+
+it('classifies "Sumbangan pernikahan 12rb" sebagai expense (bug log chat)', function () {
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('Sumbangan pernikahan 12rb'))->toBe('expense');
+});
+
+it('classifies "Memberi sumbangan pernikahan 12rb" sebagai expense', function () {
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('Memberi sumbangan pernikahan 12rb'))->toBe('expense');
+});
+
+it('classifies "dapat sumbangan pernikahan 12rb" tetap income', function () {
+    $detector = app(TransactionTypeDetector::class);
+    expect($detector->detect('dapat sumbangan pernikahan 12rb'))->toBe('income');
+});

@@ -10,7 +10,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement("ALTER TABLE `subscriptions` MODIFY `plan` ENUM('free', 'starter', 'growth', 'pro', 'enterprise') NOT NULL DEFAULT 'starter'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE `subscriptions` MODIFY `plan` ENUM('free', 'starter', 'growth', 'pro', 'enterprise') NOT NULL DEFAULT 'starter'");
+        }
     }
 
     /**
@@ -18,6 +20,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement("ALTER TABLE `subscriptions` MODIFY `plan` ENUM('starter', 'growth', 'pro', 'enterprise') NOT NULL DEFAULT 'starter'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE `subscriptions` MODIFY `plan` ENUM('starter', 'growth', 'pro', 'enterprise') NOT NULL DEFAULT 'starter'");
+        }
     }
 };

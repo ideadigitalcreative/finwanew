@@ -47,6 +47,7 @@ const healthColor = computed(() => {
 
 const healthLabel = computed(() => {
     const rate = savingRate.value;
+    if (props.totalIncome <= 0 && props.totalExpense <= 0) return 'Belum ada data';
     if (rate >= 25) return 'Sangat Sehat';
     if (rate >= 10) return 'Cukup Sehat';
     if (rate >= 0)  return 'Perlu Perhatian';
@@ -68,8 +69,8 @@ const healthBadgeClass = computed(() => {
             <div class="flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-xl text-emerald-500">spa</span>
                 <div>
-                    <h3 class="text-sm md:text-base font-bold text-foreground">Kesehatan Finansial</h3>
-                    <p class="text-[10px] text-muted-foreground">{{ period || 'Bulan ini' }}</p>
+                    <h3 class="text-sm md:text-base font-bold text-foreground">Rasio Tabungan</h3>
+                    <p class="text-xs text-muted-foreground">Sisa pemasukan setelah pengeluaran • {{ period || 'Bulan ini' }}</p>
                 </div>
             </div>
             <span :class="['px-2.5 py-0.5 rounded-full text-xs font-bold', healthBadgeClass]">
@@ -102,9 +103,9 @@ const healthBadgeClass = computed(() => {
                 </svg>
                 <div class="absolute bottom-2 flex flex-col items-center">
                     <span class="text-2xl font-black" :class="healthColor.text">
-                        {{ clampedRate }}%
+                        {{ totalIncome > 0 ? `${savingRate}%` : '—' }}
                     </span>
-                    <span class="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Tabungan</span>
+                    <span class="text-xs text-muted-foreground uppercase font-bold tracking-wider">dari pemasukan</span>
                 </div>
             </div>
         </div>

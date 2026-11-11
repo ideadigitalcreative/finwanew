@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { dashboard } from '@/routes';
 import { toUrl } from '@/lib/utils';
+import { useElasticIndicator } from '@/composables/useElasticIndicator';
 
 interface MobileNavItem {
     title: string;
@@ -54,6 +55,15 @@ const isActive = (href: string) => {
     // Untuk yang lain, check starts with
     return currentUrl.value.startsWith(hrefUrl);
 };
+
+const {
+    container: navRef,
+    indicator: indicatorRef,
+    visible: indicatorVisible,
+} = useElasticIndicator({
+    orientation: 'horizontal',
+    persistKey: 'mobile-footer',
+});
 </script>
 
 <template>
@@ -63,13 +73,21 @@ const isActive = (href: string) => {
         class="fixed bottom-0 left-0 right-0 z-50 md:hidden font-['Plus_Jakarta_Sans',sans-serif]"
     >
         <div class="relative rounded-t-[24px] border-t border-x border-[#eae8e2] bg-white/95 backdrop-blur-sm dark:border-white/10 dark:bg-[#1b1c19]/95 overflow-hidden">
-            <nav class="bottom-nav flex items-center justify-around px-2">
+            <nav ref="navRef" class="bottom-nav flex items-center justify-around px-2">
+                <!-- Pil elastis yang meluncur ke menu aktif -->
+                <span
+                    ref="indicatorRef"
+                    class="nav-indicator"
+                    :class="indicatorVisible ? 'opacity-100' : 'opacity-0'"
+                    aria-hidden="true"
+                />
                 <Link
                     v-for="(item) in userMenuItems"
                     :key="toUrl(item.href)"
                     :href="item.href"
                     class="nav-item group"
                     :class="isActive(item.href) ? 'active' : ''"
+                    :data-elastic-active="isActive(item.href) ? 'true' : 'false'"
                     :id="`mobile-menu-${item.title.toLowerCase()}`"
                 >
                     <span
@@ -78,7 +96,7 @@ const isActive = (href: string) => {
                         {{ item.materialIcon }}
                     </span>
                     <Transition name="expand-label">
-                        <span v-if="isActive(item.href)" class="nav-label text-[11px] leading-none font-bold ml-1.5 whitespace-nowrap overflow-hidden">
+                        <span v-if="isActive(item.href)" class="nav-label text-xs leading-none font-bold ml-1.5 whitespace-nowrap overflow-hidden">
                             {{ item.subtitle }}
                         </span>
                     </Transition>
@@ -100,6 +118,30 @@ const isActive = (href: string) => {
     justify-content: space-around;
     gap: 4px;
     padding: 8px 12px 10px;
+    position: relative;
+}
+
+/* ── Pil indikator elastis ──
+   Posisi & lebarnya diatur useElasticIndicator lewat transform + width. */
+.nav-indicator {
+    position: absolute;
+    top: 8px;
+    bottom: 10px;
+    left: 0;
+    width: 0;
+    border-radius: 9999px;
+    background-image: linear-gradient(to bottom right, #59c323, #4da818, #3d9014);
+    box-shadow: 0 4px 14px rgba(77, 168, 24, 0.3);
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    will-change: transform, width;
+}
+
+/* Catatan: seluruh selector harus berada DI DALAM :global(...).
+   Pola `:global(.dark) .foo` membuat Vue membuang bagian `.foo`,
+   sehingga aturannya malah menempel ke <html class="dark">. */
+:global(.dark #mobile-footer .nav-indicator) {
+    box-shadow: 0 4px 14px rgba(77, 168, 24, 0.2);
 }
 
 /* ── Base nav item ── */
@@ -116,48 +158,44 @@ const isActive = (href: string) => {
     color: #4d4634;
     text-decoration: none;
     position: relative;
+    z-index: 1;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     overflow: hidden;
 }
 
-:global(.dark) .nav-item {
+:global(.dark #mobile-footer .nav-item) {
     color: #a29f90;
 }
 
 /* ── Hover (non-active) ── */
 .nav-item:not(.active):hover {
-    background-color: #fdf8e7;
-    color: #574500;
+    background-color: #eef8e7;
+    color: #3d9014;
 }
 
-:global(.dark) .nav-item:not(.active):hover {
-    background-color: rgba(255, 210, 63, 0.1);
-    color: #ffe089;
+:global(.dark #mobile-footer .nav-item:not(.active):hover) {
+    background-color: rgba(77, 168, 24, 0.15);
+    color: #8fd65f;
 }
 
 .nav-item:not(.active):active {
-    background-color: #fdf8e7;
+    background-color: #eef8e7;
     transform: scale(0.92);
 }
 
-:global(.dark) .nav-item:not(.active):active {
-    background-color: rgba(255, 210, 63, 0.08);
+:global(.dark #mobile-footer .nav-item:not(.active):active) {
+    background-color: rgba(77, 168, 24, 0.12);
 }
 
-/* ── Active state — tema kuning dashboard ── */
+/* ── Active state — latarnya dipegang .nav-indicator di belakang ── */
 .nav-item.active {
-    background-color: #ffd23f;
-    color: #574500;
+    color: #ffffff;
     padding: 8px 16px;
-    box-shadow: 0 4px 14px rgba(255, 210, 63, 0.25);
-    transform: scale(1.02);
 }
 
-:global(.dark) .nav-item.active {
-    background-color: #ffd23f;
-    color: #241a00;
-    box-shadow: 0 4px 14px rgba(255, 210, 63, 0.15);
+:global(.dark #mobile-footer .nav-item.active) {
+    color: #ffffff;
 }
 
 .nav-item .nav-icon {
@@ -166,21 +204,13 @@ const isActive = (href: string) => {
 }
 
 .nav-item.active .nav-icon {
-    color: #574500;
+    color: #ffffff;
     transform: scale(1.08);
 }
 
-:global(.dark) .nav-item.active .nav-icon {
-    color: #241a00;
-}
-
 .nav-item.active .nav-label {
-    color: #725a00;
+    color: #ffffff;
     font-weight: 800;
-}
-
-:global(.dark) .nav-item.active .nav-label {
-    color: #3d2f00;
 }
 
 /* ── Label smooth expand transition saat aktif ── */

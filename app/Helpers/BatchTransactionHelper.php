@@ -21,6 +21,10 @@ class BatchTransactionHelper
 
         $textLower = strtolower($text);
 
+        if (\App\Support\AmountParser::composite($text) !== null) {
+            return false;
+        }
+
         // INDICATORS THAT THIS IS A SINGLE RECEIPT (NOT A BATCH)
         // If it contains receipt keywords, it's likely a single transaction with multiple items
         $receiptKeywords = ['total', 'subtotal', 'tunai', 'kembali', 'change', 'grand total', 'pajak', 'tax', 'diskon', 'discount'];
@@ -59,6 +63,12 @@ class BatchTransactionHelper
             return true;
         }
 
+        // Satu baris berisi ≥2 nominal (mis. "Beli rokok 24000 sama jajan 6000")
+        // tetap batch, selama bukan struk (guard receipt di atas sudah jalan).
+        if ($hasMultipleAmounts && count($lines) < 2) {
+            return true;
+        }
+
         // For non-marked lists, we need at least 2 distinct lines that each contain a valid amount
         // AND the number of amounts found should roughly match the number of lines with amounts
         if (count($lines) >= 2 && $linesWithAmount >= 2 && $hasMultipleAmounts) {
@@ -80,6 +90,7 @@ class BatchTransactionHelper
     public static function extractAllAmounts(string $text): array
     {
         $amounts = [];
+        $text = \App\Support\AmountParser::normalize($text);
         $textLower = strtolower($text);
 
         // Pattern 0 (HIGHEST PRIORITY): Rp-prefixed amounts with dot separators
@@ -138,9 +149,30 @@ class BatchTransactionHelper
         }
 
         // Pattern 2b: Numbers with space-separated thousands (75 000, 1 500 000)
-        if (empty($amounts) && preg_match_all('/(\d{1,3}(?:\s+\d{3})+)/', $text, $matches)) {
+        // Guard boundary: jangan sampai "150000 27092026" match "000 270".
+        if (empty($amounts) && preg_match_all('/(?<!\d)(\d{1,3}(?:\s+\d{3})+)(?!\d)/', $text, $matches)) {
             foreach ($matches[1] as $match) {
                 $amounts[] = (int) str_replace(' ', '', $match);
+            }
+        }
+
+        // Pattern 2c: Angka polos tanpa suffix/pemisah (24000, 6000)
+        // Contoh nyata: "Beli rokok 24000 sama jajan 6000".
+        // Sebelumnya angka polos tidak dikenali sama sekali → batch tidak
+        // terdeteksi → hanya nominal TERAKIR yang tercatat.
+        // Guard: 4–9 digit, bukan diawali 0 (hindari nomor HP), dan bukan
+        // tanggal compact 8 digit (27092026) agar tidak ikut dijumlahkan.
+        if (empty($amounts) && preg_match_all('/\b(\d{4,9})\b/', $text, $matches)) {
+            foreach ($matches[1] as $match) {
+                if (str_starts_with($match, '0')) {
+                    continue;
+                }
+                // ddMMyyyy compact: hari 01–31, bulan 01–12, tahun 19xx/20xx
+                if (strlen($match) === 8
+                    && preg_match('/^(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(19|20)\d{2}$/', $match)) {
+                    continue;
+                }
+                $amounts[] = (int) $match;
             }
         }
 
@@ -154,6 +186,13 @@ class BatchTransactionHelper
      */
     public static function extractAmount(string $text): ?int
     {
+        $text = \App\Support\AmountParser::normalize($text);
+
+        // Satu transaksi dengan 2 angka ("100rb kembalian 20rb", "3jt 400rb")
+        if (($composite = \App\Support\AmountParser::composite($text)) !== null) {
+            return $composite;
+        }
+
         // Check if this is a batch transaction
         if (self::isBatchTransaction($text)) {
             $amounts = self::extractAllAmounts($text);
@@ -177,8 +216,18 @@ class BatchTransactionHelper
     /**
      * Extract single amount (original logic)
      */
+    /**
+     * Buang nomor HP/rekening agar tidak terbaca sebagai nominal
+     * ("pulsa 50000 ke 0812345678" → nominal 50.000, bukan 812.345.678).
+     */
+    public static function stripPhoneNumbers(string $text): string
+    {
+        return (string) preg_replace('/(?<![\d.,])(?:\+?62|0)8\d{7,12}(?![\d.,])/', ' ', $text);
+    }
+
     private static function extractSingleAmount(string $text): ?int
     {
+        $text = self::stripPhoneNumbers($text);
         $textLower = strtolower($text);
 
         // Pattern -1 (HIGHEST PRIORITY): Rp-prefixed amounts
@@ -203,6 +252,20 @@ class BatchTransactionHelper
         }
         if (preg_match('/rp\.?\s*(\d{1,3}(?:\s+\d{3})+)/i', $text, $rpMatch)) {
             return (int) str_replace(' ', '', $rpMatch[1]);
+        }
+
+        $suffixValues = [
+            'rb' => 1000, 'ribu' => 1000, 'rebu' => 1000, 'k' => 1000,
+            'jt' => 1000000, 'juta' => 1000000,
+        ];
+
+        // Pattern 0a: jumlah × harga satuan ("beli kursi 3x 1jt", "2 x 12.500", "3 kali 50rb")
+        // Operan kedua bersatuan / berformat ribuan → itulah harganya, operan pertama jumlahnya.
+        if (preg_match('/\b(\d{1,3})\s*(?:x|kali|\*)\s*(\d+(?:[.,]\d+)?)\s*(rb|ribu|rebu|k|jt|juta)\b/i', $textLower, $m)) {
+            return (int) round((int) $m[1] * floatval(str_replace(',', '.', $m[2])) * $suffixValues[strtolower($m[3])]);
+        }
+        if (preg_match('/\b(\d{1,3})\s*(?:x|kali|\*)\s*(\d{1,3}(?:\.\d{3})+)(?![\d,])/i', $textLower, $m)) {
+            return (int) $m[1] * (int) str_replace('.', '', $m[2]);
         }
 
         // Pattern 0: Multiplication patterns (33000 dikali 3, 50rb x 2)
@@ -251,9 +314,12 @@ class BatchTransactionHelper
             return (int) ($num * ($multipliers[$suffix] ?? 1));
         }
 
-        // Pattern 2: Plain number with dots (50.000)
+        // Pattern 2: Plain number with thousand separators (50.000, 250,000)
         if (preg_match('/(\d{1,3}(?:\.\d{3})+)/', $text, $matches)) {
             return (int) str_replace('.', '', $matches[1]);
+        }
+        if (preg_match('/(?<![\d.,])(\d{1,3}(?:,\d{3})+)(?![\d.,])/', $text, $matches)) {
+            return (int) str_replace(',', '', $matches[1]);
         }
 
         // Pattern 2b: Number with space-separated thousands (75 000, 1 500 000)

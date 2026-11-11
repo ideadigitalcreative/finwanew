@@ -8,6 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempoten: kolom belum tentu ada bila tabel dibuat di luar migrasi.
+        if (Schema::hasColumn('budgets', 'rollover_enabled')) {
+            return;
+        }
+
         Schema::table('budgets', function (Blueprint $table) {
             $table->boolean('rollover_enabled')->default(false)->after('alert_threshold');
             $table->decimal('rollover_amount', 15, 2)->default(0)->after('rollover_enabled');

@@ -229,11 +229,11 @@ const totalBalance = computed(() => {
             <!-- Header -->
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div class="flex-1">
-                    <h2 class="text-xl md:text-2xl font-bold text-[#1b1c19] flex items-center gap-2">
+                    <h2 class="text-xl md:text-2xl font-bold text-[#1b1c19] dark:text-white flex items-center gap-2">
                         <span class="material-symbols-outlined text-[#ffd23f] text-2xl md:text-3xl">account_balance_wallet</span>
                         Saldo Akun
                     </h2>
-                    <p class="text-xs md:text-sm text-[#4d4634]/60 mt-1">
+                    <p class="text-xs md:text-sm text-[#4d4634]/60 dark:text-white/60 mt-1">
                         Kelola saldo akun bank, cash, dan dompet digital Anda
                     </p>
                 </div>
@@ -285,8 +285,8 @@ const totalBalance = computed(() => {
                                 <span class="material-symbols-outlined text-2xl">{{ getAccountTypeIcon(balance.account_type) }}</span>
                             </div>
                             <div>
-                                <h3 class="font-bold text-[#1b1c19]">{{ balance.account_name }}</h3>
-                                <p class="text-xs text-[#4d4634]/60">{{ getAccountTypeLabel(balance.account_type) }}</p>
+                                <h3 class="font-bold text-[#1b1c19] dark:text-white">{{ balance.account_name }}</h3>
+                                <p class="text-xs text-[#4d4634]/60 dark:text-white/60">{{ getAccountTypeLabel(balance.account_type) }}</p>
                             </div>
                         </div>
                         <div v-if="balance.is_default" class="rounded-full bg-[#51fac1]/30 px-2.5 py-0.5 text-xs font-medium text-[#006c4f]">
@@ -295,18 +295,18 @@ const totalBalance = computed(() => {
                     </div>
                     
                     <div class="mb-4">
-                        <p class="text-2xl font-bold text-[#1b1c19]">{{ formatCurrency(balance.balance) }}</p>
-                        <p class="text-xs text-[#4d4634]/50 mt-1">
+                        <p class="text-2xl font-bold text-[#1b1c19] dark:text-white">{{ formatCurrency(balance.balance) }}</p>
+                        <p class="text-xs text-[#4d4634]/50 dark:text-white/50 mt-1">
                             {{ balance.account_number ? `No. ${balance.account_number} • ` : '' }} {{ balance.currency }}
                         </p>
                     </div>
 
-                    <div class="flex items-center justify-between border-t border-[#eae8e2] pt-4">
-                        <p class="text-xs text-[#4d4634]/50">Update: {{ formatDate(balance.balance_date) }}</p>
+                    <div class="flex items-center justify-between border-t border-[#eae8e2] dark:border-white/10 pt-4">
+                        <p class="text-xs text-[#4d4634]/50 dark:text-white/50">Update: {{ formatDate(balance.balance_date) }}</p>
                         <div class="flex gap-2">
                             <button 
                                 @click="openDialog(balance)"
-                                class="p-1.5 text-[#4d4634]/40 hover:text-[#725a00] hover:bg-[#f5f3ee] rounded-lg transition-colors"
+                                class="p-1.5 text-[#4d4634]/40 dark:text-white/40 hover:text-[#725a00] hover:bg-[#f5f3ee] rounded-lg transition-colors"
                                 title="Edit"
                             >
                                 <span class="material-symbols-outlined text-lg">edit</span>
@@ -314,14 +314,14 @@ const totalBalance = computed(() => {
                             <button 
                                 v-if="!balance.is_default"
                                 @click="setDefaultBalance(balance)"
-                                class="p-1.5 text-[#4d4634]/40 hover:text-[#725a00] hover:bg-[#f5f3ee] rounded-lg transition-colors"
+                                class="p-1.5 text-[#4d4634]/40 dark:text-white/40 hover:text-[#725a00] hover:bg-[#f5f3ee] rounded-lg transition-colors"
                                 title="Jadikan Utama"
                             >
                                 <span class="material-symbols-outlined text-lg">check</span>
                             </button>
                             <button 
                                 @click="deleteBalance(balance)"
-                                class="p-1.5 text-[#4d4634]/40 hover:text-[#ad2c4f] hover:bg-[#ffc9d0]/30 rounded-lg transition-colors"
+                                class="p-1.5 text-[#4d4634]/40 dark:text-white/40 hover:text-[#ad2c4f] hover:bg-[#ffc9d0]/30 rounded-lg transition-colors"
                                 title="Hapus"
                             >
                                 <span class="material-symbols-outlined text-lg">delete</span>
@@ -336,9 +336,9 @@ const totalBalance = computed(() => {
                     class="group flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee]/50 dark:bg-white/5 p-6 transition-all hover:border-[#ffd23f] hover:bg-[#ffd23f]/10 h-full min-h-[200px]"
                 >
                     <div class="mb-3 rounded-xl bg-white dark:bg-[#23231f] p-4 group-hover:scale-110 transition-transform border border-[#eae8e2] dark:border-white/10">
-                        <span class="material-symbols-outlined text-2xl text-[#4d4634]/40 group-hover:text-[#ffd23f] transition-colors">add</span>
+                        <span class="material-symbols-outlined text-2xl text-[#4d4634]/40 dark:text-white/40 group-hover:text-[#ffd23f] transition-colors">add</span>
                     </div>
-                    <p class="font-medium text-[#4d4634]/60 group-hover:text-[#725a00]">Tambah Akun Baru</p>
+                    <p class="font-medium text-[#4d4634]/60 dark:text-white/60 group-hover:text-[#725a00]">Tambah Akun Baru</p>
                 </button>
             </div>
 
@@ -369,7 +369,7 @@ const totalBalance = computed(() => {
                                 <button
                                     type="button"
                                     @click="deleteBalance(balance)"
-                                    class="rounded-lg p-1.5 text-[#4d4634]/40 hover:bg-[#ffc9d0]/30 hover:text-[#ad2c4f]"
+                                    class="rounded-lg p-1.5 text-[#4d4634]/40 dark:text-white/40 hover:bg-[#ffc9d0]/30 hover:text-[#ad2c4f]"
                                     title="Hapus permanen"
                                 >
                                     <span class="material-symbols-outlined text-lg">delete</span>
@@ -383,10 +383,10 @@ const totalBalance = computed(() => {
 
         <!-- Dialog Form -->
         <Dialog v-model:open="isDialogOpen">
-            <DialogContent class="!max-w-[95vw] sm:!max-w-[500px] !max-h-[90vh] overflow-y-auto rounded-2xl p-0 gap-0 overflow-hidden bg-white">
+            <DialogContent class="!max-w-[95vw] sm:!max-w-[500px] !max-h-[90vh] overflow-y-auto rounded-2xl p-0 gap-0 overflow-hidden bg-white dark:bg-[#23231f]">
                 <DialogHeader class="p-6 pb-0">
-                    <DialogTitle class="text-xl font-bold text-[#1b1c19]">{{ dialogTitle }}</DialogTitle>
-                    <DialogDescription class="text-sm text-[#4d4634]/60">
+                    <DialogTitle class="text-xl font-bold text-[#1b1c19] dark:text-white">{{ dialogTitle }}</DialogTitle>
+                    <DialogDescription class="text-sm text-[#4d4634]/60 dark:text-white/60">
                         {{ editingBalance ? 'Perbarui informasi saldo akun' : 'Tambahkan saldo akun baru' }}
                     </DialogDescription>
                 </DialogHeader>
@@ -394,13 +394,13 @@ const totalBalance = computed(() => {
                 <div class="p-6">
                     <form @submit.prevent="submitForm" class="space-y-4">
                         <div class="space-y-2">
-                            <Label for="account_name" class="text-sm font-medium text-[#4d4634]">Nama Akun *</Label>
+                            <Label for="account_name" class="text-sm font-medium text-[#4d4634] dark:text-white/70">Nama Akun *</Label>
                             <Input
                                 id="account_name"
                                 v-model="form.account_name"
                                 placeholder="Contoh: Bank BCA, Cash, GoPay"
                                 required
-                                class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
+                                class="rounded-xl border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee] dark:bg-white/5 focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                             />
                             <p v-if="form.errors.account_name" class="text-xs text-[#ad2c4f]">
                                 {{ form.errors.account_name }}
@@ -408,12 +408,12 @@ const totalBalance = computed(() => {
                         </div>
 
                         <div class="space-y-2">
-                            <Label for="account_number" class="text-sm font-medium text-[#4d4634]">Nomor Akun</Label>
+                            <Label for="account_number" class="text-sm font-medium text-[#4d4634] dark:text-white/70">Nomor Akun</Label>
                             <Input
                                 id="account_number"
                                 v-model="form.account_number"
                                 placeholder="Opsional: Nomor rekening"
-                                class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
+                                class="rounded-xl border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee] dark:bg-white/5 focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                             />
                             <p v-if="form.errors.account_number" class="text-xs text-[#ad2c4f]">
                                 {{ form.errors.account_number }}
@@ -421,11 +421,11 @@ const totalBalance = computed(() => {
                         </div>
 
                         <div class="space-y-2">
-                            <Label for="account_type" class="text-sm font-medium text-[#4d4634]">Tipe Akun *</Label>
+                            <Label for="account_type" class="text-sm font-medium text-[#4d4634] dark:text-white/70">Tipe Akun *</Label>
                             <select
                                 id="account_type"
                                 v-model="form.account_type"
-                                class="w-full rounded-xl border-[#eae8e2] bg-[#f5f3ee] px-3 py-2 text-sm focus:border-[#ffd23f] focus:ring-[#ffd23f] text-[#1b1c19]"
+                                class="w-full rounded-xl border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee] dark:bg-white/5 px-3 py-2 text-sm focus:border-[#ffd23f] focus:ring-[#ffd23f] text-[#1b1c19] dark:text-white"
                                 required
                             >
                                 <option value="bank">Bank</option>
@@ -441,13 +441,13 @@ const totalBalance = computed(() => {
 
                         <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-2">
-                                <Label for="currency" class="text-sm font-medium text-[#4d4634]">Mata Uang</Label>
+                                <Label for="currency" class="text-sm font-medium text-[#4d4634] dark:text-white/70">Mata Uang</Label>
                                 <Input
                                     id="currency"
                                     v-model="form.currency"
                                     placeholder="IDR"
                                     maxlength="3"
-                                    class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
+                                    class="rounded-xl border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee] dark:bg-white/5 focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                                 />
                                 <p v-if="form.errors.currency" class="text-xs text-[#ad2c4f]">
                                     {{ form.errors.currency }}
@@ -455,7 +455,7 @@ const totalBalance = computed(() => {
                             </div>
 
                             <div class="space-y-2">
-                                <Label for="balance" class="text-sm font-medium text-[#4d4634]">Saldo *</Label>
+                                <Label for="balance" class="text-sm font-medium text-[#4d4634] dark:text-white/70">Saldo *</Label>
                                 <Input
                                     id="balance"
                                     v-model.number="form.balance"
@@ -464,7 +464,7 @@ const totalBalance = computed(() => {
                                     min="0"
                                     placeholder="0"
                                     required
-                                    class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
+                                    class="rounded-xl border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee] dark:bg-white/5 focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                                 />
                                 <p v-if="form.errors.balance" class="text-xs text-[#ad2c4f]">
                                     {{ form.errors.balance }}
@@ -473,31 +473,31 @@ const totalBalance = computed(() => {
                         </div>
 
                         <div class="space-y-2">
-                            <Label for="balance_date" class="text-sm font-medium text-[#4d4634]">Tanggal Update *</Label>
+                            <Label for="balance_date" class="text-sm font-medium text-[#4d4634] dark:text-white/70">Tanggal Update *</Label>
                             <Input
                                 id="balance_date"
                                 v-model="form.balance_date"
                                 type="date"
                                 required
-                                class="rounded-xl border-[#eae8e2] bg-[#f5f3ee] focus:ring-[#ffd23f] focus:border-[#ffd23f]"
+                                class="rounded-xl border-[#eae8e2] dark:border-white/10 bg-[#f5f3ee] dark:bg-white/5 focus:ring-[#ffd23f] focus:border-[#ffd23f]"
                             />
                             <p v-if="form.errors.balance_date" class="text-xs text-[#ad2c4f]">
                                 {{ form.errors.balance_date }}
                             </p>
                         </div>
 
-                        <div class="flex items-center space-x-2 rounded-xl bg-[#f5f3ee] p-3">
+                        <div class="flex items-center space-x-2 rounded-xl bg-[#f5f3ee] dark:bg-white/5 p-3">
                             <input
                                 id="is_default"
                                 v-model="form.is_default"
                                 type="checkbox"
-                                class="h-4 w-4 rounded border-[#eae8e2] text-[#ffd23f] focus:ring-[#ffd23f]"
+                                class="h-4 w-4 rounded border-[#eae8e2] dark:border-white/10 text-[#ffd23f] focus:ring-[#ffd23f]"
                             />
                             <div class="flex flex-col">
-                                <Label for="is_default" class="text-sm font-medium text-[#1b1c19] cursor-pointer">
+                                <Label for="is_default" class="text-sm font-medium text-[#1b1c19] dark:text-white cursor-pointer">
                                     Jadikan Dompet Utama
                                 </Label>
-                                <span class="text-xs text-[#4d4634]/60">Digunakan untuk transaksi tanpa akun spesifik</span>
+                                <span class="text-xs text-[#4d4634]/60 dark:text-white/60">Digunakan untuk transaksi tanpa akun spesifik</span>
                             </div>
                         </div>
 
@@ -505,7 +505,7 @@ const totalBalance = computed(() => {
                             <button
                                 type="button"
                                 @click="closeDialog"
-                                class="w-full rounded-xl border border-[#eae8e2] bg-white px-4 py-2.5 text-sm font-semibold text-[#4d4634] shadow-sm hover:bg-[#f5f3ee] sm:order-1"
+                                class="w-full rounded-xl border border-[#eae8e2] dark:border-white/10 bg-white dark:bg-[#23231f] px-4 py-2.5 text-sm font-semibold text-[#4d4634] dark:text-white/70 shadow-sm hover:bg-[#f5f3ee] sm:order-1"
                             >
                                 Batal
                             </button>

@@ -181,7 +181,7 @@ function getCategoryIcon(type: string) {
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-1.5">
                 <span class="text-sm md:text-base font-bold text-foreground">Porsi Pengeluaran</span>
-                <span class="text-[11px] text-muted-foreground">({{ period }})</span>
+                <span class="text-xs text-muted-foreground">({{ period }})</span>
             </div>
             <Link
                 href="/budgets"
@@ -200,7 +200,7 @@ function getCategoryIcon(type: string) {
                 </div>
                 <div>
                     <p class="text-xs font-semibold text-foreground">Belum ada anggaran</p>
-                    <p class="text-[10px] text-muted-foreground mt-0.5">Buat batas pos belanja untuk mengontrol keuangan</p>
+                    <p class="text-xs text-muted-foreground mt-0.5">Buat batas pos belanja untuk mengontrol keuangan</p>
                 </div>
                 <Link
                     href="/budgets"
@@ -249,7 +249,7 @@ function getCategoryIcon(type: string) {
                     </div>
                     <div class="flex items-baseline gap-2 flex-shrink-0">
                         <span class="text-xs font-bold text-foreground">{{ formatCurrency(item.spending) }}</span>
-                        <span class="text-[10px] text-muted-foreground w-8 text-right">{{ Math.round(item.usage_percent) }}%</span>
+                        <span class="text-xs text-muted-foreground w-8 text-right">{{ Math.round(item.usage_percent) }}%</span>
                     </div>
                 </div>
 

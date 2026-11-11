@@ -434,16 +434,14 @@ class RegistrationFlowService
                     $cleanName = preg_replace('/[[:^print:]]/', '', $cleanName);
                     $cleanName = trim($cleanName);
 
-                    /*
                     if (mb_strlen($cleanName) < 3) {
                         $whatsappService->sendMessage(
                             $sessId, $this->message->sender_id,
-                            "Nama terlalu pendek. Silakan kirim nama lengkap Anda:",
+                            "Nama terlalu pendek. Silakan kirim *nama lengkap* Anda (contoh: Budi Santoso):",
                             'text', $originalLid
                         );
                         return true;
                     }
-                    */
 
                     RegHelper::saveData($senderNumber, ['name' => $cleanName]);
                     RegHelper::setStep($senderNumber, 'awaiting_email');
@@ -608,16 +606,14 @@ class RegistrationFlowService
                     $cleanName = preg_replace('/[[:^print:]]/', '', $cleanName);
                     $cleanName = trim($cleanName);
 
-                    /*
                     if (mb_strlen($cleanName) < 3) {
                         $whatsappService->sendMessage(
                             $sessId, $this->message->sender_id,
-                            "Nama terlalu pendek. Silakan kirim nama lengkap Anda:",
+                            "Nama terlalu pendek. Silakan kirim *nama lengkap* Anda (contoh: Budi Santoso):",
                             'text'
                         );
                         return true;
                     }
-                    */
 
                     RegHelper::saveData($senderNumber, ['name' => $cleanName]);
                     RegHelper::setStep($senderNumber, 'awaiting_email');

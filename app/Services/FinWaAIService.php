@@ -69,9 +69,15 @@ class FinWaAIService
     public function processText(string $message, ?string $userId = null, ?string $conversationContext = null): array
     {
         try {
+            // Privasi: nomor WA bisa di-hash sebelum dikirim ke server AI eksternal
+            // (konsisten per user → konteks server tetap jalan). Default OFF sampai
+            // dipastikan server FinWa-AI menerima user_id non-nomor.
+            if ($userId !== null && config('services.finwa_ai.hash_user_id', false)) {
+                $userId = 'u_'.substr(hash_hmac('sha256', $userId, (string) config('app.key')), 0, 32);
+            }
+
             Log::info('FinWa-AI processing text', [
-                'message_preview' => mb_substr($message, 0, 100),
-                'user_id' => $userId,
+                'message_len' => mb_strlen($message),
                 'has_context' => ! empty($conversationContext),
             ]);
 
@@ -234,13 +240,12 @@ class FinWaAIService
         $result = $this->processText($messageText, $userId, $conversationContext);
 
         if (! $result['success']) {
-            // Fallback to unknown
+            // Laporkan GAGAL apa adanya. Dulu dibalas success=true + intent 'transaction',
+            // sehingga fallback AIProcessorService (aturan lokal) tidak pernah jalan dan
+            // pesan bukan-transaksi diperlakukan sebagai transaksi saat server AI down.
             return [
-                'success' => true,
-                'data' => [
-                    'intent' => 'transaction', // Default fallback
-                    'confidence' => 0.5,
-                ],
+                'success' => false,
+                'error' => $result['error'] ?? 'FinWa-AI unavailable',
             ];
         }
 

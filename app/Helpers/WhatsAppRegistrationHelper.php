@@ -72,8 +72,17 @@ class WhatsAppRegistrationHelper
     public static function saveData(string $phoneNumber, array $data): void
     {
         $existing = self::getRegistrationData($phoneNumber);
-        $merged = array_merge($existing, $data);
-        Cache::put("wa_reg_data:{$phoneNumber}", $merged, now()->addHours(24));
+
+        foreach ($data as $key => $value) {
+            $existing[$key] = $value;
+        }
+
+        // Prevent overwriting a valid name with an empty string.
+        if (isset($data['name']) && trim((string) $data['name']) === '') {
+            unset($existing['name']);
+        }
+
+        Cache::put("wa_reg_data:{$phoneNumber}", $existing, now()->addHours(24));
     }
 
     /**
@@ -373,11 +382,42 @@ class WhatsAppRegistrationHelper
     }
 
     /**
+     * Get message for a number that is already registered
+     */
+    public static function getAlreadyRegisteredMessage(User $user, bool $subscriptionInactive = false): string
+    {
+        $name = trim((string) $user->name) !== '' ? trim((string) $user->name) : 'Kak';
+
+        $message = "👋 Halo, *{$name}*!\n\n"
+            ."✅ Nomor WhatsApp ini *sudah terdaftar* di FinWa, jadi Anda tidak perlu daftar lagi.\n\n";
+
+        if ($subscriptionInactive) {
+            return $message
+                ."⚠️ Namun langganan Anda sedang *tidak aktif*.\n\n"
+                .'🔓 Perpanjang di: '.config('app.url')."/subscriptions\n"
+                .'📞 Bantuan Admin: 6285242766676';
+        }
+
+        return $message
+            ."📧 Email akun: *{$user->email}*\n"
+            ."🌐 Login: https://finwa.web.id/login\n\n"
+            ."Langsung saja catat transaksi, contoh:\n"
+            ."• _beli makan 25rb_\n"
+            ."• _terima gaji 5jt_\n\n"
+            .'💡 Ketik *help* untuk panduan lengkap';
+    }
+
+    /**
      * Get ask email message
      */
     public static function getAskEmailMessage(string $name): string
     {
-        return "Terima kasih, *{$name}*! 👍\n\n"
+        $safeName = trim($name);
+        if ($safeName === '') {
+            $safeName = 'teman-teman';
+        }
+
+        return "Terima kasih, *{$safeName}*! 👍\n\n"
             .'Sekarang silakan kirim *alamat email* Anda:';
     }
 

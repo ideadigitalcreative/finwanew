@@ -20,6 +20,22 @@ Schedule::command('security:monitor --alert')->everyFiveMinutes();
 // Schedule security cleanup daily at 02:00
 Schedule::command('security:monitor --clean')->daily()->at('02:00');
 
+// Fase 4 reply-edit — cleanup pemetaan & audit lewat retensi (hanya bila fitur aktif)
+if (config('finwa_reply_edit.enabled', false)) {
+    Schedule::command('reply-edit:cleanup')->daily()->at('02:30');
+}
+
+// =====================================================================
+// Pengingat yang DIMINTA user (bukan blast) — FINWA_USER_REMINDERS_ENABLED (default true)
+//   - finwa:send-reminders : pengingat buatan user ("ingatkan bayar listrik tgl 15")
+//   - reminder:daily       : pengingat harian, saat blast OFF hanya untuk akun yang
+//                            mengetik "aktifkan reminder" (opt-in)
+// =====================================================================
+if (config('services.user_reminders.enabled', true)) {
+    Schedule::command('finwa:send-reminders')->everyMinute();
+    Schedule::command('reminder:daily')->everyThreeMinutes();
+}
+
 // =====================================================================
 // Reminder blasts — hanya jalan kalau FINWA_REMINDER_BLASTS_ENABLED=true
 // Tujuannya: kurangi traffic keluar dari nomor bot (risiko restrict WA).
@@ -29,12 +45,6 @@ if (config('services.reminder_blasts.enabled', false)) {
     if (config('services.weekly_digest.enabled', false)) {
         Schedule::command('digest:weekly')->weekly()->sundays()->at('20:00');
     }
-
-    // Schedule daily reminder every 3 minutes (processes batches of 30 users)
-    Schedule::command('reminder:daily')->everyThreeMinutes();
-
-    // Schedule custom user reminders every minute
-    Schedule::command('finwa:send-reminders')->everyMinute();
 
     // Schedule daily budget health check at 19:00 WIB (12:00 UTC)
     Schedule::command('budget:daily-health-check')->daily()->at('19:00');

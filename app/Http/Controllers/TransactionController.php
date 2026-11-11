@@ -8,10 +8,12 @@ use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Services\Category\CategoryCorrectionService;
 use App\Services\GeminiAIService;
+use App\Services\Ledger\TransactionLedger;
 use App\Services\SubscriptionLimitService;
 use App\Services\Transaction\TransactionParserService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -28,7 +30,7 @@ class TransactionController extends Controller
 
         $query = Transaction::where('tenant_id', $tenant->id)
             ->with(['category', 'message', 'whatsappNumber'])
-            ->orderByRaw('COALESCE(created_at, updated_at, NOW()) DESC')  // Handle NULL created_at
+            ->orderByRaw('COALESCE(created_at, updated_at, CURRENT_TIMESTAMP) DESC')  // Handle NULL created_at
             ->orderBy('id', 'desc');  // Secondary sort by ID to ensure consistent ordering
 
         // Filters
@@ -36,12 +38,17 @@ class TransactionController extends Controller
             $query->where('type', $request->type);
         }
 
-        // Filter berdasarkan nomor WhatsApp pengirim (anggota keluarga)
+        // LID = alias WhatsApp untuk nomor yang sama → digabung ke nomor aslinya
+        $canonicalNumberIds = \App\Models\UserWhatsAppNumber::canonicalIdMap($tenant->id);
+
+        // Filter berdasarkan nomor WhatsApp pengirim (anggota keluarga), termasuk LID-nya
         if ($request->filled('number_id')) {
             if ($request->number_id === 'none') {
                 $query->whereNull('user_whatsapp_number_id');
             } else {
-                $query->where('user_whatsapp_number_id', (int) $request->number_id);
+                $numberId = (int) $request->number_id;
+                $ids = array_keys(array_filter($canonicalNumberIds, fn ($c) => $c === $numberId));
+                $query->whereIn('user_whatsapp_number_id', $ids ?: [$numberId]);
             }
         }
 
@@ -90,13 +97,25 @@ class TransactionController extends Controller
             ->orderBy('name')
             ->get();
 
-        // Daftar nomor WhatsApp anggota untuk filter "Oleh"
+        // Daftar nomor WhatsApp anggota untuk filter "Oleh" — tanpa alias LID (sama seperti
+        // halaman WhatsApp); transaksi dari LID ikut terfilter lewat nomor aslinya.
         $whatsappNumbers = \App\Models\UserWhatsAppNumber::where('tenant_id', $tenant->id)
             ->where('is_active', true)
-            ->where('is_lid', false)
             ->orderBy('is_primary', 'desc')
             ->orderBy('id')
-            ->get(['id', 'whatsapp_number', 'name', 'is_primary', 'is_lid']);
+            ->get(['id', 'whatsapp_number', 'name', 'is_primary', 'is_lid'])
+            ->filter(fn ($n) => ($canonicalNumberIds[$n->id] ?? $n->id) === $n->id)
+            ->values();
+
+        // Label "oleh" pada transaksi dari LID → tampilkan nomor aslinya
+        $parentNumbers = \App\Models\UserWhatsAppNumber::whereIn('id', array_unique(array_values($canonicalNumberIds)))->get()->keyBy('id');
+        $transactions->getCollection()->each(function ($tx) use ($canonicalNumberIds, $parentNumbers) {
+            $ownId = (int) $tx->user_whatsapp_number_id;
+            $parentId = $canonicalNumberIds[$ownId] ?? null;
+            if ($parentId && $parentId !== $ownId && $parentNumbers->has($parentId)) {
+                $tx->setRelation('whatsappNumber', $parentNumbers->get($parentId));
+            }
+        });
 
         $limitService = app(\App\Services\SubscriptionLimitService::class);
         $txLimit = $limitService->canCreateTransaction($tenant->id);
@@ -147,21 +166,12 @@ class TransactionController extends Controller
             'status' => 'required|in:confirmed,rejected',
         ]);
 
-        $oldStatus = $transaction->status;
-
-        $transaction->update([
+        // Status + saldo (confirmed ⇄ rejected) dalam satu DB transaction
+        app(TransactionLedger::class)->update($transaction, [
             'status' => $request->status,
             'reviewed_by' => $user->id,
             'reviewed_at' => now(),
-        ]);
-
-        // Sync Balance
-        $balanceService = app(\App\Services\BalanceService::class);
-        if ($oldStatus !== 'confirmed' && $transaction->status === 'confirmed') {
-            $balanceService->updateBalanceFromTransaction($transaction);
-        } elseif ($oldStatus === 'confirmed' && $transaction->status !== 'confirmed') {
-            $balanceService->reverseBalanceUpdate($transaction);
-        }
+        ], ['via' => 'dashboard', 'user_id' => $user->id]);
 
         return redirect()->back()->with('success', 'Status transaksi berhasil diperbarui');
     }
@@ -238,24 +248,12 @@ class TransactionController extends Controller
         unset($validated['attachment']);
         unset($validated['delete_attachment']);
 
-        $transaction->update(array_merge($validated, ['metadata' => $metadata]));
-
-        // Sync Balance
-        $balanceService = app(\App\Services\BalanceService::class);
-
-        // If it was confirmed, reverse the old impact
-        if ($oldStatus === 'confirmed' && $oldBalanceId) {
-            $oldTx = clone $transaction;
-            $oldTx->balance_id = $oldBalanceId;
-            $oldTx->type = $oldType;
-            $oldTx->amount = $oldAmount;
-            $balanceService->reverseBalanceUpdate($oldTx);
-        }
-
-        // If it is now confirmed, apply the new impact
-        if ($transaction->status === 'confirmed' && $transaction->balance_id) {
-            $balanceService->updateBalanceFromTransaction($transaction);
-        }
+        // Ubah + koreksi saldo (nominal/jenis/status) — pasangan transfer ikut
+        app(TransactionLedger::class)->update(
+            $transaction,
+            array_merge($validated, ['metadata' => $metadata]),
+            ['via' => 'dashboard', 'user_id' => $request->user()?->id]
+        );
 
         // ── Feedback Loop: Record category correction ──
         if ($oldCategoryId !== $transaction->category_id) {
@@ -290,12 +288,12 @@ class TransactionController extends Controller
             abort(403);
         }
 
-        // Sync Balance before deletion
-        if ($transaction->status === 'confirmed' && $transaction->balance_id) {
-            app(\App\Services\BalanceService::class)->reverseBalanceUpdate($transaction);
+        // Soft delete + kembalikan saldo (pasangan transfer ikut)
+        try {
+            app(TransactionLedger::class)->delete($transaction, ['via' => 'dashboard', 'user_id' => $request->user()?->id]);
+        } catch (\DomainException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
         }
-
-        $transaction->delete();
 
         return redirect()->back()->with('success', 'Transaksi berhasil dihapus');
     }
@@ -461,8 +459,9 @@ class TransactionController extends Controller
             'type' => 'required|in:income,expense',
             'amount' => 'required|numeric|min:100',
             'description' => 'required|string|max:255',
-            'category_id' => 'nullable|integer|exists:categories,id',
-            'balance_id' => 'nullable|integer|exists:balances,id',
+            // Hanya kategori & dompet milik tenant ini (cegah menulis ke data tenant lain)
+            'category_id' => ['nullable', 'integer', Rule::exists('categories', 'id')->where('tenant_id', $tenantId)],
+            'balance_id' => ['nullable', 'integer', Rule::exists('balances', 'id')->where('tenant_id', $tenantId)],
             'transaction_date' => 'nullable|date',
             // Fitur "tunggu review" dihilangkan — transaksi baru selalu confirmed
             'status' => 'nullable|in:confirmed',
@@ -482,16 +481,13 @@ class TransactionController extends Controller
         }
 
         try {
-            DB::beginTransaction();
-
             $balanceId = $validated['balance_id'] ?? Balance::where('tenant_id', $tenantId)
                 ->where('is_active', true)
                 ->orderBy('id')
                 ->value('id');
 
-            $transaction = Transaction::create([
+            $transaction = app(TransactionLedger::class)->record([
                 'tenant_id' => $tenantId,
-                'user_id' => $user->id,
                 'type' => $validated['type'],
                 'amount' => $validated['amount'],
                 'description' => $validated['description'],
@@ -500,20 +496,10 @@ class TransactionController extends Controller
                 'transaction_date' => $validated['transaction_date'] ?? Carbon::now('Asia/Jakarta')->toDateString(),
                 'status' => $validated['status'] ?? 'confirmed',
                 'source' => $validated['source'] ?? 'dashboard',
-            ]);
+            ], ['via' => 'dashboard', 'user_id' => $user->id]);
 
-            if ($transaction->status === 'confirmed' && $balanceId) {
-                $balance = Balance::find($balanceId);
-                if ($balance) {
-                    if ($transaction->type === 'income') {
-                        $balance->increment('balance', $transaction->amount);
-                    } else {
-                        $balance->decrement('balance', $transaction->amount);
-                    }
-                }
-            }
-
-            DB::commit();
+            // Dispatch event notifikasi ke anggota grup (dashboard: user diketahui)
+            event(new \App\Events\TransactionCreated($transaction, $user));
 
             return response()->json([
                 'message' => 'Transaksi berhasil disimpan',
@@ -521,8 +507,6 @@ class TransactionController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
-            DB::rollBack();
-
             return response()->json(['message' => 'Gagal menyimpan transaksi', 'error' => $e->getMessage()], 500);
         }
     }

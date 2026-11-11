@@ -23,11 +23,12 @@ class SendDailyReminder extends Command
 
     public function handle(): int
     {
-        // Guard: reminder blast dimatikan via FINWA_REMINDER_BLASTS_ENABLED=false
-        // untuk mengurangi risiko restrict nomor bot WhatsApp.
-        // Subscription reminder (H-2/H-1 paket Pro) TETAP aktif.
-        if (! config('services.reminder_blasts.enabled', false)) {
-            $this->info('Reminder blasts dinonaktifkan (FINWA_REMINDER_BLASTS_ENABLED=false). Lewati.');
+        // Blast ON  → semua akun kecuali yang mengetik "matikan reminder" (perilaku lama).
+        // Blast OFF → HANYA akun yang mengetik "aktifkan reminder" (opt-in), supaya
+        //             tidak ada pesan massal ke user yang tidak memintanya.
+        $blastMode = (bool) config('services.reminder_blasts.enabled', false);
+        if (! $blastMode && ! config('services.user_reminders.enabled', true)) {
+            $this->info('Pengingat harian dinonaktifkan. Lewati.');
 
             return Command::SUCCESS;
         }
@@ -76,7 +77,9 @@ class SendDailyReminder extends Command
                 $reminderHour = $settings['reminder_hour'] ?? self::DEFAULT_REMINDER_HOUR;
 
                 // CRITICAL: Check if user has disabled daily reminder
-                $reminderEnabled = $settings['daily_reminder_enabled'] ?? true; // Default true for backward compatibility
+                $reminderEnabled = $blastMode
+                    ? ($settings['daily_reminder_enabled'] ?? true)       // perilaku lama: default aktif
+                    : (($settings['daily_reminder_enabled'] ?? null) === true); // opt-in eksplisit
 
                 if (! $reminderEnabled) {
                     $skipped++;

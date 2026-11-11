@@ -18,7 +18,8 @@ withDefaults(defineProps<Props>(), {
 <template>
     <AppShell variant="sidebar">
         <AppSidebar />
-        <AppContent variant="sidebar" class="overflow-x-hidden pb-20 md:pb-0">
+        <!-- md:!mt-0 & md:!rounded-t-none: header hijau menempel ke tepi atas layar (tanpa strip putih di atasnya) -->
+        <AppContent variant="sidebar" class="overflow-x-hidden pb-20 md:pb-0 md:!mt-0 md:!rounded-t-none">
             <AppSidebarHeader :breadcrumbs="breadcrumbs" />
             <slot />
         </AppContent>

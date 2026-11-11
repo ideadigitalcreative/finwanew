@@ -11,9 +11,21 @@ class MessageReplyService
 {
     protected Message $message;
 
+    /** Pesan grup: kirim semua balasan berikutnya ke chat pribadi anggota */
+    protected bool $forcePrivate = false;
+
     public function __construct(Message $message)
     {
         $this->message = $message;
+    }
+
+    /**
+     * Pesan grup berisi permintaan info sensitif (saldo, ringkasan …):
+     * balasan selanjutnya dialihkan ke chat pribadi anggota pengirim.
+     */
+    public function forcePrivate(): void
+    {
+        $this->forcePrivate = true;
     }
 
     /**
@@ -21,6 +33,18 @@ class MessageReplyService
      */
     public function sendReply(string $text, ?string $replyToMessageId = null): void
     {
+        $meta = is_array($this->message->metadata)
+            ? $this->message->metadata
+            : json_decode($this->message->metadata ?? '{}', true);
+        if (! empty($meta['group_jid'])) {
+            if ($this->forcePrivate) {
+                $this->sendPrivateReply($text);
+
+                return;
+            }
+            $text = $this->sanitizeForGroup($text, $meta['author_name'] ?? null);
+        }
+
         try {
             $channel = Channel::find($this->message->channel_id);
 
@@ -50,11 +74,28 @@ class MessageReplyService
                 ? $this->message->metadata
                 : json_decode($this->message->metadata ?? '{}', true);
             $originalLid = $metadata['original_sender_id'] ?? null;
+            // Pesan dari GRUP → balas ke grupnya (…@g.us), bukan ke anggota/LID
+            if (! empty($metadata['group_jid'])) {
+                $recipient = (string) $metadata['group_jid'];
+                $originalLid = null;
+            }
             $replyToMessageId = $replyToMessageId ?? $this->message->message_id;
 
             // Send via WhatsApp service (simulateTyping default true sudah cukup untuk auto-reply interaktif)
             $whatsappService = app(WhatsAppService::class);
-            $whatsappService->sendMessage($sessionId, $recipient, $text, 'text', $originalLid, true, null, $replyToMessageId);
+            $sendResult = $whatsappService->sendMessage($sessionId, $recipient, $text, 'text', $originalLid, true, null, $replyToMessageId);
+
+            // Fase 1 reply-edit: simpan messageId pesan keluar sementara.
+            // Konfirmasi transaksi (yang menyusul tidak lama setelah ini) akan
+            // memakai id ini untuk membuat pemetaan wa_message_id → transaction_id.
+            $outgoingWaMessageId = $sendResult['data']['messageId'] ?? null;
+            if ($outgoingWaMessageId) {
+                Cache::put(
+                    "wa_out_msgid:{$this->message->message_id}",
+                    $outgoingWaMessageId,
+                    now()->addSeconds(60)
+                );
+            }
 
             // Mark that a reply was sent to this sender (used to suppress
             // duplicate empty-body LID notifications in ProcessIncomingMessage)
@@ -67,6 +108,63 @@ class MessageReplyService
                 'message_id' => $this->message->id,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Jaring pengaman balasan di GRUP: buang baris saldo (privasi — dibaca semua
+     * anggota) & tandai siapa pencatatnya.
+     */
+    public function sanitizeForGroup(string $text, ?string $authorName): string
+    {
+        $lines = preg_split('/\R/u', $text) ?: [$text];
+        $kept = array_values(array_filter($lines, fn ($l) => ! preg_match('/\bsaldo\b/iu', $l)));
+        // Buang garis pemisah / baris kosong yang tertinggal di akhir
+        while ($kept !== [] && preg_match('/^[\s━─\-=_]*$/u', end($kept))) {
+            array_pop($kept);
+        }
+        $clean = trim(preg_replace("/\n{3,}/", "\n\n", implode("\n", $kept)) ?? '');
+        if ($clean === '') {
+            $clean = $text;
+        }
+
+        return ($authorName ? '👤 *'.trim($authorName)."*\n" : '').$clean;
+    }
+
+    /**
+     * Pesan dari grup → kirim ke CHAT PRIBADI anggota pengirim (bukan ke grup).
+     * Dipakai untuk info sensitif (saldo, ringkasan) yang diminta dari grup.
+     * Untuk chat pribadi biasa, sama dengan sendReply().
+     */
+    public function sendPrivateReply(string $text): void
+    {
+        $metadata = is_array($this->message->metadata)
+            ? $this->message->metadata
+            : json_decode($this->message->metadata ?? '{}', true);
+
+        if (empty($metadata['group_jid'])) {
+            $this->sendReply($text);
+
+            return;
+        }
+
+        try {
+            $channel = Channel::find($this->message->channel_id);
+            if (! $channel) {
+                return;
+            }
+            $sessionId = $channel->config['session_id'] ?? "wa_{$channel->tenant_id}_{$channel->channel_account}";
+
+            app(WhatsAppService::class)->sendMessage(
+                $sessionId,
+                (string) $this->message->sender_id,          // nomor anggota (62…)
+                $text,
+                'text',
+                $metadata['author_lid'] ?? null,             // LID anggota bila ada
+                true
+            );
+        } catch (\Exception $e) {
+            Log::error('Failed to send private reply', ['message_id' => $this->message->id, 'error' => $e->getMessage()]);
         }
     }
 
@@ -105,6 +203,11 @@ class MessageReplyService
                 ? $this->message->metadata
                 : json_decode($this->message->metadata ?? '{}', true);
             $originalLid = $metadata['original_sender_id'] ?? null;
+            // Pesan dari GRUP → balas ke grupnya (…@g.us), bukan ke anggota/LID
+            if (! empty($metadata['group_jid'])) {
+                $recipient = (string) $metadata['group_jid'];
+                $originalLid = null;
+            }
 
             $whatsappService = app(WhatsAppService::class);
             $whatsappService->sendDocument($sessionId, $recipient, $filePath, $caption, $filename, $originalLid);
@@ -151,6 +254,11 @@ class MessageReplyService
                 ? $this->message->metadata
                 : json_decode($this->message->metadata ?? '{}', true);
             $originalLid = $metadata['original_sender_id'] ?? null;
+            // Pesan dari GRUP → balas ke grupnya (…@g.us), bukan ke anggota/LID
+            if (! empty($metadata['group_jid'])) {
+                $recipient = (string) $metadata['group_jid'];
+                $originalLid = null;
+            }
 
             $whatsappService = app(WhatsAppService::class);
             $whatsappService->sendImage($sessionId, $recipient, $imagePath, $caption, $originalLid);

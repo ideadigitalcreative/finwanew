@@ -57,10 +57,10 @@ const hasInsights = computed(() => props.insights && props.insights.length > 0);
                 <span class="material-symbols-outlined text-xl text-amber-500">lightbulb</span>
                 <div>
                     <h3 class="text-sm md:text-base font-bold text-foreground">Insight Keuangan</h3>
-                    <p class="text-[10px] text-muted-foreground">Analisis cerdas pola belanja</p>
+                    <p class="text-xs text-muted-foreground">Analisis cerdas pola belanja</p>
                 </div>
             </div>
-            <span class="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 text-[10px] font-bold shadow-xs">
+            <span class="px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 text-xs font-bold shadow-xs">
                 AI Radar
             </span>
         </div>
@@ -87,7 +87,7 @@ const hasInsights = computed(() => props.insights && props.insights.length > 0);
                             <p class="font-bold text-xs text-foreground leading-snug">
                                 {{ insight.title }}
                             </p>
-                            <p class="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                            <p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                                 {{ insight.message }}
                             </p>
                         </div>
@@ -101,7 +101,7 @@ const hasInsights = computed(() => props.insights && props.insights.length > 0);
                         <Lightbulb class="w-5 h-5 text-muted-foreground" />
                     </div>
                     <p class="text-xs font-semibold text-foreground">Belum ada insight</p>
-                    <p class="text-[10px] text-muted-foreground mt-0.5">Catat lebih banyak transaksi untuk melihat rekomendasi hemat!</p>
+                    <p class="text-xs text-muted-foreground mt-0.5">Catat lebih banyak transaksi untuk melihat rekomendasi hemat!</p>
                 </div>
             </template>
         </div>

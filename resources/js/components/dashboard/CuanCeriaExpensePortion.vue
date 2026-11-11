@@ -56,7 +56,7 @@ const hasData = computed(() => displayItems.value.length > 0);
 
 <template>
     <!-- 7. Kategori Pengeluaran & Progress Breakdown (1:1 Blueprint) -->
-    <section class="p-4 rounded-2xl bg-gradient-to-br from-[#fff9e8] via-white to-[#e8fff7] dark:from-[#26231b] dark:via-card dark:to-[#15261f] border border-[#ffd23f]/40 dark:border-[#ffd23f]/20 flex flex-col gap-3.5 font-['Plus_Jakarta_Sans',sans-serif] shadow-sm">
+    <section class="p-4 rounded-2xl bg-white dark:bg-[#23231f] border border-[#eae8e2] dark:border-white/10 flex flex-col gap-3.5 font-['Plus_Jakarta_Sans',sans-serif] shadow-sm">
         <div class="flex items-center justify-between">
             <span class="text-sm md:text-base font-bold text-[#1b1c19] dark:text-foreground">Porsi Pengeluaran</span>
             <a href="/budgets" class="text-xs text-[#745c00] dark:text-primary font-bold flex items-center gap-1 hover:underline">
@@ -74,7 +74,7 @@ const hasData = computed(() => displayItems.value.length > 0);
         </div>
 
         <!-- Multicolored Segmented Progress Track -->
-        <div v-else class="w-full h-3.5 bg-gradient-to-r from-[#fdf4d8] via-[#e7f6f0] to-[#fde8e8] dark:from-[#2a251c] dark:via-[#17251f] dark:to-[#2a1f22] rounded-full overflow-hidden flex shadow-inner">
+        <div v-else class="w-full h-3.5 bg-[#f0eee8] dark:bg-white/10 rounded-full overflow-hidden flex shadow-inner">
             <div 
                 v-for="(item, idx) in displayItems" 
                 :key="idx"
@@ -98,7 +98,7 @@ const hasData = computed(() => displayItems.value.length > 0);
                 </div>
                 <div class="flex items-baseline gap-2 flex-shrink-0">
                     <span class="text-xs font-extrabold text-[#1b1c19] dark:text-foreground">{{ formatCurrency(item.amount) }}</span>
-                    <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground font-semibold w-7 text-right">{{ item.percent }}%</span>
+                    <span class="text-xs text-[#4d4634] dark:text-muted-foreground font-semibold w-7 text-right">{{ item.percent }}%</span>
                 </div>
             </div>
         </div>

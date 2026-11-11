@@ -319,3 +319,81 @@ it('ConversationContextService memiliki method state pending_edit', function () 
     expect($reflection->hasMethod('getPendingEdit'))->toBeTrue();
     expect($reflection->hasMethod('clearPendingEdit'))->toBeTrue();
 });
+
+// ==========================================
+// TASK 8: Ops — parse "balas nomor daftar"
+// ==========================================
+
+it('parseListIndex membaca "2 ubah jadi 35rb" sebagai nomor 2', function () {
+    expect(\App\Services\Transaction\TransactionService::parseListIndex('2 ubah jadi 35rb'))->toBe(2);
+});
+
+it('parseListIndex mendukung format "3." dan "1)"', function () {
+    expect(\App\Services\Transaction\TransactionService::parseListIndex('3. ubah jadi 50rb'))->toBe(3);
+    expect(\App\Services\Transaction\TransactionService::parseListIndex('1) ganti ke 25rb'))->toBe(1);
+});
+
+it('parseListIndex menolak pesan tanpa kata perintah (bukan balasan nomor)', function () {
+    // "50rb" → nominal biasa, BUKAN nomor baris
+    expect(\App\Services\Transaction\TransactionService::parseListIndex('50rb'))->toBeNull();
+    expect(\App\Services\Transaction\TransactionService::parseListIndex('20000'))->toBeNull();
+    expect(\App\Services\Transaction\TransactionService::parseListIndex('beli makan 2'))->toBeNull();
+});
+
+it('parseListIndex menolak nomor 0 dan pesan kosong', function () {
+    expect(\App\Services\Transaction\TransactionService::parseListIndex('0 ubah jadi 5rb'))->toBeNull();
+    expect(\App\Services\Transaction\TransactionService::parseListIndex(''))->toBeNull();
+});
+
+// ==========================================
+// Ops — "ubah kategori nya jadi makanan"
+// ==========================================
+
+it('isCommandOnlyKeyword mengenali kata perintah tanpa deskripsi', function () {
+    $service = \App\Services\Transaction\TransactionService::class;
+
+    expect($service::isCommandOnlyKeyword('ubah'))->toBeTrue();
+    expect($service::isCommandOnlyKeyword('ganti'))->toBeTrue();
+    expect($service::isCommandOnlyKeyword('UBAH'))->toBeTrue();
+    expect($service::isCommandOnlyKeyword(''))->toBeTrue();
+
+    // Deskripsi asli bukan kata perintah
+    expect($service::isCommandOnlyKeyword('beli susu baby'))->toBeFalse();
+    expect($service::isCommandOnlyKeyword('susu'))->toBeFalse();
+});
+
+it('cleanCategoryCandidate membuang partikel dan kata penghubung', function () {
+    $service = \App\Services\Transaction\TransactionService::class;
+
+    expect($service::cleanCategoryCandidate('nya jadi makanan'))->toBe('makanan');
+    expect($service::cleanCategoryCandidate('ke kesehatan'))->toBe('kesehatan');
+    expect($service::cleanCategoryCandidate('jadi makanan & minuman'))->toBe('makanan & minuman');
+    expect($service::cleanCategoryCandidate('makanan'))->toBe('makanan');
+});
+
+// ==========================================
+// Koreksi arah transaksi tanpa kata sambung (bug log chat)
+// ==========================================
+
+it('mengenali "Termasuk pengeluaran" sebagai koreksi tipe, bukan format tak dikenal', function () {
+    expect(\App\Services\Transaction\TransactionService::isTypeOnlyCorrection('Termasuk pengeluaran'))->toBeTrue();
+});
+
+it('mengenali varian koreksi tipe lain', function (string $text) {
+    expect(\App\Services\Transaction\TransactionService::isTypeOnlyCorrection($text))->toBeTrue();
+})->with([
+    'itu pemasukan',
+    'harusnya pengeluaran',
+    'ini pengeluaran ya',
+    'masukin ke pemasukan',
+    'bukan pemasukan',
+]);
+
+it('tidak menganggap kalimat transaksi/query sebagai koreksi tipe', function (string $text) {
+    expect(\App\Services\Transaction\TransactionService::isTypeOnlyCorrection($text))->toBeFalse();
+})->with([
+    'pengeluaran',                       // query daftar pengeluaran
+    'berapa pengeluaran bulan ini',
+    'Pengeluaran beli sepatu 300rb',
+    'termasuk pengeluaran makan 50rb',
+]);

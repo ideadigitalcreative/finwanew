@@ -298,8 +298,11 @@ class WhatsAppUserMappingService
         $rawDigits = preg_replace('/[^0-9]/', '', str_replace(['@c.us', '@g.us', '@lid'], '', $senderId));
         $cleanedNumber = $this->cleanPhoneNumber($senderId);
 
+        // LID WhatsApp biasanya lebih panjang dari nomor telepon normal.
+        // Nomor Indonesia valid: 62 + 8-11 digit = maksimal 13 digit total.
+        // Jika lebih dari 13 digit, kemungkinan besar LID meskipun diawali '62'.
         $looksLikeLid = function (string $value): bool {
-            return strlen($value) > 13 && ! str_starts_with($value, '62');
+            return strlen($value) > 13;
         };
 
         // 1. Resolusi LID ke nomor telepon sebenarnya
@@ -338,8 +341,21 @@ class WhatsAppUserMappingService
             ->when($tenantId, fn ($query) => $query->where('tenant_id', $tenantId))
             ->get();
 
+        // Coba cocokkan via cleanPhoneNumber (normalisasi standar)
         $match = $candidates->first(function (UserWhatsAppNumber $number) use ($cleanedNumber) {
             return $this->cleanPhoneNumber($number->whatsapp_number) === $cleanedNumber;
+        });
+
+        if ($match) {
+            return $match->id;
+        }
+
+        // Fallback: cocokkan rawDigits langsung dengan whatsapp_number yang disimpan.
+        // Ini menangani kasus LID di mana cleanPhoneNumber bisa memotong digit
+        // (mis. '6294588232532003' dipotong jadi '62945882325320' tapi rawDigits = '94588232532003').
+        $match = $candidates->first(function (UserWhatsAppNumber $number) use ($rawDigits) {
+            $storedDigits = preg_replace('/[^0-9]/', '', $number->whatsapp_number);
+            return $storedDigits === $rawDigits || str_ends_with($storedDigits, $rawDigits) || str_ends_with($rawDigits, $storedDigits);
         });
 
         return $match?->id;

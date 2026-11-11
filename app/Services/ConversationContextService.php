@@ -24,7 +24,9 @@ class ConversationContextService
     public function __construct(int $tenantId, ?string $senderId = null)
     {
         $this->tenantId = $tenantId;
-        $this->senderId = $senderId;
+        // Identitas tetap: LID & nomor HP orang yang sama → nilai sama, supaya
+        // konteks/pertanyaan tertunda tidak "hilang" bila sender_id berganti format.
+        $this->senderId = \App\Support\SenderIdentity::canonical($tenantId, $senderId);
     }
 
     /**
@@ -39,6 +41,29 @@ class ConversationContextService
         }
 
         return $query;
+    }
+
+    /**
+     * Pesan user terbaru (lama → baru) dalam N menit terakhir — konteks Chat LLM.
+     *
+     * @return list<string>
+     */
+    public function getRecentUserMessages(int $limit = 3, int $minutes = 30): array
+    {
+        try {
+            return $this->getBaseQuery()
+                ->where('created_at', '>=', Carbon::now()->subMinutes($minutes))
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->limit($limit)
+                ->pluck('message')
+                ->filter(fn ($m) => is_string($m) && trim($m) !== '')
+                ->reverse()
+                ->values()
+                ->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /**
@@ -620,6 +645,10 @@ class ConversationContextService
                 );
             }
 
+            // Eksklusivitas state: satu waktu hanya satu konfirmasi aktif,
+            // supaya jawaban "Ya" tidak salah sasaran antar alur.
+            $this->unsetRecentEntityKey('pending_wallet_balance_confirmation');
+
             Log::info('Stored pending confirmation in context', [
                 'tenant_id' => $this->tenantId,
                 'original_message' => $transactionData['original_message'],
@@ -859,6 +888,159 @@ class ConversationContextService
             }
         } catch (\Exception $e) {
             Log::warning('Failed to clear pending edit', [
+                'tenant_id' => $this->tenantId,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Hapus satu key entities dari beberapa context terakhir.
+     * Dipakai untuk eksklusivitas state: hanya satu alur konfirmasi
+     * ("Ya"/"Batal") yang boleh aktif dalam satu waktu.
+     */
+    protected function unsetRecentEntityKey(string $key, int $limit = 3): void
+    {
+        $contexts = $this->getBaseQuery()
+            ->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get();
+
+        foreach ($contexts as $context) {
+            $entities = $context->entities ?? [];
+            if (isset($entities[$key])) {
+                unset($entities[$key]);
+                $context->update(['entities' => $entities]);
+            }
+        }
+    }
+
+    // ==========================================
+    // PENDING WALLET BALANCE — Konfirmasi set/tambah saldo ke dompet
+    // ==========================================
+
+    /**
+     * Simpan state konfirmasi saldo dompet.
+     *
+     * Dipakai ketika pesan user mengandung nominal tapi nama dompetnya
+     * generik/bukan nama dompet nyata (contoh: "Saldo awal 3215000").
+     * Bot menanyakan balik sebelum mengeksekusi.
+     *
+     * @param array $data operation (set|increase|reduce), amount, wallet_name, original_message
+     */
+    public function storePendingWalletBalanceConfirmation(array $data): void
+    {
+        try {
+            $pending = [
+                'operation'         => $data['operation'] ?? 'set',
+                'amount'            => (float) ($data['amount'] ?? 0),
+                'wallet_name'       => $data['wallet_name'] ?? '',
+                // Dompet spesifik & opsi "Keluar" (klarifikasi "dompet X nominal")
+                'balance_id'        => isset($data['balance_id']) ? (int) $data['balance_id'] : null,
+                'allow_expense'     => (bool) ($data['allow_expense'] ?? false),
+                'original_message'  => $data['original_message'] ?? '',
+                'retry_count'       => (int) ($data['retry_count'] ?? 0),
+                'created_at'        => now()->toIso8601String(),
+            ];
+
+            $lastContext = $this->getBaseQuery()
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if ($lastContext) {
+                $entities = $lastContext->entities ?? [];
+                $entities['pending_wallet_balance_confirmation'] = $pending;
+                $lastContext->update(['entities' => $entities]);
+            } else {
+                $this->addContext(
+                    $data['original_message'] ?? 'pending_wallet_balance',
+                    'pending_wallet_balance_confirmation',
+                    ['pending_wallet_balance_confirmation' => $pending],
+                    'confirmation'
+                );
+            }
+
+            // Eksklusivitas state: batalkan konfirmasi transaksi yang masih
+            // menunggu "Ya" agar tidak berebut jawaban.
+            $this->unsetRecentEntityKey('pending_confirmation');
+
+            Log::info('Stored pending wallet balance confirmation in context', [
+                'tenant_id'  => $this->tenantId,
+                'operation'  => $pending['operation'],
+                'amount'     => $pending['amount'],
+                'wallet'     => $pending['wallet_name'],
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('Failed to store pending wallet balance confirmation', [
+                'tenant_id' => $this->tenantId,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Ambil pending konfirmasi saldo dompet jika ada dan belum expired (5 menit).
+     *
+     * @return array|null
+     */
+    public function getPendingWalletBalanceConfirmation(): ?array
+    {
+        try {
+            $contexts = $this->getBaseQuery()
+                ->where('created_at', '>=', Carbon::now()->subMinutes(self::PENDING_EDIT_EXPIRY_MINUTES))
+                ->orderBy('created_at', 'desc')
+                ->limit(3)
+                ->get();
+
+            foreach ($contexts as $context) {
+                $entities = $context->entities ?? [];
+                if (isset($entities['pending_wallet_balance_confirmation'])) {
+                    $pending = $entities['pending_wallet_balance_confirmation'];
+
+                    $createdAt = Carbon::parse($pending['created_at'] ?? now());
+                    if ($createdAt->diffInMinutes(now()) <= self::PENDING_EDIT_EXPIRY_MINUTES) {
+                        return $pending;
+                    }
+                }
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::warning('Error getting pending wallet balance confirmation', [
+                'tenant_id' => $this->tenantId,
+                'error'     => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Hapus pending konfirmasi saldo dompet setelah diproses.
+     */
+    public function clearPendingWalletBalanceConfirmation(): void
+    {
+        try {
+            $contexts = $this->getBaseQuery()
+                ->orderBy('created_at', 'desc')
+                ->limit(3)
+                ->get();
+
+            foreach ($contexts as $context) {
+                $entities = $context->entities ?? [];
+                if (isset($entities['pending_wallet_balance_confirmation'])) {
+                    unset($entities['pending_wallet_balance_confirmation']);
+                    $context->update(['entities' => $entities]);
+
+                    Log::info('Cleared pending wallet balance confirmation from context', [
+                        'tenant_id'  => $this->tenantId,
+                        'context_id' => $context->id,
+                    ]);
+                    break;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to clear pending wallet balance confirmation', [
                 'tenant_id' => $this->tenantId,
                 'error'     => $e->getMessage(),
             ]);

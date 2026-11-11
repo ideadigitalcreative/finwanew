@@ -46,8 +46,8 @@ class WhatsAppChannelController extends Controller
 
         // Daftar nomor admin yang tidak boleh ditampilkan di halaman user
         $adminNumbers = [
-            '6285159205506', // Nomor admin yang tidak boleh ditampilkan
-            '6285242766676', // Super admin number
+            config('services.finwa.admin_number'), // Nomor admin yang tidak boleh ditampilkan
+            config('services.finwa.super_admin_number'), // Super admin number
         ];
 
         $channels = Channel::where('tenant_id', $tenant->id)
@@ -844,6 +844,9 @@ class WhatsAppChannelController extends Controller
         }
 
         // Create number (already confirmed not duplicate)
+        // Detect if this is a LID pseudo phone (not a real Indonesian phone number)
+        $isLid = !preg_match('/^628\d{8,12}$/', $phoneNumber);
+
         $userWhatsAppNumber = UserWhatsAppNumber::create([
             'user_id' => $user->id,
             'tenant_id' => $tenant->id,
@@ -851,6 +854,7 @@ class WhatsAppChannelController extends Controller
             'name' => $request->name,
             'is_primary' => $isPrimary,
             'is_active' => true,
+            'is_lid' => $isLid,
         ]);
 
         // Sync users.whatsapp_number if:

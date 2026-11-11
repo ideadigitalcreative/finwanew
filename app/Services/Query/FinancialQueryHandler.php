@@ -94,16 +94,25 @@ class FinancialQueryHandler
             // Cegah pesan tidak jelas (misal "edd", "halo", "ok") agar tidak
             // default menjadi "Ringkasan Keuangan"
             if (!$this->isRecognizedFinancialQuery($questionLower)) {
-                Log::info('Pesan bukan query keuangan yang dikenali, mengabaikan', [
+                Log::info('Pesan bukan query keuangan yang dikenali, mencoba jawaban LLM', [
                     'message_id' => $this->message->id,
                     'question' => $question,
                 ]);
-                $this->sendReply(
-                    "🤔 Maaf, pesan tidak dikenali.\n\n".
-                    "• _beli kopi 25rb_\n".
-                    "• _ringkasan bulan ini_\n".
-                    "• _help_ untuk panduan"
-                );
+
+                // CHAT LLM (Hybrid §6A): pertanyaan umum (mis. "Kelebihan finwa
+                // apa") dijawab LLM konfigurasi admin. Gagal → balasan lokal.
+                $llmAnswer = (new \App\Services\AI\FinWaChatService)->answer($question);
+                if ($llmAnswer !== null) {
+                    Log::info('Chat LLM: balasan terkirim', [
+                        'message_id' => $this->message->id,
+                        'answer_len' => mb_strlen($llmAnswer),
+                    ]);
+                    $this->sendReply($llmAnswer);
+
+                    return;
+                }
+
+                $this->sendReply(\App\Services\AI\FinWaChatService::fallbackReply());
 
                 return;
             }
@@ -185,24 +194,14 @@ class FinancialQueryHandler
      * Mencegah pesan acak (misal "edd", "ok", "test") diproses sebagai query
      * yang default-nya menghasilkan Ringkasan Keuangan.
      */
-    protected function isRecognizedFinancialQuery(string $questionLower): bool
+    public function isRecognizedFinancialQuery(string $questionLower): bool
     {
-        $queryKeywords = [
-            'ringkasan', 'rekap', 'rekapan', 'rangkuman', 'laporan',
-            'pengeluaran', 'pemasukan', 'pendapatan', 'penghasilan',
-            'saldo', 'cashflow', 'arus kas', 'cash flow',
-            'berapa', 'total', 'habis', 'keluar', 'masuk',
-            'mutasi', 'transaksi', 'riwayat',
-            'budget', 'anggaran',
-            'omset', 'omzet', 'income', 'expense', 'revenue', 'spending',
-            'statistik', 'analisis', 'analisa', 'keuanganku',
-            'hari ini', 'bulan ini', 'minggu ini', 'tahun ini',
-            'kemarin', 'bulan lalu', 'minggu lalu',
-            'terakhir', 'tertinggi', 'terbesar', 'terbanyak',
-            'daftar', 'list', 'detail', 'rincian', 'rinci',
-            'cek', 'lihat', 'tampilkan', 'tunjukkan', 'sebutkan',
-            'belanjaan', 'sisa', 'duit', 'uang',
-        ];
+        // Satu sumber: config/finwa_query.php (sama dengan routing di ProcessIncomingMessage)
+        $queryKeywords = array_merge(
+            config('finwa_query.query_keywords', []),
+            config('finwa_query.query_keywords_extra', []),
+            config('finwa_query.period_keywords', []),
+        );
 
         foreach ($queryKeywords as $keyword) {
             if (str_contains($questionLower, $keyword)) {
@@ -210,10 +209,14 @@ class FinancialQueryHandler
             }
         }
 
-        if (str_contains($questionLower, '?')) {
+        // Nama bulan sebagai kata utuh ("transaksi september", "rekap okt")
+        $months = array_keys(config('finwa_query.month_names', []));
+        if ($months && preg_match('/(?<![\p{L}\p{N}])(?:'.implode('|', array_map(fn ($m) => preg_quote($m, '/'), $months)).')(?![\p{L}\p{N}])/u', $questionLower)) {
             return true;
         }
 
+        // (Dulu: semua pesan bertanda "?" dianggap query keuangan → "apa itu dana
+        // darurat?" dibalas Ringkasan Keuangan. Sekarang pertanyaan umum jatuh ke Chat LLM.)
         return false;
     }
 }

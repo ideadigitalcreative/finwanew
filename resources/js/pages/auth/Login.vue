@@ -6,6 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useSweetAlert } from '@/composables/useSweetAlert';
 import AuthBase from '@/layouts/AuthLayout.vue';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
@@ -13,12 +14,34 @@ import { Form, Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
 const showPassword = ref(false);
+const { showError } = useSweetAlert();
 
 defineProps<{
     status?: string;
     canResetPassword: boolean;
     canRegister: boolean;
 }>();
+
+const handleLoginError = (errors: Record<string, string>) => {
+    const raw = errors.email || errors.password || '';
+    let title = 'Login Gagal';
+    let message = '';
+
+    if (/throttle|too many attempts/i.test(raw)) {
+        title = 'Terlalu Banyak Percobaan';
+        message = 'Anda sudah mencoba login berkali-kali. Silakan tunggu beberapa saat sebelum mencoba lagi.';
+    } else if (/credentials|does not match|auth\.failed/i.test(raw)) {
+        message = 'Email atau kata sandi yang Anda masukkan salah.';
+    } else if (/password/i.test(raw)) {
+        message = 'Kata sandi yang Anda masukkan salah.';
+    } else if (/email|user not found/i.test(raw)) {
+        message = 'Akun dengan email tersebut tidak ditemukan.';
+    } else {
+        message = 'Email atau kata sandi yang Anda masukkan salah.';
+    }
+
+    showError(title, message);
+};
 
 // telegram.me lebih andal jika t.me diblokir DNS
 const telegramUrl = 'https://telegram.me/Finwabot?start=register';
@@ -97,6 +120,7 @@ const openExternalLink = (url: string) => {
             :reset-on-success="['password']"
             v-slot="{ errors, processing }"
             class="flex flex-col gap-4"
+            @error="handleLoginError"
         >
             <div class="grid gap-4">
                 <div class="grid gap-1.5">

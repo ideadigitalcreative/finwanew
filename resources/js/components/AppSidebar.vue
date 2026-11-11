@@ -159,6 +159,11 @@ const superAdminNavItems = computed<NavItem[]>(() => [
         materialIcon: 'auto_awesome',
     },
     {
+        title: 'Hybrid LLM AI',
+        href: '/superadmin/hybrid-llm-settings',
+        materialIcon: 'merge_type',
+    },
+    {
         title: 'Risen AI (SEO)',
         href: '/admin/risen-ai',
         materialIcon: 'search',

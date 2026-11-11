@@ -859,7 +859,7 @@ onUnmounted(() => {
                                     title="Lihat riwayat transaksi nomor ini"
                                 >
                                     <span>{{ number.whatsapp_number }}</span>
-                                    <span class="material-symbols-outlined text-[16px] text-[#4d4634]/40 shrink-0">arrow_forward</span>
+                                    <span class="material-symbols-outlined text-[16px] text-[#4d4634]/40 dark:text-white/40 shrink-0">arrow_forward</span>
                                 </Link>
                                 <span v-if="number.is_primary" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#51fac1] text-[#007152] shrink-0 whitespace-nowrap">
                                     <span class="material-symbols-outlined text-[13px]">star</span>
@@ -872,14 +872,14 @@ onUnmounted(() => {
                             <button
                                 v-if="!number.is_primary"
                                 @click="setPrimaryNumber(number.id)"
-                                class="p-2 rounded-lg text-[#4d4634]/50 hover:text-[#006c4f] hover:bg-[#51fac1]/20 transition-colors"
+                                class="p-2 rounded-lg text-[#4d4634]/50 dark:text-white/50 hover:text-[#006c4f] hover:bg-[#51fac1]/20 transition-colors"
                                 title="Set Utama"
                             >
                                 <span class="material-symbols-outlined text-lg">star</span>
                             </button>
                             <button
                                 @click="editNumber(number)"
-                                class="p-2 rounded-lg text-[#4d4634]/50 hover:text-[#725a00] hover:bg-[#f5f3ee] dark:hover:bg-white/10 transition-colors"
+                                class="p-2 rounded-lg text-[#4d4634]/50 dark:text-white/50 hover:text-[#725a00] hover:bg-[#f5f3ee] dark:hover:bg-white/10 transition-colors"
                                 title="Edit"
                             >
                                 <span class="material-symbols-outlined text-lg">edit</span>
@@ -887,7 +887,7 @@ onUnmounted(() => {
                             <button
                                 @click="deleteNumber(number.id)"
                                 :disabled="props.userWhatsAppNumbers.length <= 1"
-                                class="p-2 rounded-lg text-[#4d4634]/50 hover:text-[#ad2c4f] hover:bg-[#ffc9d0]/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                class="p-2 rounded-lg text-[#4d4634]/50 dark:text-white/50 hover:text-[#ad2c4f] hover:bg-[#ffc9d0]/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                                 title="Hapus"
                             >
                                 <span class="material-symbols-outlined text-lg">delete</span>
@@ -934,7 +934,7 @@ onUnmounted(() => {
                                             @input="numberForm.whatsapp_number = numberForm.whatsapp_number.replace(/\D/g, '')"
                                             class="mt-1.5 rounded-xl border-[#eae8e2] dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2 text-sm focus:border-[#ffd23f] focus:ring-[#ffd23f] text-[#1b1c19] dark:text-white"
                                         />
-                                        <p class="mt-1 text-xs text-[#4d4634]/50">
+                                        <p class="mt-1 text-xs text-[#4d4634]/50 dark:text-white/50">
                                             Format: 6281234567890 (dengan kode negara 62)
                                         </p>
                                     </div>
@@ -963,7 +963,7 @@ onUnmounted(() => {
                                                 {{ preset }}
                                             </button>
                                         </div>
-                                        <p class="mt-1 text-xs text-[#4d4634]/50">
+                                        <p class="mt-1 text-xs text-[#4d4634]/50 dark:text-white/50">
                                             Pilih preset atau ketik nama sendiri. Nama ini dipakai untuk filter "Oleh" di transaksi.
                                         </p>
                                     </div>
@@ -972,7 +972,7 @@ onUnmounted(() => {
                                             id="is_primary"
                                             v-model="numberForm.is_primary"
                                             type="checkbox"
-                                            class="h-4 w-4 rounded border-[#eae8e2] text-[#ffd23f] focus:ring-[#ffd23f]"
+                                            class="h-4 w-4 rounded border-[#eae8e2] dark:border-white/10 text-[#ffd23f] focus:ring-[#ffd23f]"
                                         />
                                         <Label for="is_primary" class="text-sm font-normal cursor-pointer text-[#4d4634] dark:text-white/70">
                                             Set sebagai nomor utama
@@ -1105,7 +1105,7 @@ onUnmounted(() => {
                                     <p class="text-sm font-bold text-[#1b1c19] dark:text-white">
                                         {{ channel.messages_count }} pesan
                                     </p>
-                                    <p v-if="channel.recent_messages && channel.recent_messages.length > 0" class="mt-1 text-xs text-[#4d4634]/50">
+                                    <p v-if="channel.recent_messages && channel.recent_messages.length > 0" class="mt-1 text-xs text-[#4d4634]/50 dark:text-white/50">
                                         Terbaru: {{ channel.recent_messages[0].created_at_human }}
                                     </p>
                                 </div>
@@ -1128,7 +1128,7 @@ onUnmounted(() => {
                             <!-- Loading indicator for channel -->
                             <div v-if="loadingChannels.has(channel.id)" class="flex items-center gap-2 px-3 py-2 w-full sm:w-auto">
                                 <span class="material-symbols-outlined text-lg animate-spin text-[#745c00]">sync</span>
-                                <span class="text-xs text-[#4d4634]/60">Memuat session...</span>
+                                <span class="text-xs text-[#4d4634]/60 dark:text-white/60">Memuat session...</span>
                             </div>
 
                             <button

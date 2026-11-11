@@ -131,33 +131,10 @@ const getDonutPath = (startPercent: number, endPercent: number, outerRadius: num
     ].join(' ');
 };
 
-// Split label into 2 lines if longer than maxLength
-const splitLabel = (label: string, maxLength: number = 14) => {
-    if (label.length <= maxLength) {
-        return [label];
-    }
-
-    const words = label.split(' ');
-    if (words.length === 1) {
-        // Single long word - split in the middle
-        const mid = Math.ceil(label.length / 2);
-        return [label.slice(0, mid) + '-', label.slice(mid)];
-    }
-
-    // Find best split point
-    let line1 = '';
-    let line2 = '';
-    const midPoint = Math.floor(words.length / 2);
-
-    line1 = words.slice(0, midPoint).join(' ');
-    line2 = words.slice(midPoint).join(' ');
-
-    return [line1, line2];
-};
 </script>
 
 <template>
-    <div class="bg-gradient-to-br from-[#fffdfa] via-white to-[#f4fbf7] dark:from-[#1f201c] dark:via-[#23231f] dark:to-[#1a2520] h-full rounded-2xl flex flex-col border border-[#eae8e2] dark:border-white/10 font-['Plus_Jakarta_Sans',sans-serif] shadow-sm">
+    <div class="bg-white dark:bg-[#23231f] h-full rounded-2xl flex flex-col border border-[#eae8e2] dark:border-white/10 font-['Plus_Jakarta_Sans',sans-serif] shadow-sm">
         <!-- Header -->
         <div class="p-4 md:p-5 border-b border-[#eae8e2]/70 dark:border-white/10">
             <div class="flex items-center gap-2.5">
@@ -166,83 +143,41 @@ const splitLabel = (label: string, maxLength: number = 14) => {
                 </span>
                 <div>
                     <h3 class="font-bold text-[15px] text-[#1b1c19] dark:text-white leading-tight">Kategori Pengeluaran</h3>
-                    <p class="text-[11px] text-[#4d4634] dark:text-white/50">Distribusi belanja bulan ini</p>
+                    <p class="text-xs text-[#4d4634] dark:text-white/50">Distribusi belanja bulan ini</p>
                 </div>
             </div>
         </div>
         
         <!-- Content -->
         <div class="flex-1 p-2 md:p-4 overflow-hidden">
-            <div v-if="hasData" class="relative">
-                <!-- Donut Chart with Labels - Responsive size -->
-                <svg viewBox="0 0 500 300" class="w-full max-w-full mx-auto max-w-[500px]">
-                    <!-- Donut segments -->
-                    <g transform="translate(50, 0)">
+            <!-- Donut + legenda HTML: teks tetap terbaca karena tidak ikut diskalakan bersama SVG -->
+            <div v-if="hasData" class="flex flex-col sm:flex-row items-center gap-4 md:gap-6 p-2">
+                <div class="relative w-40 h-40 shrink-0">
+                    <svg viewBox="95 45 210 210" class="w-full h-full" role="img" :aria-label="`Total pengeluaran Rp ${formatNumber(totalExpense)}`">
                         <path
                             v-for="(segment, index) in pieSegments"
                             :key="index"
                             :d="getDonutPath(segment.startPercent, segment.endPercent)"
                             :fill="segment.color"
-                            class="transition-all duration-500 hover:opacity-80 cursor-pointer stroke-[#f5f3ee] dark:stroke-[#23231f]"
+                            class="stroke-white dark:stroke-[#23231f]"
                             stroke-width="3"
                         />
-                    </g>
-                    
-                    <!-- Leader lines and labels -->
-                    <g v-for="(segment, index) in pieSegments" :key="'label-' + index">
-                        <g v-if="segment.percent > 0" transform="translate(50, 0)">
-                            <line
-                                :x1="segment.leaderX"
-                                :y1="segment.leaderY"
-                                :x2="segment.labelX"
-                                :y2="segment.labelY"
-                                stroke="#c7c2b4"
-                                stroke-width="1"
-                            />
-                            <line
-                                :x1="segment.labelX"
-                                :y1="segment.labelY"
-                                :x2="segment.extensionX"
-                                :y2="segment.labelY"
-                                stroke="#c7c2b4"
-                                stroke-width="1"
-                            />
-                            <text
-                                :x="segment.extensionX + (segment.isLeftSide ? -6 : 6)"
-                                :y="segment.labelY - 3"
-                                :text-anchor="segment.isLeftSide ? 'end' : 'start'"
-                                class="text-[10px] font-extrabold fill-[#1b1c19] dark:fill-white"
-                            >
-                                {{ segment.percent.toFixed(1) }}%
-                            </text>
-                            <text
-                                :x="segment.extensionX + (segment.isLeftSide ? -6 : 6)"
-                                :y="segment.labelY + 9"
-                                :text-anchor="segment.isLeftSide ? 'end' : 'start'"
-                                class="text-[10px] fill-[#4d4634] dark:fill-white/60"
-                            >
-                                <tspan
-                                    v-for="(line, lineIndex) in splitLabel(segment.label)"
-                                    :key="lineIndex"
-                                    :x="segment.extensionX + (segment.isLeftSide ? -6 : 6)"
-                                    :dy="lineIndex === 0 ? 0 : '1.1em'"
-                                >{{ line }}</tspan>
-                            </text>
-                        </g>
-                    </g>
-                    
-                    <!-- Center total -->
-                    <g transform="translate(50, 0)">
-                        <text x="200" y="140" text-anchor="middle" class="text-sm font-medium fill-[#4d4634] dark:fill-white/50">
-                            Total
-                        </text>
-                        <text x="200" y="170" text-anchor="middle" class="text-2xl font-extrabold fill-[#1b1c19] dark:fill-white">
-                            {{ formatNumber(totalExpense) }}
-                        </text>
-                    </g>
-                </svg>
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                        <span class="text-xs font-medium text-[#4d4634] dark:text-white/60">Total</span>
+                        <span class="text-base font-extrabold tabular-nums text-[#1b1c19] dark:text-white">Rp {{ formatNumber(totalExpense) }}</span>
+                    </div>
+                </div>
+                <ul class="w-full min-w-0 flex flex-col gap-2">
+                    <li v-for="(segment, index) in pieSegments" :key="'legend-' + index" class="flex items-center gap-2 text-sm">
+                        <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ backgroundColor: segment.color }" aria-hidden="true"></span>
+                        <span class="flex-1 min-w-0 truncate text-[#1b1c19] dark:text-foreground">{{ segment.label }}</span>
+                        <span class="font-bold tabular-nums text-[#1b1c19] dark:text-foreground">Rp {{ formatNumber(segment.amount) }}</span>
+                        <span class="w-11 text-right text-xs tabular-nums text-[#4d4634] dark:text-muted-foreground">{{ Math.round(segment.percent) }}%</span>
+                    </li>
+                </ul>
             </div>
-            
+
             <!-- Empty State -->
             <div v-else class="flex flex-col items-center justify-center h-40 text-center">
                 <div class="w-14 h-14 rounded-full bg-[#f5f3ee] dark:bg-white/5 flex items-center justify-center mb-3">

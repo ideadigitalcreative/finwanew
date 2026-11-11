@@ -25,4 +25,20 @@ Route::middleware('auth')->group(function () {
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
+
+    // Push notification (aplikasi Android)
+    Route::get('settings/notifications', [\App\Http\Controllers\Settings\NotificationController::class, 'edit'])
+        ->name('notifications.edit');
+    Route::put('settings/notifications', [\App\Http\Controllers\Settings\NotificationController::class, 'update'])
+        ->name('notifications.update');
+    Route::delete('settings/notifications/devices/{id}', [\App\Http\Controllers\Settings\NotificationController::class, 'destroyDevice'])
+        ->whereNumber('id')
+        ->name('notifications.devices.destroy');
+
+    // Token FCM dari WebView (sesi login web)
+    Route::post('device-tokens', [\App\Http\Controllers\DeviceTokenController::class, 'store'])
+        ->middleware('throttle:20,1')
+        ->name('device-tokens.store');
+    Route::delete('device-tokens', [\App\Http\Controllers\DeviceTokenController::class, 'destroy'])
+        ->name('device-tokens.destroy');
 });

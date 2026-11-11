@@ -15,8 +15,9 @@ import { ChevronDown } from 'lucide-vue-next';
 import { urlIsActive } from '@/lib/utils';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
+import { useElasticIndicator } from '@/composables/useElasticIndicator';
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
     items: NavItem[];
     label?: string;
 }>(), {
@@ -28,6 +29,23 @@ const page = usePage();
 const isExternalLink = (href: NonNullable<NavItem['href']>): href is string => {
     return typeof href === 'string' && (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('wa.me/') || href.startsWith('mailto:') || href.startsWith('tel:'));
 };
+
+const isItemActive = (item: NavItem): boolean => {
+    if (!item.href || typeof item.href !== 'string' || isExternalLink(item.href)) {
+        return false;
+    }
+
+    return !!urlIsActive(item.href, page.url);
+};
+
+const {
+    container: menuRef,
+    indicator: indicatorRef,
+    visible: indicatorVisible,
+} = useElasticIndicator({
+    orientation: 'vertical',
+    persistKey: `sidebar:${props.label}`,
+});
 </script>
 
 <template>
@@ -35,6 +53,14 @@ const isExternalLink = (href: NonNullable<NavItem['href']>): href is string => {
         <SidebarGroupLabel v-if="label" class="text-[10px] font-extrabold uppercase tracking-widest text-[#7f7661] dark:text-[#6b6a5e] px-3 py-2 mb-1">
             {{ label }}
         </SidebarGroupLabel>
+        <div ref="menuRef" class="relative">
+        <!-- Pil elastis yang meluncur ke menu aktif -->
+        <span
+            ref="indicatorRef"
+            class="nav-indicator"
+            :class="indicatorVisible ? 'opacity-100' : 'opacity-0'"
+            aria-hidden="true"
+        />
         <SidebarMenu class="space-y-0.5">
             <template v-for="item in items" :key="item.title">
                 <!-- Collapsible Submenu -->
@@ -75,13 +101,13 @@ const isExternalLink = (href: NonNullable<NavItem['href']>): href is string => {
                 </Collapsible>
 
                 <!-- Single Menu Item -->
-                <SidebarMenuItem v-else>
+                <SidebarMenuItem v-else :data-elastic-active="isItemActive(item) ? 'true' : 'false'">
                     <SidebarMenuButton
                         as-child
                         size="lg"
-                        :is-active="item.href && typeof item.href === 'string' && !isExternalLink(item.href) ? !!urlIsActive(item.href, page.url) : false"
+                        :is-active="isItemActive(item)"
                         :tooltip="item.title"
-                        class="group relative rounded-xl transition-colors duration-150 text-[#4d4634] dark:text-[#a29f90] hover:bg-[#f0eee8] hover:text-[#1b1c19] dark:hover:bg-white/5 dark:hover:text-white data-[active=true]:bg-[#ffd23f] data-[active=true]:text-[#574500] dark:data-[active=true]:bg-[#ffd23f] dark:data-[active=true]:text-[#241a00] data-[active=true]:shadow-[2px_2px_0px_#1b1c19] [&>span]:text-sm [&>span]:font-bold"
+                        class="group relative z-[1] rounded-xl transition-colors duration-150 text-[#4d4634] dark:text-[#a29f90] hover:bg-[#f0eee8] hover:text-[#1b1c19] dark:hover:bg-white/5 dark:hover:text-white data-[active=true]:bg-transparent data-[active=true]:text-[#574500] dark:data-[active=true]:bg-transparent dark:data-[active=true]:text-[#241a00] [&>span]:text-sm [&>span]:font-bold"
                     >
                         <a 
                             v-if="item.href && typeof item.href === 'string' && isExternalLink(item.href)" 
@@ -115,5 +141,24 @@ const isExternalLink = (href: NonNullable<NavItem['href']>): href is string => {
                 </SidebarMenuItem>
             </template>
         </SidebarMenu>
+        </div>
     </SidebarGroup>
 </template>
+
+<style scoped>
+/* Pil indikator elastis sidebar — posisi & tingginya diatur
+   useElasticIndicator lewat transform + height. */
+.nav-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 0;
+    border-radius: 0.75rem;
+    background-color: #ffd23f;
+    box-shadow: 2px 2px 0 #1b1c19;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    will-change: transform, height;
+}
+</style>

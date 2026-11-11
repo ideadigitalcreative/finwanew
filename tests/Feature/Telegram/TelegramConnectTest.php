@@ -72,7 +72,7 @@ test('telegram webhook deep link updates user telegram_chat_id', function () {
             'text' => '/start link_'.$plainToken,
         ],
     ], [
-        'X-Telegram-Bot-Api-Secret' => 'test-secret',
+        'X-Telegram-Bot-Api-Secret-Token' => 'test-secret',
     ]);
 
     $response->assertOk();

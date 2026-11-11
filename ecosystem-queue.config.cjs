@@ -1,34 +1,52 @@
 const path = require('path');
 
 module.exports = {
-    apps: [{
-        name: 'laravel-queue-worker',
-        script: 'php',
-        args: 'artisan queue:work --tries=3 --timeout=300',
-        cwd: path.resolve(__dirname),
-        instances: 1,  // Single instance untuk Windows compatibility
-        exec_mode: 'fork',  // Fork mode untuk Windows
-        autorestart: true,
-        watch: false,
-        max_memory_restart: '512M',
-        env: {
-            APP_ENV: process.env.APP_ENV || 'production',
-            APP_DEBUG: process.env.APP_DEBUG || 'false',
-            QUEUE_CONNECTION: process.env.QUEUE_CONNECTION || 'database',
+    apps: [
+        {
+            // === Queue Worker (Laravel) ===
+            // Menggunakan queue-worker.cjs sebagai wrapper Node.js agar
+            // argumen PHP (--tries, --timeout) tidak terpotong PM2 CLI parser.
+            name: 'laravel-queue-worker',
+            script: path.join(__dirname, 'queue-worker.cjs'),
+            interpreter: 'node',
+            cwd: path.resolve(__dirname),
+            instances: 1,
+            exec_mode: 'fork',
+            autorestart: true,
+            watch: false,
+            max_memory_restart: '512M',
+            min_uptime: '10s',
+            max_restarts: 10,
+            restart_delay: 5000,
+            kill_timeout: 310000,
+            wait_ready: false,
+            error_file: path.join(__dirname, 'storage', 'logs', 'queue-worker-error.log'),
+            out_file:   path.join(__dirname, 'storage', 'logs', 'queue-worker-out.log'),
+            log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+            merge_logs: true,
+            time: true,
         },
-        error_file: path.join(__dirname, 'storage', 'logs', 'queue-worker-error.log'),
-        out_file: path.join(__dirname, 'storage', 'logs', 'queue-worker-out.log'),
-        log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-        merge_logs: true,
-        time: true,
-        min_uptime: '10s',
-        max_restarts: 10,
-        restart_delay: 5000,
-        // Kill timeout untuk queue worker (300 detik = 5 menit)
-        kill_timeout: 300000,
-        // Wait untuk graceful shutdown
-        wait_ready: false,
-        listen_timeout: 10000,
-    }]
+        {
+            // === WhatsApp Gateway (Baileys) ===
+            name: 'whatsapp-gateway',
+            script: 'index.js',
+            interpreter: 'node',
+            cwd: path.join(__dirname, 'services', 'whatsapp-gateway'),
+            instances: 1,
+            exec_mode: 'fork',
+            autorestart: true,
+            watch: false,
+            max_memory_restart: '256M',
+            min_uptime: '10s',
+            max_restarts: 10,
+            restart_delay: 5000,
+            kill_timeout: 10000,
+            wait_ready: false,
+            error_file: path.join(__dirname, 'storage', 'logs', 'whatsapp-gateway-error.log'),
+            out_file:   path.join(__dirname, 'storage', 'logs', 'whatsapp-gateway-out.log'),
+            log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+            merge_logs: true,
+            time: true,
+        },
+    ],
 };
-

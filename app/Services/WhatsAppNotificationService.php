@@ -14,11 +14,12 @@ class WhatsAppNotificationService
 
     protected $systemTenantId = 1; // Tenant sistem untuk notifikasi
 
-    protected $superAdminWhatsAppNumber = '6285242766676'; // Nomor WhatsApp super admin
+    protected $superAdminWhatsAppNumber; // Nomor WhatsApp super admin (config/services.php finwa.super_admin_number)
 
     public function __construct(WhatsAppService $whatsappService)
     {
         $this->whatsappService = $whatsappService;
+        $this->superAdminWhatsAppNumber = (string) config('services.finwa.super_admin_number');
     }
 
     /**

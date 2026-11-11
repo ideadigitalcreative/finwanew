@@ -56,16 +56,16 @@ const hasData = computed(() => ordered.value.length > 0);
         <div class="flex items-center justify-between">
             <div class="flex flex-col">
                 <span class="text-sm md:text-base font-bold text-[#1b1c19] dark:text-foreground">Aktivitas Mingguan</span>
-                <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground font-semibold">{{ periodLabel }}</span>
+                <span class="text-xs text-[#4d4634] dark:text-muted-foreground font-semibold">{{ periodLabel }}</span>
             </div>
             <div class="flex items-center gap-2.5">
                 <div class="flex items-center gap-1">
-                    <span class="w-2.5 h-2.5 rounded-full bg-[#51fac1]"></span>
-                    <span class="text-[10px] font-bold text-[#4d4634] dark:text-muted-foreground">Masuk</span>
+                    <span class="w-2.5 h-2.5 rounded-full bg-chart-income"></span>
+                    <span class="text-xs font-bold text-[#4d4634] dark:text-muted-foreground">Masuk</span>
                 </div>
                 <div class="flex items-center gap-1">
-                    <span class="w-2.5 h-2.5 rounded-full bg-[#ffd23f]"></span>
-                    <span class="text-[10px] font-bold text-[#4d4634] dark:text-muted-foreground">Keluar</span>
+                    <span class="w-2.5 h-2.5 rounded-full bg-chart-expense"></span>
+                    <span class="text-xs font-bold text-[#4d4634] dark:text-muted-foreground">Keluar</span>
                 </div>
             </div>
         </div>
@@ -87,27 +87,27 @@ const hasData = computed(() => ordered.value.length > 0);
             >
                 <span 
                     v-if="item.isHot" 
-                    class="absolute -top-3 px-1.5 py-0.2 rounded-full bg-[#ad2c4f] text-white text-[9px] font-extrabold shadow-xs"
+                    class="absolute -top-3 px-1.5 py-0.2 rounded-full bg-chart-expense text-white text-xs font-extrabold shadow-xs"
                 >
-                    Hot
+                    Puncak
                 </span>
 
                 <div class="w-full flex items-end justify-center gap-1 h-28">
-                    <!-- Income Bar (hijau mint) -->
+                    <!-- Bar pemasukan -->
                     <div 
-                        class="w-2.5 bg-[#51fac1] rounded-t-full transition-all duration-500" 
+                        class="w-2.5 bg-chart-income rounded-t-full transition-all duration-500" 
                         :style="{ height: item.incomeHeight }"
                     ></div>
-                    <!-- Expense Bar (kuning tema) -->
+                    <!-- Bar pengeluaran -->
                     <div 
                         class="rounded-t-full transition-all duration-500 shadow-xs"
-                        :class="item.isHot ? 'w-3 bg-[#ad2c4f]' : 'w-2.5 bg-[#ffd23f]'" 
+                        :class="item.isHot ? 'w-3 bg-chart-expense ring-2 ring-chart-expense/30' : 'w-2.5 bg-chart-expense/70'" 
                         :style="{ height: item.expenseHeight }"
                     ></div>
                 </div>
 
                 <span 
-                    class="text-[10px] font-bold"
+                    class="text-xs font-bold"
                     :class="item.isHot ? 'text-[#ad2c4f]' : 'text-[#4d4634] dark:text-muted-foreground'"
                 >
                     {{ item.day }}

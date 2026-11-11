@@ -44,10 +44,12 @@ class DashboardController extends Controller
         $totalExpense = $transactions->where('type', 'expense')->sum('amount');
         $netCashflow = $totalIncome - $totalExpense;
 
-        // Ringkasan arus kas per nomor WhatsApp (anggota) untuk bulan berjalan
+        // Ringkasan arus kas per nomor WhatsApp (anggota) untuk bulan berjalan;
+        // transaksi dari alias LID digabung ke nomor aslinya
+        $canonicalNumberIds = \App\Models\UserWhatsAppNumber::canonicalIdMap($tenant->id);
         $memberGroups = $transactions
             ->whereNotNull('user_whatsapp_number_id')
-            ->groupBy('user_whatsapp_number_id');
+            ->groupBy(fn ($tx) => $canonicalNumberIds[(int) $tx->user_whatsapp_number_id] ?? (int) $tx->user_whatsapp_number_id);
 
         $memberSummary = collect();
         if ($memberGroups->isNotEmpty()) {
@@ -100,24 +102,24 @@ class DashboardController extends Controller
         $prevTotalExpense = $prevTransactions->where('type', 'expense')->sum('amount');
         $prevNetCashflow = $prevTotalIncome - $prevTotalExpense;
 
-        // Calculate percentage changes with caps for better UX
+        // Persentase perubahan vs bulan lalu. Null = tidak ada pembanding (bulan pertama),
+        // supaya UI tidak menampilkan angka palsu seperti "+999%".
         if ($prevTotalIncome > 0) {
             $incomeChange = (($totalIncome - $prevTotalIncome) / $prevTotalIncome) * 100;
             $incomeChange = max(-999, min(999, $incomeChange)); // Cap at ±999%
         } else {
-            $incomeChange = $totalIncome > 0 ? 999 : 0;
+            $incomeChange = null;
         }
 
         if ($prevTotalExpense > 0) {
             $expenseChange = (($totalExpense - $prevTotalExpense) / $prevTotalExpense) * 100;
             $expenseChange = max(-999, min(999, $expenseChange)); // Cap at ±999%
         } else {
-            $expenseChange = $totalExpense > 0 ? 999 : 0;
+            $expenseChange = null;
         }
 
-        // For net cashflow, handle negative values carefully
         if ($prevNetCashflow == 0) {
-            $netChange = $netCashflow != 0 ? ($netCashflow > 0 ? 999 : -999) : 0;
+            $netChange = null;
         } else {
             $netChange = (($netCashflow - $prevNetCashflow) / abs($prevNetCashflow)) * 100;
             $netChange = max(-999, min(999, $netChange)); // Cap at ±999%
@@ -133,7 +135,7 @@ class DashboardController extends Controller
 
         // Get recent transactions (last 5) for transaction list
         $recentTransactions = Transaction::where('tenant_id', $tenant->id)
-            ->with('category')
+            ->with(['category', 'balance:id,account_name'])
             ->orderBy('transaction_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->limit(5)
@@ -290,7 +292,7 @@ class DashboardController extends Controller
                 'label' => $goal->name,
                 'current' => (float) $goal->current_amount,
                 'target' => (float) $goal->target_amount,
-                'deadline' => $goal->deadline ? $goal->deadline->format('M Y') : null,
+                'deadline' => $goal->deadline ? $goal->deadline->locale('id')->translatedFormat('M Y') : null,
                 'icon' => $goal->icon,
             ])
             ->values();
@@ -370,7 +372,7 @@ class DashboardController extends Controller
             $peakExpenseNote = 'Puncak pengeluaran di ' . $peakDay['day'];
         }
 
-        $periodLabel = $weekStart->format('d M') . ' - ' . $weekEnd->format('d M Y');
+        $periodLabel = $weekStart->locale('id')->translatedFormat('d M') . ' - ' . $weekEnd->locale('id')->translatedFormat('d M Y');
 
         $insightService = new SpendingInsightService($tenant->id);
         $insights = $insightService->generateDashboardInsights();
@@ -410,9 +412,9 @@ class DashboardController extends Controller
                 'period_start' => $cashflow->period_start,
                 'period_end' => $cashflow->period_end,
                 // Comparison with previous period
-                'income_change' => round($incomeChange, 1),
-                'expense_change' => round($expenseChange, 1),
-                'net_change' => round($netChange, 1),
+                'income_change' => $incomeChange === null ? null : round($incomeChange, 1),
+                'expense_change' => $expenseChange === null ? null : round($expenseChange, 1),
+                'net_change' => $netChange === null ? null : round($netChange, 1),
                 'health_status' => $healthStatus,
                 'prev_total_income' => (float) $prevTotalIncome,
                 'prev_total_expense' => (float) $prevTotalExpense,
@@ -425,6 +427,8 @@ class DashboardController extends Controller
                     'amount' => (float) $transaction->amount,
                     'transaction_date' => $transaction->transaction_date->format('Y-m-d'),
                     'description' => $transaction->description ?? '',
+                    'balance_name' => $transaction->balance?->account_name,
+                    'created_at' => $transaction->created_at?->toISOString(),
                     'category' => $transaction->category ? [
                         'name' => $transaction->category->name,
                         'type' => $transaction->category->type,
@@ -443,9 +447,12 @@ class DashboardController extends Controller
             'balances' => $balances->map(function ($balance) {
                 return [
                     'account_name' => $balance->account_name,
+                    'account_type' => $balance->account_type,
+                    'is_default' => (bool) $balance->is_default,
                     'balance' => (float) $balance->balance,
                     'currency' => $balance->currency,
                     'balance_date' => $balance->balance_date ? $balance->balance_date->format('Y-m-d') : null,
+                    'updated_at' => $balance->updated_at?->toISOString(),
                 ];
             }),
             'chartData' => array_map(function ($item) {
@@ -461,7 +468,7 @@ class DashboardController extends Controller
             'period' => [
                 'start' => $startDate->format('Y-m-d'),
                 'end' => $endDate->format('Y-m-d'),
-                'label' => $startDate->format('F Y'),
+                'label' => $startDate->locale('id')->translatedFormat('F Y'),
             ],
             'hasWhatsAppNumber' => \App\Models\UserWhatsAppNumber::where('user_id', $request->user()->id)->exists(),
             // Subscription/Trial data
@@ -527,7 +534,7 @@ class DashboardController extends Controller
             $expense = $grouped[$key]['expense'] ?? 0;
 
             $data[] = [
-                'month' => $date->format('M Y'),
+                'month' => $date->locale('id')->translatedFormat('M Y'),
                 'income' => $income,
                 'expense' => $expense,
                 'net' => $income - $expense,
