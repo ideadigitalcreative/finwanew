@@ -167,6 +167,10 @@ Route::middleware(['auth', 'verified', 'superadmin'])->prefix('superadmin')->nam
     Route::get('/gemini-settings', [\App\Http\Controllers\SuperAdmin\GeminiSettingsController::class, 'index'])->name('gemini-settings.index');
     Route::put('/gemini-settings', [\App\Http\Controllers\SuperAdmin\GeminiSettingsController::class, 'update'])->name('gemini-settings.update');
 
+    Route::get('/hybrid-llm-settings', [\App\Http\Controllers\SuperAdmin\HybridLLMSettingsController::class, 'index'])->name('hybrid-llm-settings.index');
+    Route::put('/hybrid-llm-settings', [\App\Http\Controllers\SuperAdmin\HybridLLMSettingsController::class, 'update'])->name('hybrid-llm-settings.update');
+    Route::post('/hybrid-llm-settings/test', [\App\Http\Controllers\SuperAdmin\HybridLLMSettingsController::class, 'test'])->name('hybrid-llm-settings.test');
+
     // WhatsApp Management (Super Admin)
     Route::prefix('whatsapp')->name('whatsapp.')->group(function () {
         Route::get('/', [\App\Http\Controllers\SuperAdmin\WhatsAppController::class, 'index'])->name('index');
@@ -276,6 +280,7 @@ Route::middleware(['auth', 'verified', 'tenant', 'subscription'])->group(functio
     Route::get('/hutang-piutang', [\App\Http\Controllers\DebtReceivableController::class, 'index'])->name('debt-receivable.index');
     Route::post('/hutang-piutang/store', [\App\Http\Controllers\DebtReceivableController::class, 'store'])->name('debt-receivable.store');
     Route::post('/hutang-piutang/settle', [\App\Http\Controllers\DebtReceivableController::class, 'settle'])->name('debt-receivable.settle');
+    Route::post('/hutang-piutang/{transaction}/cash-mode', [\App\Http\Controllers\DebtReceivableController::class, 'cashMode'])->name('debt-receivable.cash-mode');
 
     // Tabungan (Celengan Impian)
     Route::prefix('tabungan')->group(function () {

@@ -14,6 +14,9 @@ interface HistoryEntry {
     amount: number;
     effect: number;
     description: string;
+    record_only: boolean;
+    convertible: boolean;
+    credit_purchase: boolean;
 }
 
 interface Row {
@@ -32,6 +35,8 @@ interface RecentRow {
     category_type: string | null;
     category_name: string | null;
     counterparty: string | null;
+    record_only: boolean;
+    credit_purchase: boolean;
 }
 
 interface Summary {
@@ -111,6 +116,41 @@ const addKind = ref<'hutang' | 'piutang'>('hutang');
 const addCounterparty = ref('');
 const addAmount = ref('');
 const addSubmitting = ref(false);
+// true = uang benar-benar masuk/keluar dompet; false = hutang/piutang lama, hanya dicatat
+const addAffectsBalance = ref(true);
+
+type FlowRow = { type: string; record_only?: boolean; credit_purchase?: boolean };
+
+const flowLabel = (tx: FlowRow) =>
+    tx.credit_purchase ? 'Belanja kredit' : tx.record_only ? 'Dicatat' : tx.type === 'income' ? 'Masuk' : 'Keluar';
+
+const flowClass = (tx: FlowRow) =>
+    tx.record_only || tx.credit_purchase
+        ? 'bg-[#eae8e2] text-[#4d4634]'
+        : tx.type === 'income'
+          ? 'bg-[#51fac1]/20 text-[#006c4f]'
+          : 'bg-[#ffc9d0]/40 text-[#ad2c4f]';
+
+const modeSubmitting = ref<number | null>(null);
+
+const toggleCashMode = (e: HistoryEntry) => {
+    const toRecordOnly = !e.record_only;
+    const message = toRecordOnly
+        ? 'Jadikan hanya dicatat? Saldo dompet akan dikembalikan seperti sebelum transaksi ini.'
+        : 'Catat ke dompet utama? Saldo dompet utama akan berubah sebesar nominal ini.';
+    if (!window.confirm(message)) return;
+    modeSubmitting.value = e.id;
+    router.post(
+        `/hutang-piutang/${e.id}/cash-mode`,
+        { affects_balance: !toRecordOnly },
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                modeSubmitting.value = null;
+            },
+        },
+    );
+};
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -126,10 +166,12 @@ const submitAdd = () => {
             counterparty,
             amount,
             transaction_date: today(),
+            affects_balance: addAffectsBalance.value,
         },
         {
             onSuccess: () => {
                 addOpen.value = false;
+                addAffectsBalance.value = true;
                 addCounterparty.value = '';
                 addAmount.value = '';
             },
@@ -256,6 +298,20 @@ const submitSettle = () => {
                         {{ addSubmitting ? 'Menyimpan...' : 'Simpan' }}
                     </button>
                 </div>
+                <label class="flex cursor-pointer items-start gap-2 text-sm text-[#1b1c19]">
+                    <input
+                        v-model="addAffectsBalance"
+                        type="checkbox"
+                        class="mt-0.5 h-4 w-4 rounded border-[#eae8e2] text-[#725a00] focus:ring-[#ffd23f]"
+                    />
+                    <span>
+                        {{ addKind === 'hutang' ? 'Uangnya masuk ke dompet utama' : 'Uangnya keluar dari dompet utama' }}
+                        <span class="block text-xs text-[#4d4634]/60">
+                            Matikan untuk {{ addKind === 'hutang' ? 'hutang' : 'piutang' }} lama, paylater, atau kartu kredit —
+                            hanya dicatat, saldo dompet tidak berubah.
+                        </span>
+                    </span>
+                </label>
             </form>
 
             <!-- Ringkasan cepat mobile-first -->
@@ -284,13 +340,17 @@ const submitSettle = () => {
                     <span class="material-symbols-outlined text-xl text-[#725a00]">info</span>
                 </div>
                 <div class="min-w-0 text-sm text-[#4d4634]/60">
-                    <p class="font-semibold text-[#1b1c19]">Mode baca saja</p>
+                    <p class="font-semibold text-[#1b1c19]">Cara membaca</p>
                     <p class="mt-1 leading-relaxed text-[#4d4634]/60">
                         <span class="font-medium text-[#1b1c19]">Hutang:</span>
                         (+) terima pinjaman, (−) bayar hutang per pihak.
                         <span class="font-medium text-[#1b1c19]">Piutang:</span>
                         (+) kasih pinjam, (−) terima pelunasan. Nama pihak dari metadata atau pola
                         <span class="whitespace-nowrap">«dari / ke / sama»</span>.
+                        Label <span class="font-medium text-[#1b1c19]">Dicatat</span> = hutang/piutang lama atau paylater:
+                        masuk hitungan outstanding, tetapi tidak mengubah saldo dompet.
+                        <span class="font-medium text-[#1b1c19]">Belanja kredit</span> = belanja pakai paylater/kartu kredit:
+                        tercatat sebagai pengeluaran dan menambah hutang, dompet tidak berubah.
                     </p>
                 </div>
             </div>
@@ -518,6 +578,7 @@ const submitSettle = () => {
                                 <th class="px-5 py-2.5 font-medium">Jenis</th>
                                 <th class="px-5 py-2.5 text-right font-medium">Nominal</th>
                                 <th class="px-5 py-2.5 text-right font-medium">Saldo</th>
+                                <th class="px-5 py-2.5 text-right font-medium">Dompet</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -527,9 +588,9 @@ const submitSettle = () => {
                                 <td class="px-5 py-3">
                                     <span
                                         class="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-medium"
-                                        :class="e.type === 'income' ? 'bg-[#51fac1]/20 text-[#006c4f]' : 'bg-[#ffc9d0]/40 text-[#ad2c4f]'"
+                                        :class="flowClass(e)"
                                     >
-                                        {{ e.type === 'income' ? 'Masuk' : 'Keluar' }}
+                                        {{ flowLabel(e) }}
                                     </span>
                                 </td>
                                 <td class="whitespace-nowrap px-5 py-3 text-right tabular-nums text-[#1b1c19]">
@@ -540,6 +601,18 @@ const submitSettle = () => {
                                     :class="e.running > 0 ? 'text-[#ad2c4f]' : 'text-[#006c4f]'"
                                 >
                                     {{ formatCurrency(e.running) }}
+                                </td>
+                                <td class="whitespace-nowrap px-5 py-3 text-right">
+                                    <button
+                                        v-if="e.convertible"
+                                        type="button"
+                                        :disabled="modeSubmitting === e.id"
+                                        class="rounded-lg border border-[#eae8e2] px-2.5 py-1 text-xs font-medium text-[#4d4634] transition-colors hover:bg-[#f5f3ee] disabled:opacity-50"
+                                        @click="toggleCashMode(e)"
+                                    >
+                                        {{ e.record_only ? 'Catat ke dompet' : 'Jadikan hanya dicatat' }}
+                                    </button>
+                                    <span v-else class="text-xs text-[#4d4634]/40">—</span>
                                 </td>
                             </tr>
                         </tbody>
@@ -581,15 +654,12 @@ const submitSettle = () => {
                             <div class="flex shrink-0 flex-col items-end gap-1">
                                 <span
                                     class="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                                    :class="
-                                        tx.type === 'income'
-                                            ? 'bg-[#51fac1]/20 text-[#006c4f]'
-                                            : 'bg-[#ffc9d0]/40 text-[#ad2c4f]'
-                                    "
+                                    :class="flowClass(tx)"
                                 >
-                                    <span v-if="tx.type === 'income'" class="material-symbols-outlined text-sm">arrow_downward</span>
+                                    <span v-if="tx.record_only || tx.credit_purchase" class="material-symbols-outlined text-sm">edit_note</span>
+                                    <span v-else-if="tx.type === 'income'" class="material-symbols-outlined text-sm">arrow_downward</span>
                                     <span v-else class="material-symbols-outlined text-sm">arrow_upward</span>
-                                    {{ tx.type === 'income' ? 'Masuk' : 'Keluar' }}
+                                    {{ flowLabel(tx) }}
                                 </span>
                                 <p class="text-sm font-bold tabular-nums text-[#1b1c19]">
                                     {{ formatCurrency(tx.amount) }}
@@ -635,13 +705,9 @@ const submitSettle = () => {
                                 <td class="px-5 py-3">
                                     <span
                                         class="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-medium"
-                                        :class="
-                                            tx.type === 'income'
-                                                ? 'bg-[#51fac1]/20 text-[#006c4f]'
-                                                : 'bg-[#ffc9d0]/40 text-[#ad2c4f]'
-                                        "
+                                        :class="flowClass(tx)"
                                     >
-                                        {{ tx.type === 'income' ? 'Masuk' : 'Keluar' }}
+                                        {{ flowLabel(tx) }}
                                     </span>
                                 </td>
                                 <td class="whitespace-nowrap px-5 py-3 text-right tabular-nums font-semibold text-[#1b1c19]">

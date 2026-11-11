@@ -35,7 +35,11 @@ class DebtReceivableLedgerService
         $rows = Transaction::query()
             ->where('tenant_id', $tenantId)
             ->where('status', 'confirmed')
-            ->whereHas('category', static fn ($q) => $q->whereIn('type', $types))
+            ->where(static function ($q) use ($types) {
+                $q->whereHas('category', static fn ($c) => $c->whereIn('type', $types))
+                    // Belanja pakai paylater/kartu kredit: kategori belanja biasa, tapi menambah hutang
+                    ->orWhere('metadata->credit_purchase', true);
+            })
             ->with(['category:id,type,name'])
             ->orderByDesc('transaction_date')
             ->orderByDesc('id')
@@ -53,6 +57,17 @@ class DebtReceivableLedgerService
             ['label' => $label, 'key' => $key] = $this->counterpartyLabelAndKey($tx);
 
             $amount = (float) $tx->amount;
+
+            // Belanja pakai paylater/kartu kredit → hutang ke fasilitas naik
+            if ($tx->isCreditPurchase() && ! in_array($catType, $types, true)) {
+                if (! isset($hutang[$key])) {
+                    $hutang[$key] = ['counterparty' => $label, 'counterparty_normalized' => $key, 'outstanding' => 0.0, 'history' => []];
+                }
+                $hutang[$key]['outstanding'] += $amount;
+                $hutang[$key]['history'][] = $this->historyEntry($tx, 1);
+
+                continue;
+            }
 
             if (in_array($catType, self::HUTANG_CATEGORY_TYPES, true)) {
                 if (! isset($hutang[$key])) {
@@ -103,6 +118,8 @@ class DebtReceivableLedgerService
                 'category_type' => $tx->category?->type,
                 'category_name' => $tx->category?->name,
                 'counterparty' => $resolved['label'] === 'Tanpa nama' ? null : $resolved['label'],
+                'record_only' => $tx->isDebtRecordOnly(),
+                'credit_purchase' => $tx->isCreditPurchase(),
             ];
         })->values()->all();
 
@@ -111,6 +128,18 @@ class DebtReceivableLedgerService
             'piutang' => $piutangList,
             'recent' => $recent,
         ];
+    }
+
+    /** Sisa hutang ke satu pihak (kunci = counterparty_normalized). */
+    public function hutangOutstanding(int $tenantId, string $counterpartyKey): float
+    {
+        foreach ($this->summarize($tenantId, 0)['hutang'] as $row) {
+            if ($row['counterparty_normalized'] === $counterpartyKey) {
+                return (float) $row['outstanding'];
+            }
+        }
+
+        return 0.0;
     }
 
     /**
@@ -150,6 +179,12 @@ class DebtReceivableLedgerService
             'amount' => (float) $tx->amount,
             'effect' => $effect,
             'description' => $tx->description,
+            // Hanya dicatat (hutang lama/paylater): saldo dompet tidak berubah
+            'record_only' => $tx->isDebtRecordOnly(),
+            // Pencatatan hutang/piutang baru (bukan pelunasan) → bisa diubah modenya
+            'convertible' => DebtCashMode::isNewDebtCategory($tx->category?->type),
+            // Belanja pakai paylater/kartu kredit (pengeluaran, dompet tidak berubah)
+            'credit_purchase' => $tx->isCreditPurchase(),
         ];
     }
 

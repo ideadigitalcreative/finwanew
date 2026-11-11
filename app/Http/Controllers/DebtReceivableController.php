@@ -6,6 +6,8 @@ use App\Models\Category;
 use App\Models\Transaction;
 use App\Services\BalanceService;
 use App\Services\Category\CategoryManagerService;
+use App\Services\DebtReceivable\CreditFacility;
+use App\Services\DebtReceivable\DebtCashMode;
 use App\Services\DebtReceivable\DebtReceivableLedgerService;
 use App\Services\SubscriptionLimitService;
 use Illuminate\Http\RedirectResponse;
@@ -39,11 +41,43 @@ class DebtReceivableController extends Controller
             'amount' => 'required|numeric|min:1',
             'transaction_date' => 'nullable|date',
             'description' => 'nullable|string|max:255',
+            // false = hutang/piutang lama / paylater: hanya dicatat, saldo dompet tidak berubah
+            'affects_balance' => 'nullable|boolean',
         ]);
 
         $flow = $validated['kind'] === 'hutang' ? 'catat_hutang' : 'catat_piutang';
 
         return $this->persistDebtTransaction($request, $flow, $validated, 'debt_manual');
+    }
+
+    /**
+     * Ubah hutang/piutang yang sudah tercatat: ikut menggerakkan saldo dompet
+     * atau hanya dicatat. Saldo dikoreksi otomatis lewat TransactionLedger.
+     */
+    public function cashMode(Request $request, Transaction $transaction): RedirectResponse
+    {
+        $tenantId = (int) ($request->tenant_id ?? session('current_tenant_id') ?? $request->user()->tenant_id);
+        if ((int) $transaction->tenant_id !== $tenantId) {
+            abort(403);
+        }
+
+        $validated = $request->validate(['affects_balance' => 'required|boolean']);
+        $affectsBalance = (bool) $validated['affects_balance'];
+
+        $transaction->load('category');
+        $balance = $affectsBalance ? app(BalanceService::class)->getDefaultBalance($tenantId) : null;
+        if ($affectsBalance && ! $balance) {
+            return redirect()->back()->with('error', 'Belum ada dompet aktif.');
+        }
+
+        $changed = DebtCashMode::convert($transaction, $affectsBalance, $balance, ['via' => 'dashboard', 'user_id' => $request->user()?->id]);
+        if (! $changed) {
+            return redirect()->back()->with('error', 'Transaksi ini tidak bisa diubah.');
+        }
+
+        return redirect()->back()->with('success', $affectsBalance
+            ? "Dicatat ke dompet {$balance->account_name}. Saldo disesuaikan."
+            : 'Diubah menjadi hanya dicatat. Saldo dompet dikembalikan.');
     }
 
     /**
@@ -94,13 +128,24 @@ class DebtReceivableController extends Controller
             return redirect()->back()->with('error', 'Kategori hutang/piutang tidak ditemukan.');
         }
 
-        $balance = app(BalanceService::class)->getDefaultBalance($tenantId);
+        // Hanya pencatatan hutang/piutang BARU yang boleh "hanya dicatat"; pelunasan selalu lewat dompet
+        $recordOnly = in_array($flow, ['catat_hutang', 'catat_piutang'], true)
+            && array_key_exists('affects_balance', $validated)
+            && $validated['affects_balance'] !== null
+            && ! (bool) $validated['affects_balance'];
+
+        $balance = $recordOnly ? null : app(BalanceService::class)->getDefaultBalance($tenantId);
 
         $counterparty = trim($validated['counterparty']);
         $counterpartyNormalized = trim($validated['counterparty_normalized'] ?? '');
         if ($counterpartyNormalized === '') {
             $counterpartyNormalized = mb_strtolower(preg_replace('/\s+/u', ' ', $counterparty));
         }
+
+        // Bayar tagihan paylater/kartu kredit yang belanjanya sudah tercatat sebagai
+        // pengeluaran: dompet berkurang, tapi tidak dihitung pengeluaran lagi.
+        $creditRepayment = $flow === 'bayar_hutang'
+            && CreditFacility::purchaseOutstanding($tenantId, $counterpartyNormalized) > 0;
 
         $description = trim($validated['description'] ?? '');
         if ($description === '') {
@@ -113,32 +158,28 @@ class DebtReceivableController extends Controller
             $description = $desc[$flow];
         }
 
-        $transaction = Transaction::create([
+        // Catat + saldo dalam satu DB transaction (TransactionLedger)
+        $transaction = app(\App\Services\Ledger\TransactionLedger::class)->record([
             'tenant_id' => $tenantId,
             'category_id' => $category->id,
             'balance_id' => $balance?->id,
-            'type' => $cfg['type'],
+            'type' => $recordOnly
+                ? DebtCashMode::recordOnlyType($cfg['category_type'])
+                : ($creditRepayment ? 'debit_internal' : $cfg['type']),
             'amount' => $validated['amount'],
             'transaction_date' => $validated['transaction_date'] ?? now()->toDateString(),
             'source' => $source,
             'description' => $description,
             'status' => 'confirmed',
             'confidence_score' => 1.0,
-            'metadata' => [
+            'metadata' => array_merge([
                 'counterparty' => $counterparty,
                 'counterparty_normalized' => $counterpartyNormalized,
                 'debt_flow' => $flow,
-            ],
+            ], $recordOnly ? ['kind' => Transaction::KIND_DEBT_RECORD_ONLY] : [],
+                $creditRepayment ? ['kind' => Transaction::KIND_CREDIT_REPAYMENT] : []),
         ]);
 
-        if ($balance) {
-            if ($cfg['type'] === 'income') {
-                $balance->increment('balance', $transaction->amount);
-            } else {
-                $balance->decrement('balance', $transaction->amount);
-            }
-        }
-
-        return redirect()->back()->with('success', $cfg['msg']);
+        return redirect()->back()->with('success', $cfg['msg'].($recordOnly ? ' Saldo dompet tidak berubah.' : ''));
     }
 }

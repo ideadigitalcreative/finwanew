@@ -2,6 +2,7 @@
 
 namespace App\Services\Transaction;
 
+use App\Helpers\KeywordNormalizer;
 use App\Models\Balance;
 use App\Models\Message;
 use App\Models\Transaction;
@@ -146,13 +147,35 @@ class TransactionConfirmationService
             $transaction->load('category');
             $category = $transaction->category->name ?? 'Lainnya';
             $categoryIcon = $transaction->category->icon ?? '📝';
-            $desc = $transaction->description ?? '-';
+            // Keterangan tanpa nominal — nominal sudah ada di baris "💵 Rp ..."
+            $desc = KeywordNormalizer::stripAmountFromDescription($transaction->description);
 
-            if ($transaction->type === 'income') {
+            // Hutang/piutang yang hanya dicatat: bukan pemasukan/pengeluaran, saldo tidak berubah
+            $debtRecordOnly = $transaction->isDebtRecordOnly();
+            $isNewCashDebt = ! $debtRecordOnly
+                && \App\Services\DebtReceivable\DebtCashMode::isNewDebtCategory($transaction->category->type ?? null);
+            if ($debtRecordOnly) {
+                $isHutang = ($transaction->category->type ?? null) === 'pendapatan_hutang';
+                $typeEmoji = $isHutang ? '🏦' : '🤝';
+                $typeLabel = $isHutang ? 'Hutang (hanya dicatat)' : 'Piutang (hanya dicatat)';
+            } elseif ($transaction->isCreditRepayment()) {
+                // Bayar tagihan paylater/kartu kredit: belanjanya sudah dihitung pengeluaran
+                $typeEmoji = '🏦';
+                $typeLabel = 'Bayar Hutang';
+            } elseif ($transaction->type === 'income') {
                 $totalIncome += $transaction->amount;
             } else {
                 $totalExpense += $transaction->amount;
             }
+            $creditParty = ($transaction->isCreditPurchase() || $transaction->isCreditRepayment())
+                ? (string) ($transaction->metadata['counterparty'] ?? '')
+                : '';
+            $creditOutstanding = $creditParty !== ''
+                ? app(\App\Services\DebtReceivable\DebtReceivableLedgerService::class)->hutangOutstanding(
+                    $transaction->tenant_id,
+                    (string) ($transaction->metadata['counterparty_normalized'] ?? mb_strtolower($creditParty))
+                )
+                : 0.0;
 
             // Format transaksi dengan kategori icon
             $reply .= "{$typeEmoji} *{$typeLabel}*\n";
@@ -160,7 +183,7 @@ class TransactionConfirmationService
             $reply .= "{$categoryIcon} {$category}";
             if ($transaction->merchant) {
                 $reply .= " • 🏪 {$transaction->merchant}";
-            } elseif ($desc && $desc !== '-' && strlen($desc) < 50) {
+            } elseif ($desc !== '' && strlen($desc) < 50) {
                 $reply .= " • _{$desc}_";
             }
 
@@ -172,10 +195,24 @@ class TransactionConfirmationService
             $reply .= "\n";
 
             // Show balance after transaction (for single transaction)
-            if ($count === 1 && $transaction->balance) {
+            if ($debtRecordOnly) {
+                $reply .= "👛 Saldo dompet *tidak berubah*\n";
+            } elseif ($transaction->isCreditPurchase() && $creditParty !== '') {
+                $reply .= "💳 Pakai {$creditParty} — saldo dompet *tidak berubah*\n";
+                $reply .= "🏦 Hutang {$creditParty}: Rp ".number_format($creditOutstanding, 0, ',', '.')."\n";
+            } elseif ($transaction->isCreditRepayment() && $transaction->balance) {
+                $reply .= "👛 Sisa saldo {$transaction->balance->account_name}: Rp ".number_format($transaction->balance->balance ?? 0, 0, ',', '.')."\n";
+                $reply .= "🏦 Sisa hutang {$creditParty}: Rp ".number_format(max(0, $creditOutstanding), 0, ',', '.')."\n";
+                $reply .= "_Tidak dihitung pengeluaran lagi — sudah tercatat saat belanja._\n";
+            } elseif ($count === 1 && $transaction->balance) {
                 $balanceName = $transaction->balance->account_name ?? 'Dompet Utama';
                 $currentBalance = number_format($transaction->balance->balance ?? 0, 0, ',', '.');
                 $reply .= "👛 Sisa saldo {$balanceName}: Rp {$currentBalance}\n";
+                if ($isNewCashDebt) {
+                    $noun = $transaction->type === 'income' ? 'Hutang' : 'Piutang';
+                    $moved = $transaction->type === 'income' ? 'masuk ke' : 'keluar dari';
+                    $reply .= "💡 _{$noun} lama (uang tidak {$moved} dompet)? Balas: *hanya dicatat*_\n";
+                }
             } elseif ($count === 1) {
                 // Show total balance if no specific balance linked
                 $totalBalance = Balance::where('tenant_id', $this->message->tenant_id)
@@ -257,6 +294,22 @@ class TransactionConfirmationService
         }
 
         $this->sendReply($reply);
+
+        // Fase 1 reply-edit: simpan pemetaan wa_message_id balasan ini → transaksi,
+        // agar user bisa mengedit transaksi tersebut dengan cara membalas pesannya.
+        $outgoingWaMessageId = Cache::get('wa_out_msgid:'.$this->message->message_id);
+        if ($outgoingWaMessageId) {
+            foreach ($transactions as $transaction) {
+                ReplyEditService::storeMapping(
+                    (int) $this->message->tenant_id,
+                    null,
+                    (string) $outgoingWaMessageId,
+                    (int) $transaction->id,
+                    $this->message->sender_id
+                );
+            }
+            Cache::forget('wa_out_msgid:'.$this->message->message_id);
+        }
     }
 
     /**

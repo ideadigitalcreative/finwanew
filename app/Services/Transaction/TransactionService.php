@@ -2,6 +2,7 @@
 
 namespace App\Services\Transaction;
 
+use App\Helpers\KeywordNormalizer;
 use App\Models\Balance;
 use App\Models\Category;
 use App\Models\Message;
@@ -13,6 +14,11 @@ use App\Services\Category\CategoryCorrectionService;
 use App\Services\Category\CategoryManagerService;
 use App\Services\ConversationContextService;
 use App\Services\DebtReceivable\CounterpartyExtractor;
+use App\Services\DebtReceivable\CreditFacility;
+use App\Services\DebtReceivable\DebtCashMode;
+use App\Services\DebtReceivable\DebtReceivableLedgerService;
+use App\Services\Ledger\TransactionLedger;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -120,6 +126,49 @@ class TransactionService
     protected function parseDateFromHeader(string $headerLine): string
     {
         return call_user_func($this->parseDateFromHeaderCallback, $headerLine);
+    }
+
+    /**
+     * Sanitize extracted transaction date.
+     * If the date is in the future but the message has no explicit date keyword,
+     * default to today — prevents dates embedded in descriptions (flight dates, order numbers)
+     * from being used as the transaction date.
+     */
+    protected function sanitizeTransactionDate(?string $extractedDate, string $messageText): string
+    {
+        // Kata waktu di pesan ("kemarin", "5 oktober", "2 minggu lalu") dibaca aturan lokal
+        // yang pasti — LLM sering mengabaikannya / mengembalikan tanggal hari ini.
+        $localDate = app(TransactionExtractorService::class)->extractDateFromText($messageText);
+        if ($localDate !== null) {
+            return $localDate;
+        }
+
+        if (! $extractedDate) {
+            return now()->toDateString();
+        }
+
+        $today = now()->toDateString();
+        $textLower = strtolower($messageText);
+
+        // If date is today or past, it's fine
+        if ($extractedDate <= $today) {
+            return $extractedDate;
+        }
+
+        // Date is in the future — only accept if message has explicit date keyword
+        $hasDateKeyword = preg_match('/\b(tgl|tanggal|date)\b/i', $textLower)
+            || preg_match('/\b(\d{1,2})\s+(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des)\b/i', $textLower);
+
+        if ($hasDateKeyword) {
+            return $extractedDate;
+        }
+
+        Log::info('Future date rejected (no explicit date keyword), defaulting to today', [
+            'extracted_date' => $extractedDate,
+            'message_preview' => mb_substr($messageText, 0, 100),
+        ]);
+
+        return $today;
     }
 
     /**
@@ -285,9 +334,29 @@ class TransactionService
                 'merchant' => $finwaEntities['merchant'] ?? null,
             ]);
 
+            // ── HYBRID (Hybrid.md Fase 2, §7-2b) ──
+            // Entities bertanda '_source=hybrid' sudah divalidasi ExtractionValidator
+            // (nominal dari rules deklarasi eksplisit > angka LLM, nominal beda → rules).
+            // Lewati tumpukan deteksi tipe di bawah (PRIORITY 0..FINAL) → langsung
+            // pembentukan $transaction. Tumpukan lama tetap utuh di cabang `else`
+            // untuk SEMUA panggilan non-hybrid (FinWa-AI, tanpa entities, force_type).
+            // Catatan: blok `else` sengaja tidak indent ulang agar diff minimal.
+            if (($finwaEntities['_source'] ?? null) === 'hybrid') {
+                $isIncome = (bool) ($finwaEntities['is_income'] ?? false);
+                $categoryType = $finwaEntities['category_type'] ?? null;
+                if ($categoryType === null || $categoryType === '') {
+                    $categoryType = $this->mapFinwaKategoriToCategoryType($finwaEntities['kategori'] ?? null, $isIncome);
+                }
+            } else {
+
             // PRIORITY 0: Check expense override patterns FIRST (overrides AI intent)
             // Read from config (single source of truth)
             $messageTextLower = strtolower($messageText);
+
+            // PRIORITY -1: Deklarasi eksplisit user di awal pesan
+            // (mis. "Pengeluaran mengganti motor ... 3jt") — menang atas AI intent,
+            // income keyword, dan income override.
+            $declaredType = \App\Services\Transaction\TransactionTypeDetector::detectDeclaredType($messageTextLower);
 
             // NEW: If AI already provided category_type and is_income, use them directly
             $aiCategoryType = $finwaEntities['category_type'] ?? null;
@@ -338,6 +407,13 @@ class TransactionService
                 }
             }
 
+            // Toleransi typo income keyword (mis. "pemasukann cash 150000")
+            // Berlaku walau AI salah intent — tapi tidak menimpa expense override / receipt.
+            if (! $isExpenseOverride && ! $isIncome && ! $isReceiptText
+                && \App\Services\Transaction\TransactionTypeDetector::detectFuzzyIncome($messageTextLower)) {
+                $isIncome = true;
+            }
+
             // Map FinWa-AI kategori to system category_type format
             $kategori = $finwaEntities['kategori'] ?? null;
 
@@ -373,9 +449,8 @@ class TransactionService
             // EXTRA_CATEGORY_OVERRIDES removed - now handled by CategoryInferenceService
             // GUARD: Validasi teks mengandung keyword hutang/piutang sebelum mempercayai intent AI
             // Mencegah misklasifikasi seperti "Nasi kuning Rp 32.000" → catat_piutang
-            $debtKeywordsGuard = ['hutang', 'utang', 'piutang', 'pinjam', 'pinjaman', 'pinjem', 'pijemin',
-                'kasih pinjam', 'bayar hutang', 'bayar utang', 'pelunasan', 'lunas', 'dipinjemin',
-                'balikin pinjaman', 'pinjamkan'];
+            // Satu sumber dengan routing ProcessIncomingMessage (config/finwa_query.php)
+            $debtKeywordsGuard = config('finwa_query.debt_keywords', []);
             $hasDebtKeyword = false;
             foreach ($debtKeywordsGuard as $dk) {
                 if (str_contains($messageTextLower, $dk)) {
@@ -417,7 +492,25 @@ class TransactionService
 
                     // GUARD: Ensure category_type prefix matches income/expense
                     // Prevents AI from returning 'pengeluaran_gaji' for income transactions
-                    if ($isIncome && str_starts_with($categoryType, 'pengeluaran_')) {
+                    // Pasangan tak mungkin (mis. "rani bayar utang" → income +
+                    // pengeluaran_bayar_hutang) dipetakan ke arah kas yang benar,
+                    // bukan sekadar ganti prefix (yang membuat kategori nyasar
+                    // "pendapatan_bayar_hutang").
+                    if ($isIncome && in_array($categoryType, ['pengeluaran_bayar_hutang', 'pengeluaran_piutang', 'pendapatan_bayar_hutang'], true)) {
+                        $correctedType = 'pendapatan_terima_piutang';
+                        Log::info('Correcting debt category_type for income', [
+                            'original' => $categoryType,
+                            'corrected' => $correctedType,
+                        ]);
+                        $categoryType = $correctedType;
+                    } elseif (! $isIncome && in_array($categoryType, ['pendapatan_hutang', 'pendapatan_terima_piutang'], true)) {
+                        $correctedType = 'pengeluaran_bayar_hutang';
+                        Log::info('Correcting debt category_type for expense', [
+                            'original' => $categoryType,
+                            'corrected' => $correctedType,
+                        ]);
+                        $categoryType = $correctedType;
+                    } elseif ($isIncome && str_starts_with($categoryType, 'pengeluaran_')) {
                         $correctedType = 'pendapatan_' . substr($categoryType, strlen('pengeluaran_'));
                         Log::info('Correcting category_type prefix for income', [
                             'original' => $categoryType,
@@ -436,6 +529,22 @@ class TransactionService
                     $categoryType = $this->mapFinwaKategoriToCategoryType($kategori, $isIncome);
                 }
             }
+
+            // FINAL: Deklarasi eksplisit user di awal pesan menang atas semua
+            // override di atas (AI intent, income keyword, income override, dst.)
+            if ($declaredType !== null) {
+                $isIncome = $declaredType === 'income';
+
+                // Selaraskan prefix category_type dengan tipe yang dideklarasikan
+                // (AI bisa saja sudah men-set 'pendapatan_transfer' dari kata "tf").
+                if (isset($categoryType) && $isIncome && str_starts_with($categoryType, 'pengeluaran_')) {
+                    $categoryType = 'pendapatan_'.substr($categoryType, strlen('pengeluaran_'));
+                } elseif (isset($categoryType) && ! $isIncome && str_starts_with($categoryType, 'pendapatan_')) {
+                    $categoryType = 'pengeluaran_'.substr($categoryType, strlen('pendapatan_'));
+                }
+            }
+
+            } // ← HYBRID: akhir cabang `else` (tumpukan deteksi tipe lama)
 
             $finwaDebtMeta = [];
             foreach (['lawan', 'pihak', 'counterparty', 'nama_pihak', 'nama_lawan'] as $entityKey) {
@@ -457,7 +566,7 @@ class TransactionService
                 'description' => $finwaEntities['catatan'] ?? $messageText,
                 'merchant' => $finwaEntities['merchant'],
                 'account_name' => $finwaEntities['account_name'] ?? null,
-                'transaction_date' => $finwaEntities['tanggal'] ?? now()->toDateString(),
+                'transaction_date' => $this->sanitizeTransactionDate($finwaEntities['tanggal'] ?? null, $messageText),
                 'confidence_score' => 0.95,
                 'source' => 'finwa_ai',
                 'metadata' => $finwaDebtMeta,
@@ -534,9 +643,12 @@ class TransactionService
         if ($result && $result['success'] && isset($result['data']['extracted_transactions'])) {
             $txCount = count($result['data']['extracted_transactions']);
 
+            // GUARD: kategori aliran hutang/piutang tidak boleh ditimpa inferensi generik
+            $debtCategoryTypes = ['pendapatan_hutang', 'pengeluaran_bayar_hutang', 'pengeluaran_piutang', 'pendapatan_terima_piutang'];
+
             if ($txCount === 1) {
                 $txText = $result['data']['extracted_transactions'][0]['description'] ?? $messageText;
-                $inference = $this->categoryInference->infer($txText);
+                $inference = $this->categoryInference->infer($txText, null, $this->message->tenant_id);
 
                 Log::info('CategoryInferenceService result', [
                     'message_id' => $this->message->id,
@@ -544,7 +656,20 @@ class TransactionService
                     'tx_count' => $txCount,
                 ]);
 
-                if ($inference['confidence'] >= 0.4) {
+                // GUARD: Jangan timpa kategori aliran hutang/piutang.
+                // Inferensi keyword generik bisa menimpa kategori spesifik
+                // (mis. "rani bayar utang 120rb" yang benar
+                // pendapatan_terima_piutang → dipaksa pengeluaran_bayar_hutang),
+                // membuat transaksi jatuh ke kategori nyasar / tidak masuk ledger.
+                $originalCategoryType = $result['data']['extracted_transactions'][0]['category_type'] ?? null;
+                $isDebtFlow = is_string($originalCategoryType) && in_array($originalCategoryType, $debtCategoryTypes, true);
+
+                if ($isDebtFlow) {
+                    Log::info('CategoryInference: Skipped for debt flow', [
+                        'message_id' => $this->message->id,
+                        'kept_category_type' => $originalCategoryType,
+                    ]);
+                } elseif ($inference['confidence'] >= 0.4) {
                     $oldCategoryType = $result['data']['extracted_transactions'][0]['category_type'] ?? 'null';
                     $result['data']['extracted_transactions'][0]['category_type'] = $inference['category_type'];
                     $result['data']['extracted_transactions'][0]['category'] = $inference['category_name'];
@@ -570,7 +695,13 @@ class TransactionService
                 $kept = 0;
                 foreach ($result['data']['extracted_transactions'] as $i => $tx) {
                     $txText = $tx['description'] ?? $messageText;
-                    $inference = $this->categoryInference->infer($txText);
+                    $inference = $this->categoryInference->infer($txText, null, $this->message->tenant_id);
+
+                    $oldCat = $tx['category_type'] ?? null;
+                    if (is_string($oldCat) && in_array($oldCat, $debtCategoryTypes, true)) {
+                        $kept++;
+                        continue;
+                    }
 
                     if ($inference['confidence'] >= 0.4) {
                         $oldCategoryType = $tx['category_type'] ?? 'null';
@@ -634,13 +765,11 @@ class TransactionService
                 $this->sendReply('Berapa biayanya?');
 
                 // STORE PENDING TRANSACTION for follow-up
-                // NOTE: Sengaja TANPA senderId agar konsisten dengan ProcessIncomingMessage
-                // yang membuat/membaca context tanpa senderId (addContext & getPendingTransaction).
-                // Jika pakai senderId, getBaseQuery() memfilter entities->sender_id yang tidak
-                // pernah cocok karena context awal disimpan tanpa sender_id, sehingga pending
-                // tidak tersimpan dan follow-up nominal gagal dikenali.
+                // NOTE: Per-pengirim, konsisten dengan ProcessIncomingMessage yang kini
+                // membuat/membaca context DENGAN senderId (addContext & getPendingTransaction).
+                // Keduanya wajib sama; kalau tidak, pending tidak ketemu saat follow-up nominal.
                 try {
-                    $contextService = new ConversationContextService($this->message->tenant_id);
+                    $contextService = new ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
                     $type = $isIncomeKeyword ? 'income' : 'expense';
                     $contextService->storePendingTransaction($messageText, $detectedWord, $type);
                 } catch (\Exception $e) {
@@ -787,8 +916,10 @@ class TransactionService
         $forceCategoryType = $options['force_category_type'];
         $transactionDate = $options['transaction_date'] ?? now()->toDateString();
 
-        // Extract amount from the message text
-        $amount = $this->extractAmountFromText($messageText);
+        // Nominal yang sudah dibaca saat pertanyaan diajukan menang atas baca ulang dari teks
+        $amount = isset($options['amount']) && (float) $options['amount'] > 0
+            ? (float) $options['amount']
+            : $this->extractAmountFromText($messageText);
 
         // If amount is 0, try to extract from the full message using pattern matching
         if ($amount <= 0) {
@@ -821,11 +952,19 @@ class TransactionService
             'category' => null,
             'category_type' => $forceCategoryType,
             'description' => $messageText,
-            'account_name' => $this->extractAccountNameFromMessage($messageText),
+            // Dompet pilihan user dari pertanyaan bernomor menang atas tebakan dari teks
+            'account_name' => $options['account_name'] ?? $this->extractAccountNameFromMessage($messageText),
             'transaction_date' => $transactionDate,
             'confidence_score' => 0.95,
             'source' => 'ambiguous_confirmation',
         ];
+        // Jawaban "uangnya masuk dompet / hanya dicatat" untuk hutang-piutang
+        if (array_key_exists('debt_record_only', $options) && $options['debt_record_only'] !== null) {
+            $txData['debt_record_only'] = (bool) $options['debt_record_only'];
+        }
+        if (! empty($options['counterparty']) && is_string($options['counterparty'])) {
+            $txData['metadata'] = ['counterparty' => trim($options['counterparty'])];
+        }
 
         $transaction = $this->createTransaction($txData, false);
 
@@ -883,10 +1022,46 @@ class TransactionService
 
         // GUARD: Ensure category_type prefix matches transaction type
         // Catches ALL code paths (AI fast path, local extraction, etc.)
-        if ($txData['type'] === 'income' && isset($txData['category_type']) && str_starts_with($txData['category_type'], 'pengeluaran_')) {
-            $txData['category_type'] = 'pendapatan_' . substr($txData['category_type'], strlen('pengeluaran_'));
-        } elseif ($txData['type'] === 'expense' && isset($txData['category_type']) && str_starts_with($txData['category_type'], 'pendapatan_')) {
-            $txData['category_type'] = 'pengeluaran_' . substr($txData['category_type'], strlen('pendapatan_'));
+        // Khusus hutang/piutang: arah kas sudah ditentukan `type`, sedangkan
+        // kategori hasil inferensi bisa tertukar (mis. "baso bayar utang" →
+        // income + pengeluaran_bayar_hutang). Peta eksplisit agar tidak
+        // membuat kategori nyasar seperti "pendapatan_bayar_hutang".
+        if ($txData['type'] === 'income' && isset($txData['category_type'])) {
+            $txData['category_type'] = match ($txData['category_type']) {
+                'pengeluaran_bayar_hutang', 'pengeluaran_piutang' => 'pendapatan_terima_piutang',
+                default => str_starts_with($txData['category_type'], 'pengeluaran_')
+                    ? 'pendapatan_' . substr($txData['category_type'], strlen('pengeluaran_'))
+                    : $txData['category_type'],
+            };
+        } elseif ($txData['type'] === 'expense' && isset($txData['category_type'])) {
+            $txData['category_type'] = match ($txData['category_type']) {
+                'pendapatan_hutang', 'pendapatan_terima_piutang' => 'pengeluaran_bayar_hutang',
+                default => str_starts_with($txData['category_type'], 'pendapatan_')
+                    ? 'pengeluaran_' . substr($txData['category_type'], strlen('pendapatan_'))
+                    : $txData['category_type'],
+            };
+        }
+
+        // Hutang/piutang yang HANYA DICATAT (hutang lama, paylater, kartu kredit):
+        // tidak ada uang masuk/keluar dompet → tanpa dompet & bukan pemasukan/pengeluaran.
+        $debtRecordOnly = $this->isDebtRecordOnly($txData);
+        if ($debtRecordOnly) {
+            $txData['type'] = DebtCashMode::recordOnlyType($txData['category_type']);
+            $txData['account_name'] = null;
+            Log::info('Debt recorded without cash movement (record only)', [
+                'message_id' => $this->message->id,
+                'category_type' => $txData['category_type'],
+            ]);
+        }
+
+        // Paylater / kartu kredit:
+        //  - belanja pakai fasilitas → pengeluaran + hutang naik, dompet tidak berubah
+        //  - bayar tagihan → hutang turun; tidak dihitung pengeluaran lagi bila
+        //    belanjanya sudah tercatat sebagai pengeluaran
+        $creditPurchase = null;
+        $creditRepayment = false;
+        if (! $debtRecordOnly && $txData['type'] === 'expense') {
+            [$creditPurchase, $creditRepayment] = $this->applyCreditFacility($txData);
         }
 
         // Find category by type
@@ -972,7 +1147,10 @@ class TransactionService
         $accountName = $txData['account_name'] ?? null;
         $balance = null;
 
-        if ($accountName) {
+        if ($debtRecordOnly || $creditPurchase !== null) {
+            // Hanya dicatat / belanja pakai paylater: sengaja tidak ditautkan ke dompet
+            // mana pun (saldo tidak berubah)
+        } elseif ($accountName) {
             Log::info('Account name found in transaction', [
                 'tenant_id' => $this->message->tenant_id,
                 'account_name' => $accountName,
@@ -1042,14 +1220,7 @@ class TransactionService
         $debtCategoryTypes = ['pendapatan_hutang', 'pengeluaran_bayar_hutang', 'pengeluaran_piutang', 'pendapatan_terima_piutang'];
         $categoryTypeForDebt = $txData['category_type'] ?? null;
         if (is_string($categoryTypeForDebt) && in_array($categoryTypeForDebt, $debtCategoryTypes, true)) {
-            $cp = null;
-            if (isset($txMetadata['counterparty']) && is_string($txMetadata['counterparty'])) {
-                $cp = trim($txMetadata['counterparty']);
-            }
-            if ($cp === null || $cp === '') {
-                $cp = CounterpartyExtractor::extract($txData['description'] ?? '') ?? '';
-                $cp = trim((string) $cp);
-            }
+            $cp = $this->resolveDebtCounterparty($txData);
             if ($cp !== '') {
                 $txMetadata['counterparty'] = $cp;
                 $txMetadata['counterparty_normalized'] = mb_strtolower(preg_replace('/\s+/', ' ', $cp));
@@ -1060,6 +1231,19 @@ class TransactionService
                 'pengeluaran_piutang' => 'keluar_piutang',
                 'pendapatan_terima_piutang' => 'terima_piutang',
             };
+            if ($debtRecordOnly) {
+                $txMetadata['kind'] = Transaction::KIND_DEBT_RECORD_ONLY;
+            }
+            if ($creditRepayment) {
+                $txMetadata['kind'] = Transaction::KIND_CREDIT_REPAYMENT;
+            }
+        }
+
+        if ($creditPurchase !== null) {
+            $txMetadata['credit_purchase'] = true;
+            $txMetadata['counterparty'] = $creditPurchase;
+            $txMetadata['counterparty_normalized'] = CreditFacility::key($creditPurchase);
+            $txMetadata['debt_flow'] = 'belanja_kredit';
         }
 
         if ($isGroup) {
@@ -1069,7 +1253,8 @@ class TransactionService
             $txMetadata['author'] = $metadata['author'] ?? null;
         }
 
-        $transaction = Transaction::create([
+        // Catat + terapkan ke saldo dalam satu DB transaction (TransactionLedger)
+        $transaction = app(TransactionLedger::class)->record([
             'tenant_id' => $this->message->tenant_id,
             'category_id' => $category->id,
             'message_id' => $this->message->id,
@@ -1087,6 +1272,13 @@ class TransactionService
             'metadata' => $txMetadata,
         ]);
 
+        // Dispatch event notifikasi ke anggota grup
+        Log::info('Dispatching TransactionCreated event', [
+            'transaction_id' => $transaction->id,
+            'tenant_id' => $transaction->tenant_id ?? null,
+        ]);
+        event(new \App\Events\TransactionCreated($transaction));
+
         // Log transaction creation for debugging
         Log::info('Transaction created', [
             'transaction_id' => $transaction->id,
@@ -1103,11 +1295,6 @@ class TransactionService
             $contextService->storeLastTransactionId($transaction->id);
         } catch (\Exception $e) {
             Log::warning('Failed to store last transaction ID in context', ['error' => $e->getMessage()]);
-        }
-
-        // Auto-update balance if transaction is confirmed and has balance
-        if ($transaction->status === 'confirmed' && $transaction->balance_id) {
-            $balanceService->updateBalanceFromTransaction($transaction);
         }
 
         // Check budget alert for expenses
@@ -1142,6 +1329,91 @@ class TransactionService
         }
 
         return $transaction;
+    }
+
+    /**
+     * Nama pihak lawan untuk transaksi hutang/piutang; fasilitas kredit diseragamkan
+     * ("shopee paylater" → "SPayLater") agar teragregasi ke satu pihak.
+     */
+    protected function resolveDebtCounterparty(array $txData): string
+    {
+        $cp = trim((string) ($txData['metadata']['counterparty'] ?? ''));
+        if ($cp === '') {
+            $cp = trim((string) (CounterpartyExtractor::extract($txData['description'] ?? '') ?? ''));
+        }
+
+        return CreditFacility::canonical($cp !== '' ? $cp : (string) ($txData['description'] ?? '')) ?? $cp;
+    }
+
+    /**
+     * Kenali pemakaian paylater/kartu kredit pada sebuah pengeluaran dan sesuaikan $txData.
+     *
+     * @return array{0: string|null, 1: bool} [nama fasilitas bila ini belanja kredit, apakah pembayaran non-pengeluaran]
+     */
+    protected function applyCreditFacility(array &$txData): array
+    {
+        $tenantId = $this->message->tenant_id;
+        $debtTypes = ['pendapatan_hutang', 'pengeluaran_bayar_hutang', 'pengeluaran_piutang', 'pendapatan_terima_piutang'];
+        $isDebtCategory = in_array($txData['category_type'] ?? null, $debtTypes, true);
+
+        // Teks pesan asli hanya dipakai bila satu baris (pesan batch berisi banyak transaksi)
+        $content = (string) ($this->message->content ?? '');
+        $text = trim((str_contains($content, PHP_EOL) || str_contains($content, "\n") ? '' : $content).' '.($txData['description'] ?? '').' '.($txData['account_name'] ?? ''));
+        $use = CreditFacility::detectUse($text);
+
+        if ($use !== null && $use['mode'] === 'purchase' && ! $isDebtCategory) {
+            // Punya dompet bernama fasilitas itu → biarkan jadi transaksi dompet biasa
+            if (CreditFacility::hasWallet($tenantId, $use['name'])) {
+                return [null, false];
+            }
+            $txData['account_name'] = null;
+            Log::info('Credit purchase detected (expense + debt, wallet untouched)', [
+                'message_id' => $this->message->id,
+                'facility' => $use['name'],
+            ]);
+
+            return [$use['name'], false];
+        }
+
+        // "bayar spaylater 500rb" → bayar hutang, bila memang ada hutang ke fasilitas itu
+        if ($use !== null && $use['mode'] === 'repayment' && ! $isDebtCategory
+            && app(DebtReceivableLedgerService::class)->hutangOutstanding($tenantId, CreditFacility::key($use['name'])) > 0) {
+            $txData['category_type'] = 'pengeluaran_bayar_hutang';
+            $txData['metadata'] = array_merge($txData['metadata'] ?? [], ['counterparty' => $use['name']]);
+        }
+
+        if (($txData['category_type'] ?? null) === 'pengeluaran_bayar_hutang') {
+            $cp = $this->resolveDebtCounterparty($txData);
+            if ($cp !== '' && CreditFacility::purchaseOutstanding($tenantId, CreditFacility::key($cp)) > 0) {
+                // Belanjanya sudah dihitung pengeluaran → pembayaran hanya memindahkan uang keluar dompet
+                $txData['type'] = 'debit_internal';
+
+                return [null, true];
+            }
+        }
+
+        return [null, false];
+    }
+
+    /**
+     * Apakah pencatatan hutang/piutang baru ini hanya dicatat (tanpa menggerakkan saldo)?
+     * Pilihan eksplisit user (jawaban pertanyaan bernomor) menang atas tebakan dari teks.
+     */
+    protected function isDebtRecordOnly(array $txData): bool
+    {
+        if (! DebtCashMode::isNewDebtCategory($txData['category_type'] ?? null)) {
+            return false;
+        }
+        if (! in_array($txData['type'] ?? null, ['income', 'expense'], true)) {
+            return false;
+        }
+        if (array_key_exists('debt_record_only', $txData) && $txData['debt_record_only'] !== null) {
+            return (bool) $txData['debt_record_only'];
+        }
+
+        $text = trim(($this->message->content ?? '').' '.($txData['description'] ?? ''));
+
+        return DebtCashMode::detect($text) === DebtCashMode::RECORD_ONLY;
     }
 
     /**
@@ -1200,24 +1472,24 @@ class TransactionService
         }
 
         // 2. Create Transaction
-        $transaction = new Transaction;
-        $transaction->tenant_id = $this->message->tenant_id;
-        $transaction->balance_id = $balance->id;
-        $transaction->user_whatsapp_number_id = $this->resolveSenderWhatsAppNumberId();
-        $transaction->amount = $rawAmount;
-        $transaction->type = $type;
-        $transaction->category = $categoryType; // Use category_type for DB standard
-        $transaction->description = $description;
-        $transaction->transaction_date = $data['transaction_date'] ?? now()->toDateString();
-        $transaction->save();
-
-        // 3. Update Balance (column is `balance`, not current_balance)
-        if ($type === 'income') {
-            $balance->balance += $rawAmount;
-        } else {
-            $balance->balance -= $rawAmount;
-        }
-        $balance->save();
+        // 3. Simpan transaksi + update saldo dalam SATU DB transaction (TransactionLedger)
+        $categoryId = Category::where('tenant_id', $this->message->tenant_id)->where('type', $categoryType)->value('id')
+            ?? Category::where('tenant_id', $this->message->tenant_id)
+                ->where('type', $type === 'income' ? 'pendapatan_lainnya' : 'pengeluaran_lainnya')->value('id');
+        app(TransactionLedger::class)->record([
+            'tenant_id' => $this->message->tenant_id,
+            'balance_id' => $balance->id,
+            'category_id' => $categoryId,
+            'message_id' => $this->message->id,
+            'user_whatsapp_number_id' => $this->resolveSenderWhatsAppNumberId(),
+            'amount' => $rawAmount,
+            'type' => $type,
+            'description' => $description,
+            'transaction_date' => $data['transaction_date'] ?? now()->toDateString(),
+            'source' => $data['source'] ?? null,
+            'confidence_score' => $data['confidence_score'] ?? 0.9,
+        ]);
+        $balance->refresh();
 
         // 4. Send Confirmation
         $formattedAmount = 'Rp '.number_format($rawAmount, 0, ',', '.');
@@ -1234,10 +1506,13 @@ class TransactionService
         $isBackdated = $txDate !== now()->toDateString();
         $dateInfo = $isBackdated ? "\n📅 Tanggal: ".\Carbon\Carbon::parse($txDate)->translatedFormat('d F Y') : '';
 
+        // Keterangan tanpa nominal — nominal sudah ada di baris "💵 {$formattedAmount}"
+        $replyDesc = KeywordNormalizer::stripAmountFromDescription($description);
+
         $reply = "✅ Siap, Sudah Masuk! ✅\n\n".
             "{$emoji} {$typeText}\n".
             "💵 {$formattedAmount}\n".
-            "{$categoryLabel} • {$description}".
+            "{$categoryLabel} • {$replyDesc}".
             $dateInfo."\n".
             "👛 Sisa saldo {$balance->account_name}: {$formattedBalance}";
 
@@ -1289,6 +1564,256 @@ class TransactionService
      * LINES: 1935-2001
      * MODIFICATION: None (structural move only)
      */
+    /**
+     * Perintah batal/hapus transaksi terakhir yang EKSPLISIT — seluruh pesan berupa
+     * perintah, bukan kalimat yang kebetulan mengandung kata "ga jadi"/"batalkan".
+     *   ✓ "batal", "undo", "ga jadi", "hapus yang tadi", "batalin aja", "salah catat"
+     *   ✗ "ga jadi beli baju, beli celana 150rb", "batalkan pesanan, kena fee 5rb"
+     */
+    public static function isUndoCommand(string $text): bool
+    {
+        $t = mb_strtolower(trim($text));
+        $t = trim((string) preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $t));
+        $t = (string) preg_replace('/\s+/u', ' ', $t);
+        if ($t === '') {
+            return false;
+        }
+
+        $filler = '(?:\s+(?:aja|saja|deh|dong|ya|yah|kak|min|yang|yg|tadi|barusan|terakhir|itu|ini|transaksi|catatan|tsb|tersebut|tolong))*';
+
+        return (bool) preg_match(
+            '/^(?:(?:tolong|mohon|min|kak)\s+)?(?:undo|batal|batalin|batalkan|cancel|hapus|hapusin|delete|ga\s?jadi|gak\s?jadi|nggak\s?jadi|ngga\s?jadi|engga\s?jadi|enggak\s?jadi|tidak\s?jadi|gajadi)'.$filler.'$/u',
+            $t
+        ) || (bool) preg_match(
+            '/^(?:(?:yang|yg)\s+)?(?:tadi|barusan)\s+salah(?:\s+(?:catat|input|ketik))?'.$filler.'$|^salah\s+(?:catat|input|ketik)'.$filler.'$/u',
+            $t
+        );
+    }
+
+    /**
+     * Batasi ke transaksi MILIK PENGIRIM bila akun dipakai beberapa nomor
+     * (keluarga / pasangan / tim) — agar "batal" dari istri tidak menghapus
+     * transaksi suami. Akun 1 nomor: tanpa batasan (perilaku lama).
+     */
+    protected function scopeToSender($query)
+    {
+        // Saldo dasar rekonsiliasi bukan transaksi user — tidak pernah jadi target hapus/edit
+        $query->where(fn ($q) => $q->whereNull('source')->orWhere('source', '!=', Transaction::KIND_RECONCILE_BASELINE));
+
+        $activeNumbers = \App\Models\UserWhatsAppNumber::where('tenant_id', $this->message->tenant_id)
+            ->where('is_active', true)
+            ->count();
+        if ($activeNumbers <= 1) {
+            return $query;
+        }
+
+        $numberId = $this->resolveSenderWhatsAppNumberId();
+
+        return $numberId ? $query->where('user_whatsapp_number_id', $numberId) : $query;
+    }
+
+    /**
+     * Target hapus/ubah via keyword: transaksi bertanggal hari ini ATAU dicatat
+     * hari ini. "Pengeluaran 22 Oktober …" yang dikirim 26 Oktober bertanggal mundur,
+     * tapi tetap harus bisa langsung dihapus/diubah dengan "hapus laundry baju".
+     */
+    protected function todayOrRecordedToday(): \Closure
+    {
+        return fn ($q) => $q->whereDate('transaction_date', today())->orWhereDate('created_at', today());
+    }
+
+    /**
+     * Kunci konfirmasi hapus untuk SEMUA identitas pengirim (LID & nomor HP orang yang
+     * sama). Dulu hanya digit sender_id: jawaban "ya" yang datang lewat LID tidak
+     * menemukan konfirmasinya.
+     *
+     * @return list<string>
+     */
+    protected function pendingDeleteKeys(): array
+    {
+        return array_map(
+            fn (string $identity) => 'pending_delete:'.$this->message->tenant_id.':'.$identity,
+            \App\Support\SenderIdentity::keys($this->message, $this->getAttributionSenderId())
+        );
+    }
+
+    private function forgetPendingDelete(): void
+    {
+        foreach ($this->pendingDeleteKeys() as $key) {
+            Cache::forget($key);
+        }
+    }
+
+    /**
+     * Tampilkan transaksi yang akan dihapus & minta konfirmasi Ya/Tidak (5 menit).
+     * Hapus tidak pernah langsung terjadi tanpa persetujuan user.
+     */
+    protected function requestDeleteConfirmation(Transaction $transaction): void
+    {
+        foreach ($this->pendingDeleteKeys() as $key) {
+            Cache::put($key, ['transaction_id' => $transaction->id], now()->addMinutes(5));
+        }
+
+        $transaction->loadMissing('category');
+        [$emoji, $label] = $this->transactionTypeLabel($transaction);
+        $desc = KeywordNormalizer::stripAmountFromDescription($transaction->description) ?: '-';
+
+        $this->sendReply(
+            "🗑️ *Hapus transaksi ini?*\n\n".
+            "{$emoji} *{$label}* · Rp ".number_format((float) $transaction->amount, 0, ',', '.')."\n".
+            "📝 {$desc}\n".
+            '📁 '.($transaction->category->name ?? 'Lainnya').' · 📅 '.$transaction->transaction_date->format('d M Y')."\n\n".
+            'Balas *Ya* untuk menghapus, atau *Tidak* untuk membatalkan.'
+        );
+    }
+
+    /**
+     * Jawaban atas konfirmasi hapus. true bila pesan adalah jawaban (sudah ditangani).
+     * Pesan lain membatalkan konfirmasi & diproses normal.
+     */
+    public function handlePendingDeleteReply(string $reply): bool
+    {
+        $pending = null;
+        foreach ($this->pendingDeleteKeys() as $key) {
+            $pending = Cache::get($key);
+            if (is_array($pending)) {
+                break;
+            }
+        }
+        if (! is_array($pending)) {
+            return false;
+        }
+
+        $answer = trim((string) preg_replace('/[^\p{L}\s]/u', '', mb_strtolower(trim($reply))));
+
+        if (preg_match('/^(?:ya|y|iya|iyaa|yaa|ok|oke|okay|hapus|yakin|lanjut|betul|benar|setuju|yes|gas|sip)(?:\s+(?:hapus|aja|deh|dong|kak|min|yakin))*$/u', $answer)) {
+            $this->forgetPendingDelete();
+            $transaction = Transaction::where('tenant_id', $this->message->tenant_id)->find($pending['transaction_id'] ?? 0);
+            if (! $transaction) {
+                $this->sendReply('ℹ️ Transaksi tersebut sudah tidak ada.');
+
+                return true;
+            }
+            $this->deleteTransactionNow($transaction, 'pending_delete_confirmed');
+
+            return true;
+        }
+
+        if (preg_match('/^(?:tidak|tdk|gak|ga|nggak|ngga|enggak|engga|no|n|batal|batalkan|jangan|cancel|nanti|skip)(?:\s+(?:jadi|usah|dulu|aja|deh|dihapus|hapus|kak|min))*$/u', $answer)) {
+            $this->forgetPendingDelete();
+            $this->sendReply('👍 Oke, transaksi *tidak jadi* dihapus.');
+
+            return true;
+        }
+
+        // Pesan lain → konfirmasi kedaluwarsa, lanjutkan alur normal
+        $this->forgetPendingDelete();
+
+        return false;
+    }
+
+    /** @return array{0: string, 1: string} */
+    private function transactionTypeLabel(Transaction $transaction): array
+    {
+        // Hutang/piutang yang hanya dicatat memakai jenis internal, tapi bukan transfer
+        if ($transaction->isDebtRecordOnly()) {
+            return $transaction->type === 'kredit_internal'
+                ? ['🏦', 'Hutang (hanya dicatat)']
+                : ['🤝', 'Piutang (hanya dicatat)'];
+        }
+        if ($transaction->isCreditRepayment()) {
+            return ['🏦', 'Bayar Hutang'];
+        }
+
+        return match ($transaction->type) {
+            'income' => ['💰', 'Pemasukan'],
+            'expense' => ['💸', 'Pengeluaran'],
+            'debit_internal', 'kredit_internal' => ['🔄', 'Transfer Internal'],
+            default => ['📝', 'Transaksi'],
+        };
+    }
+
+    /**
+     * Hapus transaksi + kembalikan saldo dompetnya, lalu kirim konfirmasi.
+     */
+    protected function deleteTransactionNow(Transaction $transaction, string $via): void
+    {
+        $transaction->loadMissing('category');
+        [$typeEmoji, $typeLabel] = $this->transactionTypeLabel($transaction);
+        $amount = number_format((float) $transaction->amount, 0, ',', '.');
+        $category = $transaction->category->name ?? 'Lainnya';
+        $desc = KeywordNormalizer::stripAmountFromDescription($transaction->description) ?: '-';
+        $date = $transaction->transaction_date->format('d M Y');
+
+        // Soft delete + kembalikan saldo (pasangan transfer ikut) — bisa dipulihkan: "kembalikan"
+        app(TransactionLedger::class)->delete($transaction);
+
+        Log::info('Transaction deleted via chat', [
+            'message_id' => $this->message->id,
+            'transaction_id' => $transaction->id,
+            'amount' => $transaction->amount,
+            'via' => $via,
+        ]);
+
+        $this->sendReply(
+            "🗑️ *Transaksi Dihapus!*\n\n".
+            "{$typeEmoji} *{$typeLabel}*\n".
+            "💵 Rp {$amount}\n".
+            "📁 {$category}\n".
+            "📝 {$desc}\n".
+            "📅 {$date}\n\n".
+            "✅ Transaksi berhasil dihapus dari catatan Anda.\n".
+            '↩️ Salah hapus? Ketik *kembalikan* (berlaku 30 hari).'
+        );
+    }
+
+    /**
+     * "kembalikan" / "pulihkan transaksi" / "batal hapus" — seluruh pesan berupa perintah.
+     */
+    public static function isRestoreCommand(string $text): bool
+    {
+        $t = mb_strtolower(trim((string) preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text)));
+        $t = (string) preg_replace('/\s+/u', ' ', $t);
+
+        return (bool) preg_match(
+            '/^(?:(?:tolong|mohon|min|kak)\s+)?(?:kembalikan|kembaliin|balikin|pulihkan|restore|undo\s+hapus|batal(?:kan|in)?\s+(?:hapus|penghapusan)|(?:ga|gak|nggak|tidak)\s?jadi\s+(?:hapus|dihapus))(?:\s+(?:transaksi|yang|yg|tadi|dihapus|terhapus|kehapus|terakhir|barusan|itu|aja|dong|ya|deh|kak|min|catatan))*$/u',
+            $t
+        );
+    }
+
+    /** Pulihkan transaksi milik pengirim yang terakhir dihapus (≤ 30 hari). */
+    public function handleRestoreTransaction(): void
+    {
+        $transaction = $this->scopeToSender(Transaction::onlyTrashed()->where('tenant_id', $this->message->tenant_id))
+            ->where('deleted_at', '>=', now()->subDays(30))
+            ->orderByDesc('deleted_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $transaction) {
+            $this->sendReply("ℹ️ Tidak ada transaksi terhapus yang bisa dikembalikan (30 hari terakhir).");
+
+            return;
+        }
+
+        app(TransactionLedger::class)->restore($transaction);
+        $transaction->refresh()->loadMissing(['category', 'balance']);
+
+        [$emoji, $label] = $this->transactionTypeLabel($transaction);
+        $desc = KeywordNormalizer::stripAmountFromDescription($transaction->description) ?: '-';
+        $balanceLine = $transaction->balance
+            ? "\n\n👛 Saldo {$transaction->balance->account_name}: Rp ".number_format((float) $transaction->balance->balance, 0, ',', '.')
+            : '';
+
+        $this->sendReply(
+            "♻️ *Transaksi Dikembalikan!*\n\n".
+            "{$emoji} *{$label}* · Rp ".number_format((float) $transaction->amount, 0, ',', '.')."\n".
+            "📝 {$desc}\n".
+            '📁 '.($transaction->category->name ?? 'Lainnya').' · 📅 '.$transaction->transaction_date->format('d M Y').
+            $balanceLine
+        );
+    }
+
     public function handleDeleteTransaction(): void
     {
         try {
@@ -1296,9 +1821,10 @@ class TransactionService
             $contextService = new ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
             $lastCorrection = $contextService->getLastBalanceCorrection();
 
-            // Find last transaction for this tenant
-            $lastTransaction = Transaction::where('tenant_id', $this->message->tenant_id)
+            // Transaksi terakhir MILIK PENGIRIM (akun keluarga: bukan milik anggota lain)
+            $lastTransaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
                 ->orderBy('created_at', 'desc')
+                ->orderBy('id', 'desc')
                 ->first();
 
             if ($lastCorrection) {
@@ -1320,68 +1846,7 @@ class TransactionService
                 return;
             }
 
-            // Load category
-            $lastTransaction->load('category');
-
-            // Format transaction info
-            $typeEmoji = $lastTransaction->type === 'income' ? '💰' : '💸';
-            $typeLabel = $lastTransaction->type === 'income' ? 'Pemasukan' : 'Pengeluaran';
-            $amount = number_format($lastTransaction->amount, 0, ',', '.');
-            $category = $lastTransaction->category->name ?? 'Lainnya';
-            $desc = $lastTransaction->description ?? '-';
-            $date = $lastTransaction->transaction_date->format('d M Y');
-
-            // Update balance - ALWAYS reverse the transaction amount
-            $balanceService = app(BalanceService::class);
-
-            if ($lastTransaction->balance_id) {
-                // Transaction has linked balance - use it
-                $balanceService->reverseBalanceUpdate($lastTransaction);
-            } else {
-                // Transaction has no linked balance - use default wallet
-                $defaultWallet = Balance::where('tenant_id', $this->message->tenant_id)
-                    ->where('is_default', true)
-                    ->where('is_active', true)
-                    ->first();
-
-                if ($defaultWallet) {
-                    // Manually reverse the balance
-                    if ($lastTransaction->type === 'income') {
-                        $defaultWallet->balance -= $lastTransaction->amount;
-                    } else {
-                        $defaultWallet->balance += $lastTransaction->amount;
-                    }
-                    $defaultWallet->save();
-
-                    Log::info('Balance reversed using default wallet (no balance_id)', [
-                        'wallet_id' => $defaultWallet->id,
-                        'wallet_name' => $defaultWallet->account_name,
-                        'transaction_id' => $lastTransaction->id,
-                        'amount' => $lastTransaction->amount,
-                        'type' => $lastTransaction->type,
-                        'new_balance' => $defaultWallet->balance,
-                    ]);
-                }
-            }
-
-            // Delete the transaction
-            $lastTransaction->delete();
-
-            Log::info('Transaction deleted via chat', [
-                'message_id' => $this->message->id,
-                'transaction_id' => $lastTransaction->id,
-                'amount' => $lastTransaction->amount,
-            ]);
-
-            $this->sendReply(
-                "🗑️ *Transaksi Dihapus!*\n\n".
-                "{$typeEmoji} *{$typeLabel}*\n".
-                "💵 Rp {$amount}\n".
-                "📁 {$category}\n".
-                "📝 {$desc}\n".
-                "📅 {$date}\n\n".
-                '✅ Transaksi berhasil dihapus dari catatan Anda.'
-            );
+            $this->requestDeleteConfirmation($lastTransaction);
 
         } catch (\Exception $e) {
             Log::error('Error deleting transaction', [
@@ -1415,9 +1880,15 @@ class TransactionService
                 return;
             }
             
-            $balance->balance = $oldBalance;
-            $balance->save();
-            
+            // Batalkan SELISIH koreksi (bukan menimpa ke nilai lama), agar
+            // transaksi yang tercatat setelah koreksi tidak ikut terhapus dari saldo.
+            app(TransactionLedger::class)->setBalanceTo(
+                $balance,
+                (float) $balance->fresh()->balance + (float) $oldBalance - (float) $newBalance,
+                Transaction::KIND_BALANCE_ADJUSTMENT,
+                ['message_id' => $this->message->id, 'description' => 'Batal ubah saldo '.$balance->account_name]
+            );
+
             $contextService->clearLastBalanceCorrection();
             
             $oldFormatted = number_format($oldBalance, 0, ',', '.');
@@ -1469,21 +1940,13 @@ class TransactionService
                 return;
             }
 
-            // Search for matching transaction today only
-            $transaction = Transaction::where('tenant_id', $this->message->tenant_id)
-                ->where('description', 'LIKE', '%'.$keyword.'%')
-                ->whereDate('transaction_date', today())
+            // Cari transaksi hari ini MILIK PENGIRIM (case-insensitive)
+            $transaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
+                ->whereRaw('LOWER(description) LIKE ?', ['%'.mb_strtolower($keyword).'%'])
+                ->where($this->todayOrRecordedToday())
                 ->orderBy('created_at', 'desc')
+                ->orderBy('id', 'desc')
                 ->first();
-
-            if (! $transaction) {
-                // Try case-insensitive search with lower()
-                $transaction = Transaction::where('tenant_id', $this->message->tenant_id)
-                    ->whereRaw('LOWER(description) LIKE ?', ['%'.strtolower($keyword).'%'])
-                    ->whereDate('transaction_date', today())
-                    ->orderBy('created_at', 'desc')
-                    ->first();
-            }
 
             if (! $transaction) {
                 $this->sendReply(
@@ -1495,67 +1958,7 @@ class TransactionService
                 return;
             }
 
-            // Load category
-            $transaction->load('category');
-
-            // Format transaction info
-            $typeEmoji = match ($transaction->type) {
-                'income' => '💰',
-                'expense' => '💸',
-                'debit_internal', 'kredit_internal' => '🔄',
-                default => '📝'
-            };
-            $typeLabel = match ($transaction->type) {
-                'income' => 'Pemasukan',
-                'expense' => 'Pengeluaran',
-                'debit_internal', 'kredit_internal' => 'Transfer Internal',
-                default => 'Transaksi'
-            };
-            $amount = number_format($transaction->amount, 0, ',', '.');
-            $category = $transaction->category->name ?? 'Lainnya';
-            $desc = $transaction->description ?? '-';
-            $date = $transaction->transaction_date->format('d M Y');
-
-            // Update balance - reverse the transaction amount
-            $balanceService = app(BalanceService::class);
-
-            if ($transaction->balance_id) {
-                $balanceService->reverseBalanceUpdate($transaction);
-            } else {
-                $defaultWallet = Balance::where('tenant_id', $this->message->tenant_id)
-                    ->where('is_default', true)
-                    ->where('is_active', true)
-                    ->first();
-
-                if ($defaultWallet) {
-                    if ($transaction->type === 'income') {
-                        $defaultWallet->balance -= $transaction->amount;
-                    } else {
-                        $defaultWallet->balance += $transaction->amount;
-                    }
-                    $defaultWallet->save();
-                }
-            }
-
-            // Delete the transaction
-            $transaction->delete();
-
-            Log::info('Transaction deleted by keyword via chat', [
-                'message_id' => $this->message->id,
-                'transaction_id' => $transaction->id,
-                'keyword' => $keyword,
-                'amount' => $transaction->amount,
-            ]);
-
-            $this->sendReply(
-                "🗑️ *Transaksi Dihapus!*\n\n".
-                "{$typeEmoji} *{$typeLabel}*\n".
-                "💵 Rp {$amount}\n".
-                "📁 {$category}\n".
-                "📝 {$desc}\n".
-                "📅 {$date}\n\n".
-                '✅ Transaksi berhasil dihapus.'
-            );
+            $this->requestDeleteConfirmation($transaction);
 
         } catch (\Exception $e) {
             Log::error('Error deleting transaction by keyword', [
@@ -1623,16 +2026,16 @@ class TransactionService
             }
 
             // Search for matching transaction today only
-            $transaction = Transaction::where('tenant_id', $this->message->tenant_id)
+            $transaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
                 ->where('description', 'LIKE', '%'.$keyword.'%')
-                ->whereDate('transaction_date', today())
+                ->where($this->todayOrRecordedToday())
                 ->orderBy('created_at', 'desc')
                 ->first();
 
             if (! $transaction) {
-                $transaction = Transaction::where('tenant_id', $this->message->tenant_id)
+                $transaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
                     ->whereRaw('LOWER(description) LIKE ?', ['%'.strtolower($keyword).'%'])
-                    ->whereDate('transaction_date', today())
+                    ->where($this->todayOrRecordedToday())
                     ->orderBy('created_at', 'desc')
                     ->first();
             }
@@ -1652,40 +2055,12 @@ class TransactionService
 
             // Store old values
             $oldAmount = $transaction->amount;
-            $typeEmoji = match ($transaction->type) {
-                'income' => '💰',
-                'expense' => '💸',
-                'debit_internal', 'kredit_internal' => '🔄',
-                default => '📝'
-            };
-            $typeLabel = match ($transaction->type) {
-                'income' => 'Pemasukan',
-                'expense' => 'Pengeluaran',
-                'debit_internal', 'kredit_internal' => 'Transfer Internal',
-                default => 'Transaksi'
-            };
+            [$typeEmoji, $typeLabel] = $this->transactionTypeLabel($transaction);
             $category = $transaction->category->name ?? 'Lainnya';
-            $desc = $transaction->description ?? '-';
+            $desc = KeywordNormalizer::stripAmountFromDescription($transaction->description) ?: '-';
 
-            // Update balance
-            $balanceService = app(BalanceService::class);
-            $amountDiff = $newAmount - $oldAmount;
-
-            if ($transaction->balance_id) {
-                $balance = Balance::find($transaction->balance_id);
-                if ($balance) {
-                    if ($transaction->type === 'income') {
-                        $balance->balance += $amountDiff;
-                    } else {
-                        $balance->balance -= $amountDiff;
-                    }
-                    $balance->save();
-                }
-            }
-
-            // Update transaction
-            $transaction->amount = $newAmount;
-            $transaction->save();
+            // Ubah nominal + koreksi saldo (TransactionLedger; pasangan transfer ikut)
+            app(TransactionLedger::class)->update($transaction, ['amount' => $newAmount]);
 
             Log::info('Transaction edited by keyword via chat', [
                 'message_id' => $this->message->id,
@@ -1734,7 +2109,14 @@ class TransactionService
             $today = now()->toDateString();
 
             // Try today first, then last 7 days
+            // Hanya transaksi terkonfirmasi (selaras dengan FinancialQueryService),
+            // pending/ditolak tidak boleh ikut dihitung di Masuk/Keluar/Net.
+            // Baris saldo dasar rekonsiliasi bukan transaksi user → tidak ditampilkan
+            $notBaseline = fn ($q) => $q->whereNull('source')->orWhere('source', '!=', Transaction::KIND_RECONCILE_BASELINE);
             $transactions = Transaction::where('tenant_id', $this->message->tenant_id)
+                ->where('status', 'confirmed')
+                ->where($notBaseline)
+                ->with('category')
                 ->whereDate('transaction_date', $today)
                 ->orderBy('created_at', 'desc')
                 ->limit(5)
@@ -1743,6 +2125,9 @@ class TransactionService
             if ($transactions->isEmpty()) {
                 $weekAgo = now()->subDays(7)->toDateString();
                 $transactions = Transaction::where('tenant_id', $this->message->tenant_id)
+                    ->where('status', 'confirmed')
+                    ->where($notBaseline)
+                    ->with('category')
                     ->whereDate('transaction_date', '>=', $weekAgo)
                     ->orderBy('transaction_date', 'desc')
                     ->orderBy('created_at', 'desc')
@@ -1762,18 +2147,17 @@ class TransactionService
             $totalExpense = 0;
 
             $reply = $title."\n";
+            $orderedIds = [];
 
-            foreach ($transactions as $tx) {
-                $tx->load('category');
+            foreach ($transactions as $i => $tx) {
                 $typeEmoji = match ($tx->type) {
                     'income' => '💰',
                     'expense' => '💸',
                     default => '📝'
                 };
                 $amount = number_format($tx->amount, 0, ',', '.');
-                $desc = $tx->description ?? '';
-                $desc = preg_replace('/\s*\d+[.,]?\d*\s*$/i', '', $desc);
-                $desc = trim($desc);
+                // Keterangan tanpa nominal — nominal sudah tampil di kolom tersendiri
+                $desc = KeywordNormalizer::stripAmountFromDescription($tx->description);
 
                 if ($tx->type === 'income') {
                     $totalIncome += $tx->amount;
@@ -1781,10 +2165,12 @@ class TransactionService
                     $totalExpense += $tx->amount;
                 }
 
-                // Compact: single line per item
-                $reply .= "{$typeEmoji} *Rp {$amount}*";
+                // Compact: single line per item, bernomor (Ops — balas angka → aksi)
+                $reply .= ($i + 1).". {$typeEmoji} *Rp {$amount}*";
                 if ($desc) $reply .= " - {$desc}";
                 $reply .= "\n";
+
+                $orderedIds[] = (int) $tx->id;
             }
 
             $reply .= "\n";
@@ -1792,8 +2178,29 @@ class TransactionService
             if ($totalExpense > 0) $reply .= '💸 Keluar: Rp '.number_format($totalExpense, 0, ',', '.')."\n";
             $net = $totalIncome - $totalExpense;
             $reply .= "📊 Net: Rp ".number_format($net, 0, ',', '.');
+            $reply .= "\n\n💡 Ketik *nomor* lalu perubahannya, mis. *3 ubah jadi 50rb* atau *3 hapus*";
 
             $this->sendReply($reply);
+
+            // Ops — simpan payload daftar:
+            // (a) kunci per pengirim → alur "balas nomor" (tanpa syarat flag,
+            //     agar tetap berfungsi walau ReplyEditService nonaktif);
+            // (b) kunci per messageId pesan keluar → untuk ReplyEditService.
+            if ($orderedIds !== []) {
+                // Di semua kunci identitas (LID ↔ nomor HP orang yang sama)
+                foreach ($this->listIndexKeys() as $listKey) {
+                    Cache::put($listKey, ['ids' => $orderedIds], now()->addSeconds((int) config('finwa_reply_edit.list_ttl', 3600)));
+                }
+
+                $waOut = Cache::get('wa_out_msgid:'.$this->message->message_id);
+                if ($waOut) {
+                    \App\Services\Transaction\ReplyEditService::storeListPayload(
+                        (int) $this->message->tenant_id,
+                        (string) $waOut,
+                        $orderedIds
+                    );
+                }
+            }
 
         } catch (\Exception $e) {
             Log::error('Error viewing transactions', [
@@ -1816,7 +2223,7 @@ class TransactionService
     {
         try {
             // Find last transaction for this tenant
-            $lastTransaction = Transaction::where('tenant_id', $this->message->tenant_id)
+            $lastTransaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
                 ->orderBy('created_at', 'desc')
                 ->first();
 
@@ -1973,10 +2380,11 @@ class TransactionService
                 return;
             }
 
-            // Save changes
-            $lastTransaction->save();
+            // Simpan perubahan + koreksi saldo (TransactionLedger)
+            $originalCategoryId = $lastTransaction->getOriginal('category_id');
+            app(TransactionLedger::class)->save($lastTransaction);
 
-            if ($newCategory && $newCategory->id != $lastTransaction->getOriginal('category_id')) {
+            if ($newCategory && $newCategory->id != $originalCategoryId) {
                 $correctionService = app(CategoryCorrectionService::class);
                 $correctionService->recordCorrection(
                     $this->message->tenant_id,
@@ -1986,51 +2394,6 @@ class TransactionService
                     $lastTransaction->merchant,
                     $lastTransaction->amount
                 );
-            }
-
-            // Update balance if amount changed
-            if ($newAmount !== null && $newAmount != $oldAmount) {
-                $diff = $newAmount - $oldAmount;
-
-                if ($lastTransaction->balance_id) {
-                    // Transaction has linked balance - use it
-                    $balance = Balance::find($lastTransaction->balance_id);
-                    if ($balance) {
-                        if ($lastTransaction->type === 'expense') {
-                            $balance->balance -= $diff; // More expense = less balance
-                        } else {
-                            $balance->balance += $diff; // More income = more balance
-                        }
-                        $balance->save();
-
-                        Log::info('Balance updated after edit (linked wallet)', [
-                            'wallet' => $balance->account_name,
-                            'diff' => $diff,
-                            'new_balance' => $balance->balance,
-                        ]);
-                    }
-                } else {
-                    // Transaction has no linked balance - use default wallet
-                    $defaultWallet = Balance::where('tenant_id', $this->message->tenant_id)
-                        ->where('is_default', true)
-                        ->where('is_active', true)
-                        ->first();
-
-                    if ($defaultWallet) {
-                        if ($lastTransaction->type === 'expense') {
-                            $defaultWallet->balance -= $diff;
-                        } else {
-                            $defaultWallet->balance += $diff;
-                        }
-                        $defaultWallet->save();
-
-                        Log::info('Balance updated after edit (default wallet)', [
-                            'wallet' => $defaultWallet->account_name,
-                            'diff' => $diff,
-                            'new_balance' => $defaultWallet->balance,
-                        ]);
-                    }
-                }
             }
 
             // Check Budget Alert
@@ -2127,7 +2490,7 @@ class TransactionService
             $expenseCount = Transaction::where('tenant_id', $tenantId)->where('type', 'expense')->count();
 
             // Delete all transactions only
-            Transaction::where('tenant_id', $tenantId)->delete();
+            Transaction::withTrashed()->where('tenant_id', $tenantId)->forceDelete(); // hapus permanen (reset)
 
             // RESET ALL WALLET BALANCES TO 0
             // Crucial to prevent stranded balance (GHOST MONEY)
@@ -2175,7 +2538,7 @@ class TransactionService
      */
     protected function resolveLastTransaction(): ?Transaction
     {
-        $transaction = Transaction::where('tenant_id', $this->message->tenant_id)
+        $transaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
             ->orderBy('created_at', 'desc')
             ->first();
 
@@ -2184,6 +2547,48 @@ class TransactionService
         }
 
         return $transaction;
+    }
+
+    /**
+     * "hanya dicatat" / "hutang lama": ubah hutang/piutang yang BARU SAJA dicatat
+     * (dan terlanjur menggerakkan saldo) menjadi hanya dicatat. Saldo dikembalikan.
+     */
+    public function handleDebtRecordOnlyCommand(): void
+    {
+        $transaction = $this->resolveLastTransaction();
+        $categoryType = $transaction?->category?->type;
+
+        if (! $transaction || ! DebtCashMode::isNewDebtCategory($categoryType)) {
+            $this->sendReply(
+                "⚠️ Transaksi terakhir bukan pencatatan hutang/piutang.\n\n".
+                "Untuk mencatat hutang lama tanpa mengubah saldo, tulis misalnya:\n".
+                '• *hutang lama ke Budi 2jt*'."\n".
+                '• *punya hutang SpayLater 2jt*'
+            );
+
+            return;
+        }
+
+        $noun = $categoryType === 'pendapatan_hutang' ? 'Hutang' : 'Piutang';
+        $amount = 'Rp '.number_format((float) $transaction->amount, 0, ',', '.');
+
+        if ($transaction->isDebtRecordOnly()) {
+            $this->sendReply("👍 {$noun} {$amount} memang sudah *hanya dicatat* — saldo dompet tidak berubah.");
+
+            return;
+        }
+
+        $balance = $transaction->balance;
+        DebtCashMode::convert($transaction, false, null, ['via' => 'whatsapp', 'message_id' => $this->message->id]);
+        $balance?->refresh();
+
+        $reply = "✅ *{$noun} {$amount} sekarang hanya dicatat*\n\n".
+            "{$noun} tetap ada di daftar hutang/piutang, tapi tidak dihitung sebagai uang ".
+            ($categoryType === 'pendapatan_hutang' ? 'masuk' : 'keluar').'.';
+        if ($balance) {
+            $reply .= "\n👛 Saldo {$balance->account_name} dikembalikan: Rp ".number_format((float) $balance->balance, 0, ',', '.');
+        }
+        $this->sendReply($reply);
     }
 
     /**
@@ -2279,7 +2684,23 @@ class TransactionService
                 return;
             }
 
-            $lastTransactionId = $contextService->getLastTransactionId();
+            // Ops — "balas nomor daftar": "2 ubah jadi 35rb".
+            // Nomor baris menunjuk transaksi target, BUKAN nominal.
+            $transaction = $this->resolveListIndexTarget($messageText);
+
+            if ($transaction) {
+                // Buang indeks dari teks → "35rb" jadi satu-satunya nominal
+                $messageText = ltrim(
+                    preg_replace('/^\s*\d{1,2}\s*[.)]?\s*/u', '', $messageText),
+                    ' ,'
+                );
+            }
+
+            $lastTransactionId = $transaction?->id;
+
+            if (! $transaction) {
+                $lastTransactionId = $contextService->getLastTransactionId();
+            }
 
             if (! $lastTransactionId) {
                 $this->sendReply(
@@ -2293,8 +2714,8 @@ class TransactionService
                 return;
             }
 
-            // Find the transaction
-            $transaction = Transaction::find($lastTransactionId);
+            // Find the transaction (sudah diresolusi dari daftar bila ada)
+            $transaction = $transaction ?: Transaction::find($lastTransactionId);
 
             if (! $transaction || $transaction->tenant_id !== $this->message->tenant_id) {
                 $this->sendReply(
@@ -2312,8 +2733,11 @@ class TransactionService
             $updates = [];
 
             // Pattern: number followed by rb/ribu/k/jt/juta
-            if (preg_match('/(\d+(?:[.,]\d+)?)\s*(rb|ribu|k|jt|juta|rbu)?/i', $textLower, $matches)) {
-                $number = (float) str_replace(',', '.', $matches[1]);
+            if (preg_match('/(\d+(?:[.,]\d+)*)\s*(rb|ribu|k|jt|juta|rbu)?/i', $textLower, $matches)) {
+                // "1.500.000" → 1500000 (dulu terbaca 1,5); "1,5" → 1.5 tetap
+                $number = preg_match('/^\d{1,3}(?:[.,]\d{3})+$/', $matches[1])
+                    ? (float) \App\Support\Rupiah::parse($matches[1])
+                    : (float) str_replace(',', '.', $matches[1]);
                 $suffix = strtolower($matches[2] ?? '');
 
                 if (in_array($suffix, ['rb', 'ribu', 'k', 'rbu'])) {
@@ -2335,10 +2759,16 @@ class TransactionService
 
             // Extract category update
             // "ganti kategori jadi hiburan", "pindahin ke makan", "masuk ke belanja"
-            if (preg_match('/(?:kategori|masuk|pindah(?:in)?|ubah|ganti)\s+(?:ke\s+|jadi\s+)?([a-zA-Z\s]+)/i', $textLower, $catMatches)) {
+            // \b wajib: tanpa itu "termasuk pengeluaran" ikut tertangkap lewat
+            // potongan "masuk" dan dibaca sebagai kategori bernama "pengeluaran".
+            if (preg_match('/\b(?:kategori|masuk|pindah(?:in)?|ubah|ganti)\s+(?:ke\s+|jadi\s+)?([a-zA-Z\s]+)/i', $textLower, $catMatches)) {
                 // Ignore "jadi 50rb" or "jadi rp"
                 $candidate = trim($catMatches[1]);
-                if (! preg_match('/^(\d+|rp|rupiah|tanggal|tgl|harga|nominal|kategori|tipe|type|transaksi|jumlah)/i', $candidate) && strlen($candidate) > 2) {
+                // Ops — tolak kata sambung/frasa umum: "jadi", "ke jadi", "menjadi",
+                // agar "35rb" tidak dianggap gagal-ubah-kategori jadi "jadi".
+                if (! preg_match('/^(\d+|rp|rupiah|tanggal|tgl|harga|nominal|kategori|tipe|type|transaksi|jumlah)/i', $candidate)
+                    && ! preg_match('/^(jadi|ke|menjadi|sama|dengan|yang|nominal|rupiah|rp|ke\b)/i', $candidate)
+                    && strlen($candidate) > 2) {
                     $newCategoryName = $candidate;
                 }
             }
@@ -2363,6 +2793,12 @@ class TransactionService
                 $typeCandidate2 = trim($typeMatch2[1] ?? '');
                 $newType = $typeChangeKeywords[$typeCandidate2] ?? null;
             }
+            // Koreksi arah tanpa kata sambung: "termasuk pengeluaran", "itu pemasukan".
+            // Hanya bila pesan tidak membawa nominal/kategori baru, supaya kalimat
+            // seperti "koreksi pengeluaran makan jadi 50rb" tidak ikut ganti tipe.
+            if (! $newType && ! $newAmount && ! $newCategoryName) {
+                $newType = self::detectBareTypeWord($textLower);
+            }
 
             if (! $newAmount && ! $newCategoryName && ! $newType) {
                 $this->sendReply(
@@ -2376,30 +2812,26 @@ class TransactionService
                 return;
             }
 
+            // Koreksi tipe saja padahal arahnya sudah benar → beri tahu, jangan
+            // balas "Dikoreksi" tanpa satu pun perubahan.
+            if ($newType && ! $newAmount && ! $newCategoryName && $newType === $transaction->type) {
+                $this->sendReply(
+                    '👍 Transaksi ini memang sudah tercatat sebagai *'
+                    .($newType === 'income' ? 'Pemasukan' : 'Pengeluaran')."*.\n\n"
+                    .'📝 '.($transaction->description ?? '-')
+                );
+
+                return;
+            }
+
             $replyMsg = "✅ *Transaksi Dikoreksi*\n\n";
 
             // Handle Amount Update
             if ($newAmount) {
                 $oldAmount = $transaction->amount;
 
-                // Update balance first (reverse old, apply new - handled by updateBalanceFromTransaction if we were creating, but here we update)
-                // Actually, simply updating transaction amount is not enough if balance triggers.
-                // We should reverse old adjustment and apply new.
-
-                if ($transaction->balance_id) {
-                    $balanceService = app(BalanceService::class);
-                    // Reverse OLD amount
-                    $balanceService->reverseBalanceUpdate($transaction);
-                }
-
-                $transaction->amount = $newAmount;
-                $transaction->save();
-
-                if ($transaction->balance_id) {
-                    $balanceService = app(BalanceService::class);
-                    // Apply NEW amount
-                    $balanceService->updateBalanceFromTransaction($transaction);
-                }
+                // Nominal + saldo + pasangan transfer (TransactionLedger)
+                app(TransactionLedger::class)->update($transaction, ['amount' => $newAmount]);
 
                 $replyMsg .= '💰 Nominal: ~'.number_format($oldAmount, 0, ',', '.').'~ ➝ *'.number_format($newAmount, 0, ',', '.')."*\n";
             }
@@ -2446,23 +2878,13 @@ class TransactionService
 
             // Handle Type Change (income ↔ expense)
             if ($newType && $newType !== $transaction->type) {
-                $balanceService = app(BalanceService::class);
                 $oldType = $transaction->type;
 
-                // 1. Batalkan efek tipe lama pada saldo
-                if ($transaction->balance_id) {
-                    $balanceService->reverseBalanceUpdate($transaction);
-                }
-
-                // 2. Ubah tipe + remap kategori agar prefix konsisten
-                $transaction->type = $newType;
-                $transaction->category_id = $this->remapCategoryForType($transaction, $newType);
-                $transaction->save();
-
-                // 3. Terapkan efek tipe baru pada saldo
-                if ($transaction->balance_id) {
-                    $balanceService->updateBalanceFromTransaction($transaction);
-                }
+                // Ubah tipe + remap kategori; saldo dikoreksi oleh TransactionLedger
+                app(TransactionLedger::class)->update($transaction, [
+                    'type' => $newType,
+                    'category_id' => $this->remapCategoryForType($transaction, $newType),
+                ]);
 
                 $typeLabel = fn (string $t) => $t === 'income' ? 'Pemasukan' : 'Pengeluaran';
                 $replyMsg .= "🔄 Tipe: ~{$typeLabel($oldType)}~ ➝ *{$typeLabel($newType)}*\n";
@@ -2525,6 +2947,143 @@ class TransactionService
         }
 
         return true;
+    }
+
+    /**
+     * Ops — baca pola "balas nomor": "2 ubah jadi 35rb", "2.", "2)".
+     *
+     * Hanya pola yang diawali angka 1-2 digit + kata perintah ("ubah/ganti/
+     * edit/jadi/ke/koreksi") yang dianggap indeks. "50rb" atau "20000"
+     * TANPA kata perintah tidak dianggap indeks.
+     */
+    public static function parseListIndex(string $text): ?int
+    {
+        if (! preg_match('/^\s*(\d{1,2})\s*[.)]?\s*(?=\S)/u', $text, $m)) {
+            return null;
+        }
+
+        $rest = trim(substr($text, strlen($m[0])));
+
+        // Sisa pesan harus memuat kata perintah perubahan
+        if (! preg_match('/\b(ubah|ganti|edit|koreksi|jadi|ke|menjadi|rubah|tolong)\b/i', $rest)) {
+            return null;
+        }
+
+        $n = (int) $m[1];
+
+        return $n >= 1 ? $n : null;
+    }
+
+    /**
+     * "1 hapus", "1. hapus aja", "hapus 1", "hapus no 1", "hapus nomor 1" → 1.
+     * Nomor merujuk daftar terakhir dari "lihat transaksi".
+     */
+    public static function parseListDeleteIndex(string $text): ?int
+    {
+        $t = mb_strtolower(trim($text));
+        $verb = '(?:hapus|hapusin|delete|del|buang|remove|dihapus)';
+        if (preg_match('/^(\d{1,2})\s*[.)]?\s*'.$verb.'(?:\s+(?:aja|saja|ya|dong|deh|transaksi|itu|ini|yang|yg))*\s*[.!]*$/u', $t, $m)
+            || preg_match('/^'.$verb.'\s+(?:transaksi\s+)?(?:no\.?|nomor|nomer|nmr|#)?\s*(\d{1,2})\s*[.!]*$/u', $t, $m)) {
+            $n = (int) $m[1];
+
+            return $n >= 1 ? $n : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Kunci daftar bernomor terakhir untuk SEMUA identitas pengirim (LID ↔ nomor HP).
+     *
+     * @return list<string>
+     */
+    protected function listIndexKeys(): array
+    {
+        return array_map(
+            fn (string $identity) => 'finwa_reply_list_idx:'.$this->message->tenant_id.':'.$identity,
+            \App\Support\SenderIdentity::keys($this->message, $this->getAttributionSenderId())
+        );
+    }
+
+    /** @return list<int> urutan ID transaksi pada daftar terakhir yang dilihat pengirim */
+    protected function listIndexIds(): array
+    {
+        foreach ($this->listIndexKeys() as $key) {
+            $payload = Cache::get($key);
+            if (is_array($payload) && ! empty($payload['ids'])) {
+                return array_values($payload['ids']);
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * "1 hapus" setelah "lihat transaksi" → konfirmasi hapus transaksi nomor 1 (Ya/Tidak).
+     */
+    public function handleListIndexDelete(int $n): void
+    {
+        $ids = $this->listIndexIds();
+        if ($ids === []) {
+            $this->sendReply("ℹ️ Daftar transaksi belum dibuka atau sudah kedaluwarsa.\n\nKetik *lihat transaksi* dulu, lalu *{$n} hapus*.");
+
+            return;
+        }
+        if (! isset($ids[$n - 1])) {
+            $this->sendReply("⚠️ Nomor *{$n}* tidak ada di daftar (1–".count($ids).').');
+
+            return;
+        }
+
+        $transaction = Transaction::withTrashed()->where('tenant_id', $this->message->tenant_id)->find($ids[$n - 1]);
+        if (! $transaction || $transaction->trashed()) {
+            $this->sendReply("ℹ️ Transaksi nomor *{$n}* sudah dihapus.\n\n↩️ Ketik *kembalikan* untuk memulihkannya.");
+
+            return;
+        }
+        if ($transaction->source === Transaction::KIND_RECONCILE_BASELINE) {
+            $this->sendReply('ℹ️ Baris saldo dasar (rekonsiliasi) tidak bisa dihapus.');
+
+            return;
+        }
+
+        $this->requestDeleteConfirmation($transaction);
+    }
+
+    /**
+     * Ops — resolusi target dari pesan "balas nomor" (daftar riwayat bernomor).
+     *
+     * @return Transaction|null null bila bukan balasan nomor / payload kedaluwarsa
+     */
+    protected function resolveListIndexTarget(string $messageText): ?Transaction
+    {
+        $n = self::parseListIndex($messageText);
+
+        if ($n === null) {
+            return null;
+        }
+
+        $ids = $this->listIndexIds();
+
+        if ($ids === [] || ! isset($ids[$n - 1])) {
+            return null; // nomor di luar daftar → biarkan flow lama memproses
+        }
+
+        $transaction = Transaction::where('tenant_id', $this->message->tenant_id)
+            ->where('id', $ids[$n - 1])
+            ->first();
+
+        if (! $transaction) {
+            return null;
+        }
+
+        Log::info('Balas nomor daftar → target transaksi', [
+            'message_id' => $this->message->id,
+            'index' => $n,
+            'transaction_id' => $transaction->id,
+        ]);
+
+        return $transaction;
     }
 
     /**
@@ -2635,23 +3194,41 @@ class TransactionService
     /**
      * Terapkan perubahan nominal dari jawaban ask-back.
      */
+    /**
+     * Nominal dari jawaban singkat user: "50rb" | "1,5jt" | "150.000" | "150000" | "50".
+     * Angka polos < 1000 tanpa satuan dianggap ribuan ("50" → 50.000);
+     * angka ≥ 1000 dipakai apa adanya ("150000" → 150.000, bukan 150 juta).
+     */
+    public static function parseAnswerAmount(string $text): ?int
+    {
+        return \App\Support\AmountParser::parseAnswer($text);
+    }
+
+    /**
+     * Koreksi nominal transaksi milik pengirim yang dicatat ≤ 24 jam lalu dengan nominal $old.
+     * true bila ada yang dikoreksi.
+     */
+    public function correctRecentAmount(int $old, int $new): bool
+    {
+        $transaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
+            ->where('amount', $old)
+            ->where('created_at', '>=', now()->subDay())
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+        if (! $transaction) {
+            return false;
+        }
+
+        $this->applyAmountChange($transaction, (string) $new);
+
+        return true;
+    }
+
     protected function applyAmountChange(Transaction $transaction, string $amountText): void
     {
         // Extract number dari teks (sama seperti di handleEditWithContext)
-        $textLower = strtolower(trim($amountText));
-        $newAmount = null;
-
-        if (preg_match('/(\d+(?:[.,]\d+)?)/', $textLower, $matches)) {
-            $number = (float) str_replace(',', '.', $matches[1]);
-
-            if (preg_match('/(?:jt|juta)/i', $textLower)) {
-                $newAmount = $number * 1000000;
-            } elseif (preg_match('/(?:rb|ribu)/i', $textLower)) {
-                $newAmount = $number * 1000;
-            } else {
-                $newAmount = $number * 1000; // Asumsi ribu
-            }
-        }
+        $newAmount = self::parseAnswerAmount($amountText);
 
         if (! $newAmount || $newAmount <= 0) {
             $this->sendReply("⚠️ Tidak bisa membaca nominal '{$amountText}'.\n\nContoh: _50rb_, _1,5jt_, _100000_.");
@@ -2660,18 +3237,8 @@ class TransactionService
 
         $oldAmount = $transaction->amount;
 
-        // Update saldo
-        $balanceService = app(BalanceService::class);
-        if ($transaction->balance_id) {
-            $balanceService->reverseBalanceUpdate($transaction);
-        }
-
-        $transaction->amount = $newAmount;
-        $transaction->save();
-
-        if ($transaction->balance_id) {
-            $balanceService->updateBalanceFromTransaction($transaction);
-        }
+        // Nominal + saldo (TransactionLedger)
+        app(TransactionLedger::class)->update($transaction, ['amount' => $newAmount]);
 
         $this->sendReply(
             "✅ *Nominal Diperbarui*\n\n".
@@ -2711,21 +3278,12 @@ class TransactionService
             return;
         }
 
-        // Terapkan perubahan tipe (dengan penyesuaian saldo)
-        $balanceService = app(BalanceService::class);
+        // Terapkan perubahan tipe (saldo dikoreksi oleh TransactionLedger)
         $oldType = $transaction->type;
-
-        if ($transaction->balance_id) {
-            $balanceService->reverseBalanceUpdate($transaction);
-        }
-
-        $transaction->type = $newType;
-        $transaction->category_id = $this->remapCategoryForType($transaction, $newType);
-        $transaction->save();
-
-        if ($transaction->balance_id) {
-            $balanceService->updateBalanceFromTransaction($transaction);
-        }
+        app(TransactionLedger::class)->update($transaction, [
+            'type' => $newType,
+            'category_id' => $this->remapCategoryForType($transaction, $newType),
+        ]);
 
         $typeLabel = fn (string $t) => $t === 'income' ? 'Pemasukan' : 'Pengeluaran';
         $this->sendReply(
@@ -2796,105 +3354,211 @@ class TransactionService
     }
 
     /**
+     * Ops — apakah ini hanya kata perintah (bukan deskripsi transaksi)?
+     * "ubah kategori ..." → keyword "ubah" → target = transaksi terakhir.
+     */
+    public static function isCommandOnlyKeyword(string $keyword): bool
+    {
+        $keyword = mb_strtolower(trim($keyword));
+
+        if ($keyword === '') {
+            return true;
+        }
+
+        $commands = [
+            'ubah', 'ganti', 'edit', 'rubah', 'revisi', 'koreksi', 'perbaiki',
+            'pindah', 'masuk', 'masukin', 'kategori', 'tolong', 'mohon', 'plis',
+            'ini', 'itu', 'yang', 'terakhir', 'baru', 'tadi', 'nomor',
+        ];
+
+        return in_array($keyword, $commands, true);
+    }
+
+    /**
+     * Koreksi arah transaksi yang SELURUH pesannya hanya menyebut tipe:
+     * "termasuk pengeluaran", "itu pemasukan", "harusnya pengeluaran ya".
+     *
+     * Dipakai ProcessIncomingMessage untuk merutekan pesan semacam ini ke
+     * handleEditWithContext; tanpa itu pesan jatuh ke "Format Tidak Dikenali".
+     * Kata pembuka wajib ada supaya "pengeluaran" polos tetap dibaca sebagai
+     * query ("pengeluaran" = minta daftar pengeluaran).
+     */
+    public static function isTypeOnlyCorrection(string $text): bool
+    {
+        $textLower = mb_strtolower(trim($text));
+
+        return (bool) preg_match(
+            '/^(?:itu|ini|yang\s+itu|yg\s+itu|termasuk|masuk(?:in|kan)?|dicatat|jadikan|'
+            .'harusnya|seharusnya|mestinya|semestinya|bukan|kategorinya|tipenya|jenisnya)'
+            .'\b[\s,.:-]*(?:ke|jadi|menjadi|sebagai)?\s*'
+            .'(?:pemasukan|pendapatan|income|uang\s+masuk|pengeluaran|expense|uang\s+keluar)'
+            .'\b[\s,.!]*(?:ya|yah|dong|deh|kok|aja|saja|sih|nya)?[\s.!?]*$/iu',
+            $textLower
+        );
+    }
+
+    /**
+     * Ambil arah transaksi dari kata tipe yang berdiri sendiri di dalam pesan
+     * koreksi ("termasuk pengeluaran" → expense). Kata sambung tidak wajib,
+     * jadi hanya dipakai saat pesan tidak membawa nominal/kategori baru.
+     */
+    protected static function detectBareTypeWord(string $textLower): ?string
+    {
+        if (! preg_match(
+            '/\b(pemasukan|pendapatan|income|uang\s+masuk|pengeluaran|expense|uang\s+keluar)\b/iu',
+            $textLower,
+            $m
+        )) {
+            return null;
+        }
+
+        $word = preg_replace('/\s+/', ' ', mb_strtolower(trim($m[1])));
+
+        return config('finwa_category_rules.type_change_keywords', [])[$word] ?? null;
+    }
+
+    /**
+     * Ops — bersihkan kandidat kategori dari partikel & kata penghubung.
+     * "nya jadi makanan" → "makanan"; "ke kesehatan" → "kesehatan".
+     */
+    public static function cleanCategoryCandidate(string $candidate): string
+    {
+        $candidate = preg_replace('/\b(nya|nyaa|aja|saja|dong|yaa|ya|lah|kah)\b/iu', ' ', $candidate);
+        $candidate = preg_replace('/^\s*(?:jadi|ke|menjadi|pindah(?:in)?|ganti|ubah)\s+/iu', ' ', $candidate);
+
+        return trim(preg_replace('/\s+/u', ' ', (string) $candidate));
+    }
+
+    /**
+     * Terapkan koreksi kategori ke transaksi (lookup nama/slug → pola alias →
+     * update + rekam koreksi + balasan sukses).
+     *
+     * Dipakai alur WhatsApp biasa maupun alur reply-edit (target sudah ditentukan).
+     */
+    public function applyCategoryCorrection(Transaction $transaction, string $catCandidate): void
+    {
+        $transaction->load('category');
+
+        $newCategory = Category::where('tenant_id', $this->message->tenant_id)
+            ->where(function ($q) use ($catCandidate) {
+                $q->where('name', 'LIKE', '%'.$catCandidate.'%')
+                    ->orWhere('slug', 'LIKE', '%'.$catCandidate.'%');
+            })
+            ->first();
+
+        if (!$newCategory) {
+            $categoryPatterns = [
+                'makan' => 'Makanan', 'minum' => 'Makanan', 'makanan' => 'Makanan',
+                'transport' => 'Transport', 'belanja' => 'Belanja',
+                'kesehatan' => 'Kesehatan', 'hiburan' => 'Hiburan',
+                'tagihan' => 'Utilitas', 'utilitas' => 'Utilitas',
+                'gaji' => 'Gaji', 'bonus' => 'Bonus',
+                'pendidikan' => 'Pendidikan', 'sekolah' => 'Pendidikan',
+                'otomotif' => 'Otomotif', 'kendaraan' => 'Otomotif',
+                'baby' => 'Baby', 'bayi' => 'Baby',
+                'hewan' => 'Hewan', 'kucing' => 'Hewan', 'anjing' => 'Hewan', 'pet' => 'Hewan',
+                'gadget' => 'Gadget', 'elektronik' => 'Gadget', 'hp' => 'Gadget', 'laptop' => 'Gadget',
+            ];
+
+            foreach ($categoryPatterns as $keyword => $catNamePartial) {
+                if (str_contains($catCandidate, $keyword)) {
+                    $newCategory = Category::where('tenant_id', $this->message->tenant_id)
+                        ->where('name', 'LIKE', '%'.$catNamePartial.'%')
+                        ->first();
+                    if ($newCategory) break;
+                }
+            }
+        }
+
+        if (!$newCategory) {
+            $this->sendReply(
+                "⚠️ *Kategori tidak ditemukan*\n\n".
+                "Kategori \"{$catCandidate}\" tidak ditemukan.\n\n".
+                "💡 Ketik _help_ untuk melihat daftar kategori yang tersedia."
+            );
+            return;
+        }
+
+        $oldCategoryName = $transaction->category->name ?? 'Lainnya';
+        $oldCategoryType = $transaction->category->type ?? 'pengeluaran_lainnya';
+        $transaction->category_id = $newCategory->id;
+        $transaction->save();
+
+        $correctionService = app(CategoryCorrectionService::class);
+        $correctionService->recordCorrection(
+            $this->message->tenant_id,
+            $transaction->description ?? '',
+            $oldCategoryType,
+            $newCategory->type,
+            $transaction->source,
+            (float) $transaction->amount
+        );
+
+        $amount = number_format($transaction->amount, 0, ',', '.');
+        $typeEmoji = $transaction->type === 'income' ? '💰' : '💸';
+
+        $this->sendReply(
+            "✅ *Kategori Berhasil Diubah!*\n\n".
+            "{$typeEmoji} Rp {$amount}\n".
+            "📝 {$transaction->description}\n\n".
+            "📁 Kategori:\n".
+            "   ~{$oldCategoryName}~ ➝ *{$newCategory->name}*\n\n".
+            "💡 Perubahan ini akan dipelajari oleh sistem."
+        );
+
+        Log::info('Category corrected via WhatsApp pattern', [
+            'transaction_id' => $transaction->id,
+            'description' => $transaction->description,
+            'old_category' => $oldCategoryName,
+            'new_category' => $newCategory->name,
+            'candidate' => $catCandidate,
+        ]);
+    }
+
+    /**
      * Handle category correction by matching transaction keyword + category name.
      * Example: "air mineral kategori makanan & minuman"
      *          "beli susu ganti ke kesehatan"
+     *          "ubah kategori nya jadi makanan" (keyword '' → transaksi terakhir)
      */
-    public function handleEditTransactionWithCorrection(string $txKeyword, string $catCandidate): void
+    public function handleEditTransactionWithCorrection(?string $txKeyword, string $catCandidate): void
     {
         try {
-            $normalizedKeyword = mb_strtolower(trim($txKeyword));
+            $normalizedKeyword = mb_strtolower(trim((string) $txKeyword));
 
-            $transaction = Transaction::where('tenant_id', $this->message->tenant_id)
-                ->whereRaw('LOWER(description) LIKE ?', ['%'.$normalizedKeyword.'%'])
-                ->orderByDesc('created_at')
-                ->first();
+            $transaction = null;
+
+            if ($normalizedKeyword !== '') {
+                $transaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
+                    ->whereRaw('LOWER(description) LIKE ?', ['%'.$normalizedKeyword.'%'])
+                    ->orderByDesc('created_at')
+                    ->first();
+            }
+
+            // Ops — tanpa deskripsi ("ubah kategori nya jadi makanan"):
+            // koreksi ditujukan ke transaksi terakhir yang dicatat.
+            // Keyword ADA tapi tidak ditemukan → jangan fallback diam-diam.
+            if (! $transaction && $normalizedKeyword === '') {
+                $contextService = new ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
+                $lastId = $contextService->getLastTransactionId();
+
+                $transaction = $lastId
+                    ? Transaction::where('tenant_id', $this->message->tenant_id)->find($lastId)
+                    : $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))->orderByDesc('created_at')->first();
+            }
 
             if (!$transaction) {
                 $this->sendReply(
                     "⚠️ *Transaksi tidak ditemukan*\n\n".
-                    "Tidak ada transaksi dengan deskripsi \"{$txKeyword}\".\n\n".
+                    ($normalizedKeyword !== ''
+                        ? "Tidak ada transaksi dengan deskripsi \"{$txKeyword}\".\n\n"
+                        : "Belum ada transaksi yang bisa dikoreksi.\n\n").
                     "💡 Ketik _lihat transaksi_ untuk melihat daftar transaksi."
                 );
                 return;
             }
 
-            $transaction->load('category');
-
-            $newCategory = Category::where('tenant_id', $this->message->tenant_id)
-                ->where(function ($q) use ($catCandidate) {
-                    $q->where('name', 'LIKE', '%'.$catCandidate.'%')
-                        ->orWhere('slug', 'LIKE', '%'.$catCandidate.'%');
-                })
-                ->first();
-
-            if (!$newCategory) {
-                $categoryPatterns = [
-                    'makan' => 'Makanan', 'minum' => 'Makanan', 'makanan' => 'Makanan',
-                    'transport' => 'Transport', 'belanja' => 'Belanja',
-                    'kesehatan' => 'Kesehatan', 'hiburan' => 'Hiburan',
-                    'tagihan' => 'Utilitas', 'utilitas' => 'Utilitas',
-                    'gaji' => 'Gaji', 'bonus' => 'Bonus',
-                    'pendidikan' => 'Pendidikan', 'sekolah' => 'Pendidikan',
-                    'otomotif' => 'Otomotif', 'kendaraan' => 'Otomotif',
-                    'baby' => 'Baby', 'bayi' => 'Baby',
-                    'hewan' => 'Hewan', 'kucing' => 'Hewan', 'anjing' => 'Hewan', 'pet' => 'Hewan',
-                    'gadget' => 'Gadget', 'elektronik' => 'Gadget', 'hp' => 'Gadget', 'laptop' => 'Gadget',
-                ];
-
-                foreach ($categoryPatterns as $keyword => $catNamePartial) {
-                    if (str_contains($catCandidate, $keyword)) {
-                        $newCategory = Category::where('tenant_id', $this->message->tenant_id)
-                            ->where('name', 'LIKE', '%'.$catNamePartial.'%')
-                            ->first();
-                        if ($newCategory) break;
-                    }
-                }
-            }
-
-            if (!$newCategory) {
-                $this->sendReply(
-                    "⚠️ *Kategori tidak ditemukan*\n\n".
-                    "Kategori \"{$catCandidate}\" tidak ditemukan.\n\n".
-                    "💡 Ketik _help_ untuk melihat daftar kategori yang tersedia."
-                );
-                return;
-            }
-
-            $oldCategoryName = $transaction->category->name ?? 'Lainnya';
-            $oldCategoryType = $transaction->category->type ?? 'pengeluaran_lainnya';
-            $transaction->category_id = $newCategory->id;
-            $transaction->save();
-
-            $correctionService = app(CategoryCorrectionService::class);
-            $correctionService->recordCorrection(
-                $this->message->tenant_id,
-                $transaction->description ?? '',
-                $oldCategoryType,
-                $newCategory->type,
-                $transaction->source,
-                (float) $transaction->amount
-            );
-
-            $amount = number_format($transaction->amount, 0, ',', '.');
-            $typeEmoji = $transaction->type === 'income' ? '💰' : '💸';
-
-            $this->sendReply(
-                "✅ *Kategori Berhasil Diubah!*\n\n".
-                "{$typeEmoji} Rp {$amount}\n".
-                "📝 {$transaction->description}\n\n".
-                "📁 Kategori:\n".
-                "   ~{$oldCategoryName}~ ➝ *{$newCategory->name}*\n\n".
-                "💡 Perubahan ini akan dipelajari oleh sistem."
-            );
-
-            Log::info('Category corrected via WhatsApp pattern', [
-                'transaction_id' => $transaction->id,
-                'description' => $transaction->description,
-                'old_category' => $oldCategoryName,
-                'new_category' => $newCategory->name,
-                'pattern' => "{$txKeyword} kategori {$catCandidate}",
-            ]);
+            $this->applyCategoryCorrection($transaction, $catCandidate);
 
         } catch (\Exception $e) {
             Log::error('Error in handleEditTransactionWithCorrection', [
@@ -2979,9 +3643,9 @@ class TransactionService
                 return ['success' => false, 'error' => 'keyword terlalu pendek'];
             }
 
-            $transaction = \App\Models\Transaction::where('tenant_id', $this->message->tenant_id)
+            $transaction = $this->scopeToSender(\App\Models\Transaction::where('tenant_id', $this->message->tenant_id))
                 ->whereRaw('LOWER(description) LIKE ?', ['%'.strtolower($keyword).'%'])
-                ->whereDate('transaction_date', today())
+                ->where($this->todayOrRecordedToday())
                 ->orderBy('created_at', 'desc')
                 ->first();
 
@@ -2989,15 +3653,11 @@ class TransactionService
                 return ['success' => false, 'error' => "'{$keyword}' tidak ditemukan"];
             }
 
-            $balanceService = app(\App\Services\BalanceService::class);
-            if ($transaction->balance_id) {
-                $balanceService->reverseBalanceUpdate($transaction);
-            }
-
             $description = $transaction->description;
             $amount = number_format($transaction->amount, 0, ',', '.');
 
-            $transaction->delete();
+            // Soft delete + kembalikan saldo (TransactionLedger)
+            app(TransactionLedger::class)->delete($transaction);
 
             return ['success' => true, 'description' => $description, 'amount' => $amount];
 
@@ -3032,9 +3692,9 @@ class TransactionService
                 return ['success' => false, 'error' => 'nominal tidak valid'];
             }
 
-            $transaction = \App\Models\Transaction::where('tenant_id', $this->message->tenant_id)
+            $transaction = $this->scopeToSender(\App\Models\Transaction::where('tenant_id', $this->message->tenant_id))
                 ->whereRaw('LOWER(description) LIKE ?', ['%'.strtolower($keyword).'%'])
-                ->whereDate('transaction_date', today())
+                ->where($this->todayOrRecordedToday())
                 ->orderBy('created_at', 'desc')
                 ->first();
 
@@ -3043,22 +3703,9 @@ class TransactionService
             }
 
             $oldAmount = $transaction->amount;
-            $amountDiff = $newAmount - $oldAmount;
 
-            if ($transaction->balance_id) {
-                $balance = \App\Models\Balance::find($transaction->balance_id);
-                if ($balance) {
-                    if ($transaction->type === 'income') {
-                        $balance->balance += $amountDiff;
-                    } else {
-                        $balance->balance -= $amountDiff;
-                    }
-                    $balance->save();
-                }
-            }
-
-            $transaction->amount = $newAmount;
-            $transaction->save();
+            // Nominal + saldo (TransactionLedger)
+            app(TransactionLedger::class)->update($transaction, ['amount' => $newAmount]);
 
             return [
                 'success' => true,

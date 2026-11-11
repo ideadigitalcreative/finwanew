@@ -423,8 +423,12 @@ class CashflowService
         $internalTransfers = Transaction::where('tenant_id', $tenantId)
             ->where('status', 'confirmed')
             ->whereIn('type', ['debit_internal', 'kredit_internal'])
+            // Hutang/piutang "hanya dicatat" tidak punya dompet → bukan transfer antar dompet
+            ->whereNotNull('balance_id')
             ->whereBetween('transaction_date', [$periodStart, $periodEnd])
-            ->get();
+            ->get()
+            // Bayar tagihan paylater/kartu kredit keluar dari dompet, tapi bukan transfer antar dompet
+            ->reject(fn (Transaction $tx) => $tx->isCreditRepayment());
 
         $totalDebit = (float) $internalTransfers->where('type', 'debit_internal')->sum('amount');
         $totalCredit = (float) $internalTransfers->where('type', 'kredit_internal')->sum('amount');

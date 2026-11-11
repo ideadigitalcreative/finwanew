@@ -137,6 +137,10 @@ class TransactionExtractorService
 
             '/(?:uang\s+masuk|masuk\s+(?:ke|di))\s+([a-z0-9]+(?:\s+[a-z]+)?)\s+[\d\.,]/i',
 
+            // "Masuk dana 2jt", "terima BCA 500rb", "keluar gopay 25rb" — nama bank/e-wallet
+            // langsung diikuti nominal (bukan "dana darurat 1jt" / "dana bos 2jt")
+            '/^(?:uang\s+)?(?:masuk|keluar|terima|dapat|dapet|dpt)\s+(?:ke\s+|di\s+|dari\s+)?(bca|bri|brimo|bni|mandiri|bsi|btn|cimb|permata|danamon|jago|seabank|blu|jenius|neo|ocbc|gopay|ovo|dana|shopeepay|linkaja|flazz)\s+(?=(?:rp\.?\s*)?\d)/i',
+
             '/via\s+(?:bank\s+)?([a-z0-9]+(?:\s+[a-z]+)?)/i',
             '/saldo\s+(?:awal\s+|akhir\s+)?(?:bank\s+)?([a-z0-9]+(?:\s+[a-z]+)?)/i',
             '/dengan\s+saldo\s+(?:bank\s+)?([a-z0-9]+(?:\s+[a-z]+)?)/i',
@@ -230,46 +234,74 @@ class TransactionExtractorService
     {
         $textLower = strtolower($text);
 
-        // Today keywords (explicitly mentioning today)
-        if (str_contains($textLower, 'tadi') || str_contains($textLower, 'barusan') ||
-            str_contains($textLower, 'baru aja') || str_contains($textLower, 'baru saja')) {
-            return now()->toDateString(); // Today
-        }
+        // Tanggal + nama bulan: "5 oktober", "tgl 5 okt 2026" (sebelum "tgl 5" agar bulan ikut terbaca)
+        $monthMap = [
+            'januari' => 1, 'jan' => 1, 'februari' => 2, 'feb' => 2, 'maret' => 3, 'mar' => 3,
+            'april' => 4, 'apr' => 4, 'mei' => 5, 'juni' => 6, 'jun' => 6, 'juli' => 7, 'jul' => 7,
+            'agustus' => 8, 'agu' => 8, 'agt' => 8, 'ags' => 8, 'aug' => 8, 'september' => 9, 'sept' => 9, 'sep' => 9,
+            'oktober' => 10, 'okt' => 10, 'oct' => 10, 'november' => 11, 'nov' => 11, 'desember' => 12, 'des' => 12, 'dec' => 12,
+        ];
+        if (preg_match('/(?<![\d.,])(\d{1,2})\s+('.implode('|', array_keys($monthMap)).')\b(?:\s+((?:19|20)\d{2}))?/u', $textLower, $m)) {
+            $day = (int) $m[1];
+            $month = $monthMap[$m[2]];
+            $year = isset($m[3]) ? (int) $m[3] : now()->year;
+            if ($day >= 1 && checkdate($month, $day, $year)) {
+                $date = \Carbon\Carbon::create($year, $month, $day);
+                // Tanpa tahun & jatuh di masa depan (> 7 hari) → tahun lalu ("28 desember" dikirim Januari)
+                if (! isset($m[3]) && $date->isAfter(now()->addDays(7))) {
+                    $date = $date->subYear();
+                }
 
-        // Relative dates
-        if (str_contains($textLower, 'kemarin') || str_contains($textLower, 'yesterday') ||
-            str_contains($textLower, 'kmrn') || str_contains($textLower, 'kmrin')) {
-            return now()->subDay()->toDateString();
-        }
-
-        // Last night = kemarin malam = usually yesterday
-        if (str_contains($textLower, 'semalem') || str_contains($textLower, 'semalam') ||
-            str_contains($textLower, 'tadi malam') || str_contains($textLower, 'kemarin malam')) {
-            // If it's currently morning (before 6 AM), "semalem" might mean last night (today)
-            // Otherwise, it means yesterday night
-            if (now()->hour < 6) {
-                return now()->toDateString();
+                return $date->toDateString();
             }
-
-            return now()->subDay()->toDateString();
         }
 
-        if (str_contains($textLower, 'lusa') || str_contains($textLower, 'kemarin dulu')) {
+        // Malam: "tadi malam" dikirim pagi/siang = semalam (kemarin); dikirim malam = hari ini
+        if (preg_match('/\btadi\s+malam\b/u', $textLower)) {
+            return now()->hour >= 18 ? now()->toDateString() : now()->subDay()->toDateString();
+        }
+        if (preg_match('/\b(?:semalem|semalam|kemarin\s+malam|kmrn\s+malam)\b/u', $textLower)) {
+            return now()->hour < 6 ? now()->toDateString() : now()->subDay()->toDateString();
+        }
+
+        // "kemarin lusa" / "kemarin dulu" = 2 hari lalu (sebelum "kemarin")
+        if (preg_match('/\b(?:kemarin|kmrn|kmrin)\s+(?:lusa|dulu)\b/u', $textLower)) {
             return now()->subDays(2)->toDateString();
         }
 
-        if (preg_match('/(\d+)\s*hari\s*(lalu|yang\s*lalu)/i', $textLower, $matches)) {
-            $days = (int) $matches[1];
-
-            return now()->subDays($days)->toDateString();
+        // Today keywords (explicitly mentioning today)
+        if (preg_match('/\b(?:tadi|barusan|baru\s+aja|baru\s+saja|hari\s+ini|hr\s+ini)\b/u', $textLower)) {
+            return now()->toDateString();
         }
 
-        if (str_contains($textLower, 'minggu lalu') || str_contains($textLower, 'pekan lalu')) {
+        if (preg_match('/\b(?:kemarin|yesterday|kmrn|kmrin|kemaren)\b/u', $textLower)) {
+            return now()->subDay()->toDateString();
+        }
+
+        // "lusa" = 2 hari lagi; "besok" = 1 hari lagi
+        if (preg_match('/\blusa\b/u', $textLower)) {
+            return now()->addDays(2)->toDateString();
+        }
+
+        // "3 hari lalu", "2 minggu yang lalu", "1 bulan lalu"
+        if (preg_match('/(\d+)\s*(hari|minggu|pekan|bulan)\s*(?:yang\s*|yg\s*)?lalu/u', $textLower, $m)) {
+            $n = (int) $m[1];
+
+            $date = match ($m[2]) {
+                'hari' => now()->subDays($n),
+                'minggu', 'pekan' => now()->subWeeks($n),
+                'bulan' => now()->subMonthsNoOverflow($n),
+            };
+
+            return $date->toDateString();
+        }
+
+        if (preg_match('/\b(?:minggu|pekan)\s+(?:lalu|kemarin)\b/u', $textLower)) {
             return now()->subWeek()->toDateString();
         }
 
-        if (str_contains($textLower, 'bulan lalu')) {
-            return now()->subMonth()->toDateString();
+        if (preg_match('/\bbulan\s+(?:lalu|kemarin)\b/u', $textLower)) {
+            return now()->subMonthNoOverflow()->toDateString();
         }
 
         // Specific date patterns
@@ -290,8 +322,10 @@ class TransactionExtractorService
             return $date->toDateString();
         }
 
-        // "15/12" or "15-12" format
-        if (preg_match('/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/', $text, $matches)) {
+        // "tgl 15/12", "tanggal 15/12/2025", or "date 15-12" format
+        // Requires a date keyword prefix to avoid false positives from dates embedded
+        // in descriptions (e.g., flight dates like "KNO-PEN 22/09/2026", order numbers)
+        if (preg_match('/(?:tgl|tanggal|date)\s*[,:]*\s*(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/i', $textLower, $matches)) {
             $day = (int) $matches[1];
             $month = (int) $matches[2];
             $year = isset($matches[3]) ? (int) $matches[3] : now()->year;
@@ -458,6 +492,29 @@ class TransactionExtractorService
      *
      * @return string|null finwa intent (catat_hutang|bayar_hutang|catat_piutang|terima_piutang)
      */
+    /**
+     * Arah pinjaman dari SUBJEK kalimat — sumber kesalahan paling sering:
+     *   "budi pinjam 100rb"  → orang lain meminjam dari kita  → catat_piutang
+     *   "pinjam budi 100rb"  → tidak jelas siapa meminjam ke siapa → 'ambiguous' (tanya user)
+     *
+     * @return 'catat_piutang'|'ambiguous'|null
+     */
+    public static function debtDirectionFromSubject(string $text): ?string
+    {
+        $t = mb_strtolower(trim($text));
+        $notName = 'saya|aku|gue|gw|sy|ak|ku|kami|kita|mau|ingin|pengen|lagi|tadi|sudah|udah|baru|bisa|boleh|jadi|buat|untuk|minta|coba|ga|gak|nggak|tidak|ada|yang|yg|mo|harus|perlu|sempat|abis|habis';
+        if (preg_match('/(?:^|[\s,])(?!(?:'.$notName.')\b)([a-z]{2,})\s+(?:pinjam|minjem|pinjem|ngutang|kasbon|ngebon)\b(?!\s+(?:ke|dari)\b)/u', $t)) {
+            return 'catat_piutang';
+        }
+        // "pinjam motor/hp/tempat" = meminjam BARANG, bukan utang uang → jangan tanya arah
+        $objects = 'motor|mobil|hp|handphone|laptop|kamera|buku|alat|tempat|gedung|baju|kostum|sepeda|tenda|ruang|ruangan|aula|lapangan|proyektor|sound|speaker|kursi|meja|truk|pickup|kendaraan|barang|charger|powerbank|gitar|helm|jas|kebaya|mic|lcd';
+        if (preg_match('/^(?:pinjam|minjem|pinjem)\s+(?!(?:ke|dari|uang|duit|dana|di|dulu|sama|online|pinjol|bank|koperasi|'.$objects.')\b)[a-z]{2,}/u', $t)) {
+            return 'ambiguous';
+        }
+
+        return null;
+    }
+
     public function detectDebtIntent(string $messageText): ?string
     {
         $t = mb_strtolower($messageText);
@@ -465,6 +522,11 @@ class TransactionExtractorService
         // "X bayar hutang" (pihak lain bayar ke kita) = terima piutang, bukan bayar hutang.
         if (CounterpartyExtractor::extractDebtPayer($messageText) !== null) {
             return 'terima_piutang';
+        }
+
+        // "budi pinjam 100rb" → piutang (arah dari subjek). Ambigu ditangani penanya di PIM.
+        if (self::debtDirectionFromSubject($messageText) === 'catat_piutang') {
+            return 'catat_piutang';
         }
 
         // 1. bayar hutang (uang keluar, lunasi/angsur hutang)
@@ -530,6 +592,14 @@ class TransactionExtractorService
             ];
         }
 
+        // "budi pinjam 100rb" = kita meminjamkan ke Budi
+        if (self::debtDirectionFromSubject($originalText ?? $t) === 'catat_piutang') {
+            return [
+                'type' => 'expense',
+                'category_type' => 'pengeluaran_piutang',
+            ];
+        }
+
         $rules = [
             [
                 'type' => 'expense',
@@ -562,6 +632,17 @@ class TransactionExtractorService
                     ];
                 }
             }
+        }
+
+        // Kata "hutang/utang/piutang" berdiri sendiri: "hutang SpayLater 2jt",
+        // "punya hutang ke budi 2jt", "piutang lama noki 5jt" → pencatatan baru.
+        // Pelunasan/cicilan/bunga dikecualikan (bukan hutang baru). Apakah saldo
+        // ikut berubah diputuskan DebtCashMode saat transaksi dibuat.
+        if (preg_match('/\b(hutang|utang|piutang)\b/u', $t, $m)
+            && ! preg_match('/\b(?:bayar\w*|membayar|cicil\w*|angsur\w*|lunas\w*|melunasi|pelunasan|bunga|denda|dibayar)\b/u', $t)) {
+            return $m[1] === 'piutang'
+                ? ['type' => 'expense', 'category_type' => 'pengeluaran_piutang']
+                : ['type' => 'income', 'category_type' => 'pendapatan_hutang'];
         }
 
         return null;
