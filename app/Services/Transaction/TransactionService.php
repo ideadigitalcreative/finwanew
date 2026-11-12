@@ -1341,6 +1341,8 @@ class TransactionService
         if ($cp === '') {
             $cp = trim((string) (CounterpartyExtractor::extract($txData['description'] ?? '') ?? ''));
         }
+        // "hutang lama budi 2jt" → pihak "budi", bukan "lama budi"
+        $cp = trim((string) preg_replace('/^(?:lama|lalu|dulu)\s+(?:ke\s+|dari\s+|sama\s+)?/iu', '', $cp));
 
         return CreditFacility::canonical($cp !== '' ? $cp : (string) ($txData['description'] ?? '')) ?? $cp;
     }
@@ -1413,7 +1415,8 @@ class TransactionService
 
         $text = trim(($this->message->content ?? '').' '.($txData['description'] ?? ''));
 
-        return DebtCashMode::detect($text) === DebtCashMode::RECORD_ONLY;
+        // Sampai di sini tanpa pilihan user (grup / jalur tanpa pertanyaan) → tebakan terbaik
+        return DebtCashMode::guess($text) === DebtCashMode::RECORD_ONLY;
     }
 
     /**

@@ -35,7 +35,62 @@ final class DebtCashMode
     /** Fasilitas kredit: hutangnya timbul tanpa uang masuk ke dompet. */
     private const CREDIT_FACILITY = '(?:s\s?-?\s?pay\s?later|shopee\s?pay\s?later|go\s?pay\s?later|pay\s?later|kartu\s+kredit|credit\s+card|\bcc\b|kredivo|akulaku|indodana|atome|home\s?credit|\bkpr\b|\bkta\b|leasing|cicilan|kredit\s+(?:motor|mobil|rumah|hp|barang))';
 
+    /**
+     * Keputusan TEGAS — dipakai untuk memutuskan perlu bertanya atau tidak.
+     *
+     * Begitu kalimat menyebut "hutang/utang/piutang", hanya pernyataan yang benar-benar
+     * eksplisit yang dipercaya ("hutang lama…", "jangan masuk saldo", "pinjam dari…",
+     * "dapat pinjaman…"). Selain itu → AMBIGUOUS, supaya user memilih sendiri 1/2.
+     * "punya hutang SpayPinjam 3jt" atau "hutang Spay Pinjam 3jt" tidak ditebak:
+     * "pinjam" di situ bisa nama produk, dan "punya hutang" bisa hutang baru.
+     */
     public static function detect(string $text): string
+    {
+        $t = mb_strtolower(trim($text));
+        $debt = self::DEBT_WORD;
+
+        if (! preg_match('/\b'.$debt.'\b/u', $t)) {
+            return self::guess($text);
+        }
+
+        $recordOnly = [
+            '/\b'.$debt.'\s+(?:lama|lalu|dulu|sebelumnya|(?:yang|yg)\s+(?:sudah|udah|telah)\s+ada)\b/u',
+            '/\b(?:hanya|cuma|cuman)\s+(?:di\s?catat|catat|nyatat)\b/u',
+            '/\b(?:di\s?catat|catat)\s+(?:saja|aja|doang)\b/u',
+            '/\b(?:tanpa|jangan|tidak|tdk|ga|gak|nggak|enggak|bukan)\s+(?:usah\s+)?(?:ubah|rubah|mengubah|masuk|tambah|nambah|menambah|potong|memotong|kurangi|mengurangi|keluar)\w*\s+(?:ke\s+|dari\s+)?(?:saldo|dompet|rekening)\b/u',
+            '/\bsaldo\s+(?:tetap|tidak\s+berubah|ga\s+berubah|gak\s+berubah)\b/u',
+        ];
+        foreach ($recordOnly as $pattern) {
+            if (preg_match($pattern, $t)) {
+                return self::RECORD_ONLY;
+            }
+        }
+
+        $cash = [
+            '/\b(?:pinjam|minjem|pinjem|meminjam)\s+(?:uang\s+|duit\s+)?(?:dari|ke)\b/u',
+            '/\b(?:dapat|dapet|terima|nerima)\s+(?:pinjaman|utangan|hutangan)\b/u',
+            '/\bpinjaman\s+dari\b/u',
+            '/\b(?:dipinjemin|dipinjami|dipinjamkan|dikasih\s+pinjam\w*)\b/u',
+            '/\b(?:kasih|ngasih|beri|memberi)\s+pinjam\w*\b/u',
+            '/\b(?:pinjamkan|pinjemin|minjemin|pijemin|meminjamkan)\b/u',
+            '/\b(?:cair|pencairan|dicairkan)\b/u',
+            '/\b(?:uang|duit|dana)\s+(?:masuk|keluar)\b/u',
+            '/\b(?:masuk|keluar)\s+(?:ke\s+|dari\s+)?(?:saldo|dompet|rekening)\b/u',
+        ];
+        foreach ($cash as $pattern) {
+            if (preg_match($pattern, $t)) {
+                return self::CASH;
+            }
+        }
+
+        return self::AMBIGUOUS;
+    }
+
+    /**
+     * Tebakan TERBAIK — dipakai saat tidak bisa bertanya (grup, jalur tanpa
+     * pertanyaan): "punya hutang…", paylater, kartu kredit → hanya dicatat.
+     */
+    public static function guess(string $text): string
     {
         $t = mb_strtolower(trim($text));
         $debt = self::DEBT_WORD;

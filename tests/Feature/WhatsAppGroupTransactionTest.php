@@ -159,6 +159,28 @@ it('pemilik Premium mengaktifkan grup, lalu pasangan mencatat transaksi', functi
         ->and($reply['text'])->not->toMatch('/saldo/i');
 });
 
+it('daftar multi-baris dengan "#" di tiap baris tercatat semua', function () {
+    WhatsappGroup::create(['group_jid' => GRP_JID, 'tenant_id' => $this->tenant->id, 'is_active' => true]);
+
+    grpIncoming(implode("\n", [
+        '#belanja alfagift 141700',
+        '#sarapan 18rb',
+        '#jas hujan 106762',
+        '#sepatu mama 63850',
+        '#sandal mama & mairasya 119613',
+        '#vitamin rasya 316029',
+        '#Sketsa set 65722',
+        '#bantal alasan duduk 54683',
+    ]), PARTNER_PHONE, 'Istri');
+
+    $txs = Transaction::where('tenant_id', $this->tenant->id)->get();
+    expect($txs)->toHaveCount(8)
+        ->and($txs->pluck('type')->unique()->all())->toBe(['expense'])
+        ->and($txs->pluck('amount')->map(fn ($a) => (int) $a)->sort()->values()->all())
+        ->toBe([18000, 54683, 63850, 65722, 106762, 119613, 141700, 316029])
+        ->and($txs->pluck('description')->filter(fn ($d) => str_contains((string) $d, '#')))->toHaveCount(0);
+});
+
 it('mention bot juga menjadi pemicu', function () {
     WhatsappGroup::create(['group_jid' => GRP_JID, 'tenant_id' => $this->tenant->id, 'is_active' => true]);
 

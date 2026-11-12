@@ -228,6 +228,8 @@ function goldenScore(array $case, Tenant $tenant, array $replies): array
                 || $ctx->getEntityFromContext('pending_wallet_balance_confirmation') !== null;
             $fields['konfirmasi_ditampilkan'] = $hasPending
                 || str_contains($joined, 'Konfirmasi Transaksi')
+                // Pertanyaan bernomor (mis. hutang baru: masuk dompet / hanya dicatat)
+                || str_contains($joined, 'Balas dengan nomor pilihan')
                 || str_contains($joined, 'bukan nama dompet');
             $detail = 'reply='.mb_substr($replies[0] ?? '(tanpa balasan)', 0, 70);
             break;

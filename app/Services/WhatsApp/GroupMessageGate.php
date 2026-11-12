@@ -161,7 +161,10 @@ class GroupMessageGate
         $t = trim($body);
 
         if (str_starts_with($t, '#')) {
-            $t = (string) preg_replace('/^#+\s*(?:(?:finwa|catat)\b\s*[:,\-]?\s*)?/iu', '', $t);
+            // Pemicu dibuang di SETIAP baris: daftar "#sarapan 18rb\n#jas hujan 106762"
+            // dulu hanya baris pertama yang bersih, sisanya tetap ber-"#" sehingga
+            // tidak dikenali sebagai daftar transaksi dan hanya 1 baris yang tercatat.
+            $t = (string) preg_replace('/^[ \t]*#+[ \t]*(?:(?:finwa|catat)\b[ \t]*[:,\-]?[ \t]*)?/imu', '', $t);
 
             return trim($t);
         }

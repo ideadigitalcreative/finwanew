@@ -298,15 +298,15 @@ const submitSettle = () => {
                         {{ addSubmitting ? 'Menyimpan...' : 'Simpan' }}
                     </button>
                 </div>
-                <label class="flex cursor-pointer items-start gap-2 text-sm text-[#1b1c19]">
+                <label class="flex cursor-pointer items-start gap-3 rounded-xl bg-[#ad2c4f] px-4 py-3 text-sm font-semibold text-white shadow-sm">
                     <input
                         v-model="addAffectsBalance"
                         type="checkbox"
-                        class="mt-0.5 h-4 w-4 rounded border-[#eae8e2] text-[#725a00] focus:ring-[#ffd23f]"
+                        class="mt-0.5 h-5 w-5 shrink-0 rounded border-white bg-white accent-[#1b1c19] focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-[#ad2c4f]"
                     />
                     <span>
                         {{ addKind === 'hutang' ? 'Uangnya masuk ke dompet utama' : 'Uangnya keluar dari dompet utama' }}
-                        <span class="block text-xs text-[#4d4634]/60">
+                        <span class="mt-0.5 block text-xs font-normal text-white/85">
                             Matikan untuk {{ addKind === 'hutang' ? 'hutang' : 'piutang' }} lama, paylater, atau kartu kredit —
                             hanya dicatat, saldo dompet tidak berubah.
                         </span>

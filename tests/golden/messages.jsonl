@@ -115,8 +115,8 @@
 {"id":"batch-02","text":"makan siang 25000 dan parkir 5000","intent":"transaction","type":"expense","amount":30000,"items":2,"tags":["batch"]}
 {"id":"batch-03","text":"beli rokok 13000 sama air mineral 6000","intent":"transaction","type":"expense","amount":19000,"items":2,"tags":["batch"]}
 {"id":"batch-04","text":"kopi 15000 rokok 24000","intent":"transaction","type":"expense","amount":39000,"items":2,"tags":["batch"]}
-{"id":"debt-01","text":"hutang Budi 500000","intent":"debt","type":"income","amount":500000,"items":1,"category":"pendapatan_hutang","tags":[]}
-{"id":"debt-02","text":"piutang Andi 250000","intent":"debt","type":"expense","amount":250000,"items":1,"category":"pengeluaran_piutang","tags":[]}
+{"id":"debt-01","text":"hutang Budi 500000","intent":"pending_confirmation","type":"income","amount":500000,"items":1,"category":"pendapatan_hutang","tags":["ambiguous","debt_cash_mode"]}
+{"id":"debt-02","text":"piutang Andi 250000","intent":"pending_confirmation","type":"expense","amount":250000,"items":1,"category":"pengeluaran_piutang","tags":["ambiguous","debt_cash_mode"]}
 {"id":"debt-03","text":"bayar hutang ke Pak Budi 1jt","intent":"debt","type":"expense","amount":1000000,"items":1,"category":"pengeluaran_bayar_hutang","tags":[]}
 {"id":"debt-04","text":"dapat piutang dari Rina 800rb","intent":"debt","type":"income","amount":800000,"items":1,"category":"pendapatan_terima_piutang","tags":[]}
 {"id":"h-01","text":"help","intent":"help","type":null,"amount":null,"items":null,"marker":"Panduan FinWa","tags":[]}
@@ -211,10 +211,10 @@
 {"id":"q-30","text":"tunjukkan riwayat transaksi","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
 {"id":"debt-05","text":"pinjam ke bank 5jt","intent":"debt","type":"income","amount":5000000,"items":1,"category":"pendapatan_hutang","tags":[]}
 {"id":"debt-06","text":"kasih pinjam ke Doni 300000","intent":"debt","type":"expense","amount":300000,"items":1,"category":"pengeluaran_piutang","tags":[]}
-{"id":"debt-07","text":"piutang dari klien 1500000","intent":"debt","type":"expense","amount":1500000,"items":1,"category":"pengeluaran_piutang","tags":[]}
-{"id":"debt-08","text":"piutang Noki 20000000","intent":"debt","type":"expense","amount":20000000,"items":1,"category":"pengeluaran_piutang","tags":[]}
+{"id":"debt-07","text":"piutang dari klien 1500000","intent":"pending_confirmation","type":"expense","amount":1500000,"items":1,"category":"pengeluaran_piutang","tags":["ambiguous","debt_cash_mode"]}
+{"id":"debt-08","text":"piutang Noki 20000000","intent":"pending_confirmation","type":"expense","amount":20000000,"items":1,"category":"pengeluaran_piutang","tags":["ambiguous","debt_cash_mode"]}
 {"id":"debt-09","text":"Noki bayar hutang 600000","intent":"debt","type":"income","amount":600000,"items":1,"category":"pendapatan_terima_piutang","tags":[]}
-{"id":"debt-10","text":"hutang warung 85000","intent":"debt","type":"income","amount":85000,"items":1,"category":"pendapatan_hutang","tags":[]}
+{"id":"debt-10","text":"hutang warung 85000","intent":"pending_confirmation","type":"income","amount":85000,"items":1,"category":"pendapatan_hutang","tags":["ambiguous","debt_cash_mode"]}
 {"id":"debt-11","text":"bayar utang ke mama 1jt","intent":"debt","type":"expense","amount":1000000,"items":1,"category":"pengeluaran_bayar_hutang","tags":[]}
 {"id":"debt-12","text":"dapat pelunasan piutang 2400000","intent":"debt","type":"income","amount":2400000,"items":1,"category":"pendapatan_terima_piutang","tags":[]}
 {"id":"g-03","text":"pagi","intent":"greeting","type":null,"amount":null,"items":null,"tags":[]}

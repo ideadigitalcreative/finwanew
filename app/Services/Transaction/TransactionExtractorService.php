@@ -634,6 +634,11 @@ class TransactionExtractorService
             }
         }
 
+        // "dapat piutang dari Rina 800rb" = piutang dilunasi (uang masuk), bukan piutang baru
+        if (preg_match('/\b(?:dapat|dapet|nerima)\s+piutang\b/u', $t)) {
+            return ['type' => 'income', 'category_type' => 'pendapatan_terima_piutang'];
+        }
+
         // Kata "hutang/utang/piutang" berdiri sendiri: "hutang SpayLater 2jt",
         // "punya hutang ke budi 2jt", "piutang lama noki 5jt" → pencatatan baru.
         // Pelunasan/cicilan/bunga dikecualikan (bukan hutang baru). Apakah saldo

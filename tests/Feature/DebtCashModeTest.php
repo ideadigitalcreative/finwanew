@@ -98,18 +98,25 @@ beforeEach(function () {
 
 // ── Detektor ────────────────────────────────────────────────────────────────
 
-it('menebak apakah uangnya bergerak', function (string $text, string $expected) {
+it('keputusan tegas: hanya kalimat eksplisit yang tidak ditanya', function (string $text, string $expected) {
     expect(DebtCashMode::detect($text))->toBe($expected);
 })->with([
-    ['hutang SpayLater 2jt', DebtCashMode::RECORD_ONLY],
-    ['hutang shopee paylater 500rb', DebtCashMode::RECORD_ONLY],
-    ['utang kartu kredit BCA 3jt', DebtCashMode::RECORD_ONLY],
-    ['punya hutang ke budi 2jt', DebtCashMode::RECORD_ONLY],
+    // menyebut hutang/piutang tanpa pernyataan eksplisit → tanya
+    ['hutang SpayLater 2jt', DebtCashMode::AMBIGUOUS],
+    ['punya hutang SpayPinjam 3 juta', DebtCashMode::AMBIGUOUS],
+    ['Hutang Spay Pinjam 3jt', DebtCashMode::AMBIGUOUS],
+    ['utang kartu kredit BCA 3jt', DebtCashMode::AMBIGUOUS],
+    ['punya hutang ke budi 2jt', DebtCashMode::AMBIGUOUS],
+    ['masih utang sama andi 300rb', DebtCashMode::AMBIGUOUS],
+    ['catat hutang budi 1jt', DebtCashMode::AMBIGUOUS],
+    // eksplisit hanya dicatat
     ['hutang lama ke budi 2jt', DebtCashMode::RECORD_ONLY],
-    ['masih utang sama andi 300rb', DebtCashMode::RECORD_ONLY],
-    ['catat hutang budi 1jt', DebtCashMode::RECORD_ONLY],
+    ['hutang lama SpayLater 2jt', DebtCashMode::RECORD_ONLY],
     ['piutang lama noki 5jt', DebtCashMode::RECORD_ONLY],
     ['hutang budi 2jt jangan masuk saldo', DebtCashMode::RECORD_ONLY],
+    ['hutang budi 2jt hanya dicatat', DebtCashMode::RECORD_ONLY],
+    // eksplisit uang bergerak
+    ['hutang, pinjam dari budi 2jt', DebtCashMode::CASH],
     ['pinjam dari budi 2jt', DebtCashMode::CASH],
     ['dapat pinjaman dari bank 10jt', DebtCashMode::CASH],
     ['pinjaman kredivo cair 2jt', DebtCashMode::CASH],
@@ -119,9 +126,50 @@ it('menebak apakah uangnya bergerak', function (string $text, string $expected) 
     ['piutang noki 20jt', DebtCashMode::AMBIGUOUS],
 ]);
 
+it('tebakan terbaik saat tidak bisa bertanya (grup)', function (string $text, string $expected) {
+    expect(DebtCashMode::guess($text))->toBe($expected);
+})->with([
+    ['hutang SpayLater 2jt', DebtCashMode::RECORD_ONLY],
+    ['utang kartu kredit BCA 3jt', DebtCashMode::RECORD_ONLY],
+    ['punya hutang ke budi 2jt', DebtCashMode::RECORD_ONLY],
+    ['pinjam dari budi 2jt', DebtCashMode::CASH],
+    ['hutang budi 2jt', DebtCashMode::AMBIGUOUS],
+]);
+
 // ── WhatsApp ────────────────────────────────────────────────────────────────
 
-it('WA: hutang paylater / hutang lama hanya dicatat — saldo dompet tidak bertambah', function (string $text) {
+it('WA: hutang baru tidak langsung dicatat — tanya 1/2 dulu', function (string $text, int $amount, string $party) {
+    $ask = dcmSend($text);
+    expect($ask)->toContain('uangnya gimana')->toContain('1️⃣')->toContain('2️⃣')->toContain($party)
+        ->and(dcmTx())->toHaveCount(0)
+        ->and(dcmWallet())->toBe(1_000_000.0);
+
+    $reply = dcmSend('2');
+    $tx = dcmTx()->sole();
+    expect($tx->category->type)->toBe('pendapatan_hutang')
+        ->and($tx->isDebtRecordOnly())->toBeTrue()
+        ->and((int) $tx->amount)->toBe($amount)
+        ->and(dcmWallet())->toBe(1_000_000.0)
+        ->and(dcmOutstanding('hutang'))->toBe((float) $amount)
+        ->and($reply)->toContain('tidak berubah');
+})->with([
+    ['punya hutang SpayPinjam 3 juta', 3_000_000, 'Spaypinjam'],
+    ['Hutang Spay Pinjam 3jt', 3_000_000, 'Spay Pinjam'],
+    ['hutang SpayLater 2jt', 2_000_000, 'SPayLater'],
+    ['punya hutang ke budi 2jt', 2_000_000, 'Budi'],
+]);
+
+it('WA: "Hutang Spay Pinjam 3jt" → jawab 1 = uang masuk dompet sebagai hutang (bukan piutang)', function () {
+    dcmSend('Hutang Spay Pinjam 3jt');
+    dcmSend('1');
+
+    $tx = dcmTx()->sole();
+    expect($tx->type)->toBe('income')
+        ->and($tx->category->type)->toBe('pendapatan_hutang')
+        ->and(dcmWallet())->toBe(4_000_000.0);
+});
+
+it('WA: "hutang lama …" langsung hanya dicatat — saldo dompet tidak bertambah', function (string $text) {
     $reply = dcmSend($text);
 
     $tx = dcmTx()->sole();
@@ -134,13 +182,13 @@ it('WA: hutang paylater / hutang lama hanya dicatat — saldo dompet tidak berta
         ->and(dcmOutstanding('hutang'))->toBe(2_000_000.0)
         ->and($reply)->toContain('hanya dicatat')->toContain('tidak berubah');
 })->with([
-    ['hutang SpayLater 2jt'],
-    ['punya hutang ke budi 2jt'],
+    ['hutang lama SpayLater 2jt'],
     ['hutang lama ke budi 2jt'],
+    ['hutang lama budi 2jt'],
 ]);
 
 it('WA: hutang hanya-dicatat tidak terhitung sebagai pemasukan', function () {
-    dcmSend('hutang SpayLater 2jt');
+    dcmSend('hutang lama SpayLater 2jt');
 
     expect(Transaction::where('tenant_id', $this->tenant->id)->where('type', 'income')->count())->toBe(0);
 });
@@ -222,7 +270,7 @@ it('WA: bayar hutang yang hanya dicatat tetap mengurangi dompet & outstanding', 
 });
 
 it('WA: menghapus hutang hanya-dicatat tidak menggeser saldo', function () {
-    dcmSend('hutang SpayLater 2jt');
+    dcmSend('hutang lama SpayLater 2jt');
     app(\App\Services\Ledger\TransactionLedger::class)->delete(dcmTx()->sole());
 
     expect(dcmWallet())->toBe(1_000_000.0)
@@ -289,7 +337,7 @@ it('WA: bayar paylater setelah belanja → dompet & hutang turun, tidak dobel pe
 });
 
 it('WA: bayar paylater untuk hutang lama (tanpa belanja tercatat) tetap pengeluaran', function () {
-    dcmSend('hutang SpayLater 2jt');
+    dcmSend('hutang lama SpayLater 2jt');
     dcmSend('bayar spaylater 500rb');
 
     $pay = dcmTx()->sortByDesc('id')->first();
@@ -300,7 +348,7 @@ it('WA: bayar paylater untuk hutang lama (tanpa belanja tercatat) tetap pengelua
 });
 
 it('WA: hutang lama + belanja paylater teragregasi ke satu pihak', function () {
-    dcmSend('hutang shopee paylater 2jt');
+    dcmSend('hutang lama shopee paylater 2jt');
     dcmSend('beli sepatu pakai spaylater 500rb');
 
     $rows = app(DebtReceivableLedgerService::class)->summarize($this->tenant->id)['hutang'];

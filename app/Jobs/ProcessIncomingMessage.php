@@ -2844,7 +2844,9 @@ class ProcessIncomingMessage implements ShouldQueue
     {
         if (! preg_match('/\b(?:hutang|utang|piutang)\b/u', $textLower)
             // Pelunasan/cicilan/bunga bukan pencatatan hutang baru
-            || preg_match('/\b(?:bayar\w*|membayar|cicil\w*|angsur\w*|lunas\w*|melunasi|pelunasan|bunga|denda|terima|dibayar)\b/u', $textLower)) {
+            || preg_match('/\b(?:bayar\w*|membayar|cicil\w*|angsur\w*|lunas\w*|melunasi|pelunasan|bunga|denda|terima|dibayar)\b/u', $textLower)
+            // "dapat piutang dari Rina 800rb" = piutang dilunasi (uang masuk), bukan piutang baru
+            || preg_match('/\b(?:dapat|dapet|nerima)\s+piutang\b/u', $textLower)) {
             return false;
         }
 
@@ -2853,15 +2855,20 @@ class ProcessIncomingMessage implements ShouldQueue
             return false;
         }
 
-        $intent = $this->transactionExtractor->detectDebtIntent($messageText);
-        if (! in_array($intent, ['catat_hutang', 'catat_piutang'], true)
-            || \App\Services\DebtReceivable\DebtCashMode::detect($messageText) !== \App\Services\DebtReceivable\DebtCashMode::AMBIGUOUS) {
+        // Hanya pernyataan yang benar-benar eksplisit ("hutang lama…", "pinjam dari…") yang
+        // langsung dicatat; selebihnya user memilih sendiri 1/2.
+        if (\App\Services\DebtReceivable\DebtCashMode::detect($messageText) !== \App\Services\DebtReceivable\DebtCashMode::AMBIGUOUS) {
             return false;
         }
 
-        $isHutang = $intent === 'catat_hutang';
+        // Jenisnya dari kata yang ditulis user, bukan tebakan arah: di "hutang Spay Pinjam 3jt"
+        // kata "pinjam" adalah nama produk, bukan "Spay meminjam dari saya".
+        $isHutang = ! preg_match('/\bpiutang\b/u', $textLower);
         $name = \App\Services\DebtReceivable\CounterpartyExtractor::extract($messageText);
-        $name = $name !== null ? ucwords(mb_strtolower($name)) : null;
+        $name = $name !== null ? trim((string) preg_replace('/^(?:lama|lalu|dulu)\s+/iu', '', $name)) : null;
+        $name = $name !== null && $name !== ''
+            ? (\App\Services\DebtReceivable\CreditFacility::canonical($name) ?? ucwords(mb_strtolower($name)))
+            : null;
         $rp = 'Rp '.number_format($amount, 0, ',', '.');
 
         $action = [
