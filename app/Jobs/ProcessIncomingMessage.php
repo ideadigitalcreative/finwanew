@@ -803,6 +803,11 @@ class ProcessIncomingMessage implements ShouldQueue
             return;
         }
 
+        // "yg sebelumnya" / "selanjutnya" setelah "lihat transaksi" → halaman berikutnya.
+        if (TransactionService::isListMoreCommand($messageText) && $this->transactionService->handleViewMoreTransactions()) {
+            return;
+        }
+
         // "1 hapus" / "hapus nomor 1" setelah "lihat transaksi" → konfirmasi hapus nomor itu.
         // Dulu tidak dikenali (pola nomor hanya untuk "N ubah jadi X").
         if (($listNo = TransactionService::parseListDeleteIndex($messageText)) !== null) {
@@ -1494,7 +1499,9 @@ class ProcessIncomingMessage implements ShouldQueue
         // 1.6af2: Delete specific transaction by keyword - "hapus beli kue", "hapus makan siang"
         // Must have keyword after "hapus" but NOT "hapus transaksi terakhir" or "hapus semua"
         // EXCLUDE: "hapus target" and "hapus tabungan" - these are handled by delete savings target
-        if (preg_match('/^(hapus|delete|batal)\s+(?!transaksi\s*$)(?!semua)(?!terakhir)(?!target)(?!tabungan)(?!saving)(?!dompet\b)(?!rekening\b)(?!akun\b)(?!wallet\b)(?!bank\b)/i', $textLower)) {
+        // "batal di hapus" / "batal dihapus" = batalkan transaksi terakhir, bukan kata kunci "di hapus"
+        if (! TransactionService::isUndoCommand($messageText)
+            && preg_match('/^(hapus|delete|batal)\s+(?!transaksi\s*$)(?!semua)(?!terakhir)(?!target)(?!tabungan)(?!saving)(?!dompet\b)(?!rekening\b)(?!akun\b)(?!wallet\b)(?!bank\b)/i', $textLower)) {
             // Check if it's "hapus transaksi [keyword]" or "hapus [keyword]"
             $isSpecificDelete = preg_match('/^(hapus|delete|batal)\s+(transaksi\s+)?[a-zA-Z]/i', $textLower);
             // "batal beli baju, beli celana 150rb" = transaksi pengganti, bukan perintah hapus
@@ -1506,6 +1513,14 @@ class ProcessIncomingMessage implements ShouldQueue
             }
         }
         
+        // 1.6af2.1: kata kunci dulu, perintah di belakang — "ayam 2 kg di hapus", "kopi dihapus"
+        if (! $hasMoneyAmount && ! TransactionService::isUndoCommand($messageText)
+            && ($trailingKeyword = TransactionService::parseTrailingDeleteKeyword($messageText)) !== null) {
+            $this->transactionService->handleDeleteTransactionByKeyword($messageText, $trailingKeyword);
+
+            return;
+        }
+
         // 1.6af2.6: Perintah edit AMBIGU → tanya balik, jangan kirim template
         // Menangkap: "Ubah kategori", "Ganti nominal", "Edit tanggal", "Ubah tipe"
         // Ini adalah kasus 4 dari chat log: user bilang "Ubah kategori" tapi bot kirim template

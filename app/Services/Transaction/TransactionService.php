@@ -1582,7 +1582,11 @@ class TransactionService
             return false;
         }
 
-        $filler = '(?:\s+(?:aja|saja|deh|dong|ya|yah|kak|min|yang|yg|tadi|barusan|terakhir|itu|ini|transaksi|catatan|tsb|tersebut|tolong))*';
+        // "batal di hapus" / "batal dihapus" = batalkan transaksi tadi (hapus), bukan
+        // hapus transaksi berkata kunci "di hapus". ("batal hapus" = pulihkan → isRestoreCommand.)
+        $t = (string) preg_replace('/\bdi\s+(hapus|batalkan|batalin|cancel)\b/u', 'di$1', $t);
+
+        $filler = '(?:\s+(?:aja|saja|deh|dong|ya|yah|kak|min|yang|yg|tadi|barusan|terakhir|itu|ini|transaksi|catatan|tsb|tersebut|tolong|dihapus|dibatalkan|dibatalin|dicancel))*';
 
         return (bool) preg_match(
             '/^(?:(?:tolong|mohon|min|kak)\s+)?(?:undo|batal|batalin|batalkan|cancel|hapus|hapusin|delete|ga\s?jadi|gak\s?jadi|nggak\s?jadi|ngga\s?jadi|engga\s?jadi|enggak\s?jadi|tidak\s?jadi|gajadi)'.$filler.'$/u',
@@ -1918,7 +1922,36 @@ class TransactionService
      * Handle delete transaction by keyword/description
      * Example: "hapus beli kue", "hapus transaksi makan siang"
      */
-    public function handleDeleteTransactionByKeyword(string $messageText): void
+    /**
+     * "ayam 2 kg di hapus", "kopi dihapus", "bensin batal" — kata kunci DULU, perintah di
+     * belakang. Mengembalikan kata kuncinya, atau null bila bukan bentuk itu.
+     */
+    public static function parseTrailingDeleteKeyword(string $text): ?string
+    {
+        if (preg_match('/[\r\n]/', trim($text))) {
+            return null;
+        }
+        $t = trim((string) preg_replace('/\s+/u', ' ', mb_strtolower(trim($text))));
+        if (! preg_match(
+            '/^(.{2,60}?)\s+(?:tolong\s+)?(?:di\s?hapus|hapus|hapusin|di\s?batalkan|di\s?batalin|batalkan|batalin|batal|di\s?cancel|di\s?delete)(?:\s+(?:aja|saja|ya|yah|dong|deh|kak|min))*\s*[.!]*$/u',
+            $t, $m
+        )) {
+            return null;
+        }
+
+        $keyword = trim((string) preg_replace('/^(?:transaksi|catatan|yang|yg)\s+/u', '', trim($m[1])));
+        // "3 hapus" (nomor daftar), kata perintah saja, atau kalimat tanya → bukan bentuk ini
+        if (mb_strlen($keyword) < 3 || preg_match('/^\d+$/', $keyword)
+            || ! preg_match('/\p{L}{2,}/u', $keyword)
+            || str_contains($keyword, '?')
+            || preg_match('/^(?:tolong|mohon|sudah|udah|belum|blm|kenapa|kok|apa|apakah|bisa|gimana|bagaimana|cara|mau|ingin|pengen|jangan|ga|gak|nggak|tidak|ya|iya|oke|ok|semua|semuanya|itu|ini|tadi|barusan|terakhir|salah|batal|hapus)\b/u', $keyword)) {
+            return null;
+        }
+
+        return $keyword;
+    }
+
+    public function handleDeleteTransactionByKeyword(string $messageText, ?string $explicitKeyword = null): void
     {
         try {
             // Handle multi-line messages - only process first line
@@ -1927,7 +1960,8 @@ class TransactionService
 
             // Extract keyword from message
             // Pattern: "hapus [transaksi] keyword"
-            $keyword = preg_replace('/^(hapus|delete|batal|batalkan)\s+(transaksi\s+)?/i', '', trim($firstLine));
+            $keyword = $explicitKeyword
+                ?? preg_replace('/^(hapus|delete|batal|batalkan)\s+(transaksi\s+)?/i', '', trim($firstLine));
             $keyword = trim($keyword);
 
             if (empty($keyword) || strlen($keyword) < 3) {
@@ -1950,6 +1984,17 @@ class TransactionService
                 ->orderBy('created_at', 'desc')
                 ->orderBy('id', 'desc')
                 ->first();
+
+            // "ayam 2 kg" harus menemukan "ayam 2kg 30.000" → bandingkan tanpa spasi
+            if (! $transaction) {
+                $compact = (string) preg_replace('/\s+/u', '', mb_strtolower($keyword));
+                $transaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
+                    ->whereRaw("REPLACE(LOWER(description), ' ', '') LIKE ?", ['%'.$compact.'%'])
+                    ->where($this->todayOrRecordedToday())
+                    ->orderBy('created_at', 'desc')
+                    ->orderBy('id', 'desc')
+                    ->first();
+            }
 
             if (! $transaction) {
                 $this->sendReply(
@@ -2106,7 +2151,47 @@ class TransactionService
      * LINES: 2003-2151
      * MODIFICATION: None (structural move only)
      */
-    public function handleViewTransactions(): void
+    /** Jumlah baris per halaman "lihat transaksi". */
+    public const LIST_PAGE_SIZE = 10;
+
+    /** "yg sebelumnya", "selanjutnya", "lihat lagi" → halaman berikut dari daftar terakhir. */
+    public static function isListMoreCommand(string $text): bool
+    {
+        $t = mb_strtolower(trim((string) preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text)));
+        $t = (string) preg_replace('/\s+/u', ' ', $t);
+
+        return (bool) preg_match(
+            '/^(?:(?:lihat|liat|tampilkan|tampilin|tunjukkan)\s+)?(?:(?:yang|yg)\s+)?(?:(?:transaksi\s+)?(?:sebelum\s?nya|selanjutnya|berikutnya|lain\s?nya|sisanya|lebih\s+lama)|lagi|lanjut|next|more)(?:\s+(?:dong|ya|kak|min|lagi|transaksi|nya))*$/u',
+            $t
+        );
+    }
+
+    /** Halaman berikut dari daftar terakhir. false bila tidak ada daftar aktif. */
+    public function handleViewMoreTransactions(): bool
+    {
+        foreach ($this->listIndexKeys() as $key) {
+            $payload = Cache::get($key);
+            if (is_array($payload) && isset($payload['total'])) {
+                $shown = count($payload['ids'] ?? []);
+                if ($shown >= (int) $payload['total']) {
+                    $this->sendReply('✅ Itu sudah semua transaksi ('.$payload['total'].").\n\n💡 Ketik _lihat transaksi_ untuk mengulang dari yang terbaru.");
+
+                    return true;
+                }
+                $this->handleViewTransactions($shown, array_values($payload['ids']));
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  int  $offset  jumlah baris yang sudah ditampilkan (halaman lanjutan)
+     * @param  list<int>  $previousIds  ID yang sudah ditampilkan → nomor urut berlanjut
+     */
+    public function handleViewTransactions(int $offset = 0, array $previousIds = []): void
     {
         try {
             $today = now()->toDateString();
@@ -2116,41 +2201,41 @@ class TransactionService
             // pending/ditolak tidak boleh ikut dihitung di Masuk/Keluar/Net.
             // Baris saldo dasar rekonsiliasi bukan transaksi user → tidak ditampilkan
             $notBaseline = fn ($q) => $q->whereNull('source')->orWhere('source', '!=', Transaction::KIND_RECONCILE_BASELINE);
-            $transactions = Transaction::where('tenant_id', $this->message->tenant_id)
+            $base = fn () => Transaction::where('tenant_id', $this->message->tenant_id)
                 ->where('status', 'confirmed')
-                ->where($notBaseline)
-                ->with('category')
-                ->whereDate('transaction_date', $today)
-                ->orderBy('created_at', 'desc')
-                ->limit(5)
-                ->get();
+                ->where($notBaseline);
 
-            if ($transactions->isEmpty()) {
+            $scope = fn ($q) => $q->whereDate('transaction_date', $today);
+            $title = '📋 *Transaksi Hari Ini*';
+            if (! $base()->where($scope)->exists()) {
                 $weekAgo = now()->subDays(7)->toDateString();
-                $transactions = Transaction::where('tenant_id', $this->message->tenant_id)
-                    ->where('status', 'confirmed')
-                    ->where($notBaseline)
-                    ->with('category')
-                    ->whereDate('transaction_date', '>=', $weekAgo)
-                    ->orderBy('transaction_date', 'desc')
-                    ->orderBy('created_at', 'desc')
-                    ->limit(5)
-                    ->get();
-
-                if ($transactions->isEmpty()) {
-                    $this->sendReply("📋 Belum ada transaksi 7 hari terakhir.\n\n💡 Catat: _beli makan 25rb_");
-                    return;
-                }
-                $title = "📋 *Transaksi 7 Hari*";
-            } else {
-                $title = "📋 *Transaksi Hari Ini*";
+                $scope = fn ($q) => $q->whereDate('transaction_date', '>=', $weekAgo);
+                $title = '📋 *Transaksi 7 Hari*';
             }
 
-            $totalIncome = 0;
-            $totalExpense = 0;
+            $total = $base()->where($scope)->count();
+            if ($total === 0) {
+                $this->sendReply("📋 Belum ada transaksi 7 hari terakhir.\n\n💡 Catat: _beli makan 25rb_");
 
-            $reply = $title."\n";
-            $orderedIds = [];
+                return;
+            }
+
+            $transactions = $base()->where($scope)
+                ->with('category')
+                ->orderBy('transaction_date', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->orderBy('id', 'desc')
+                ->skip($offset)
+                ->limit(self::LIST_PAGE_SIZE)
+                ->get();
+
+            // Total = SELURUH transaksi periode itu, bukan hanya baris yang ditampilkan
+            $totalIncome = (float) $base()->where($scope)->where('type', 'income')->sum('amount');
+            $totalExpense = (float) $base()->where($scope)->where('type', 'expense')->sum('amount');
+
+            $last = $offset + $transactions->count();
+            $reply = $title.($total > self::LIST_PAGE_SIZE ? ' ('.($offset + 1)."–{$last} dari {$total})" : '')."\n";
+            $orderedIds = $previousIds;
 
             foreach ($transactions as $i => $tx) {
                 $typeEmoji = match ($tx->type) {
@@ -2162,14 +2247,8 @@ class TransactionService
                 // Keterangan tanpa nominal — nominal sudah tampil di kolom tersendiri
                 $desc = KeywordNormalizer::stripAmountFromDescription($tx->description);
 
-                if ($tx->type === 'income') {
-                    $totalIncome += $tx->amount;
-                } elseif ($tx->type === 'expense') {
-                    $totalExpense += $tx->amount;
-                }
-
                 // Compact: single line per item, bernomor (Ops — balas angka → aksi)
-                $reply .= ($i + 1).". {$typeEmoji} *Rp {$amount}*";
+                $reply .= ($offset + $i + 1).". {$typeEmoji} *Rp {$amount}*";
                 if ($desc) $reply .= " - {$desc}";
                 $reply .= "\n";
 
@@ -2181,6 +2260,9 @@ class TransactionService
             if ($totalExpense > 0) $reply .= '💸 Keluar: Rp '.number_format($totalExpense, 0, ',', '.')."\n";
             $net = $totalIncome - $totalExpense;
             $reply .= "📊 Net: Rp ".number_format($net, 0, ',', '.');
+            if ($last < $total) {
+                $reply .= "\n\n➡️ Masih ada *".($total - $last).'* transaksi lagi — ketik *sebelumnya* untuk melihatnya.';
+            }
             $reply .= "\n\n💡 Ketik *nomor* lalu perubahannya, mis. *3 ubah jadi 50rb* atau *3 hapus*";
 
             $this->sendReply($reply);
@@ -2192,7 +2274,7 @@ class TransactionService
             if ($orderedIds !== []) {
                 // Di semua kunci identitas (LID ↔ nomor HP orang yang sama)
                 foreach ($this->listIndexKeys() as $listKey) {
-                    Cache::put($listKey, ['ids' => $orderedIds], now()->addSeconds((int) config('finwa_reply_edit.list_ttl', 3600)));
+                    Cache::put($listKey, ['ids' => $orderedIds, 'total' => $total], now()->addSeconds((int) config('finwa_reply_edit.list_ttl', 3600)));
                 }
 
                 $waOut = Cache::get('wa_out_msgid:'.$this->message->message_id);

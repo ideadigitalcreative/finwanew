@@ -176,3 +176,72 @@ it('"N ubah jadi X" tetap jalan (tidak terganggu)', function () {
 
     expect((int) $this->bensin->fresh()->amount)->toBe(25_000);
 });
+
+// ── Kasus Mutia 12/11/2026: "batal di hapus", "ayam 2 kg di hapus", daftar terpotong ──
+
+it('"batal di hapus" = batalkan transaksi terakhir (konfirmasi), bukan kata kunci "di hapus"', function (string $text) {
+    $ask = lstSend($text);
+    expect($ask)->toContain('Hapus transaksi ini?')->toContain('ada uang masuk')
+        ->not->toContain('keyword');
+
+    lstSend('ya');
+    expect(Transaction::find($this->masuk->id))->toBeNull();
+})->with([['batal di hapus'], ['batal dihapus'], ['Batal, di hapus aja']]);
+
+it('"batal hapus" tetap berarti pulihkan, bukan hapus', function () {
+    expect(TransactionService::isUndoCommand('batal hapus'))->toBeFalse()
+        ->and(TransactionService::isRestoreCommand('batal hapus'))->toBeTrue();
+});
+
+it('mengenali kata kunci di depan perintah hapus', function (string $text, ?string $expected) {
+    expect(TransactionService::parseTrailingDeleteKeyword($text))->toBe($expected);
+})->with([
+    ['ayam 2 kg di hapus', 'ayam 2 kg'],
+    ['ayam 2kg dihapus', 'ayam 2kg'],
+    ['bensin hapus aja', 'bensin'],
+    ['transaksi bayar ongkir dibatalkan', 'bayar ongkir'],
+    ['kopi batal', 'kopi'],
+    ['3 hapus', null],
+    ['kenapa transaksi saya dihapus', null],
+    ['tolong hapus', null],
+    ['beli kopi 25rb', null],
+]);
+
+it('"ayam 2 kg di hapus" menemukan "ayam 2kg 30.000" walau spasinya beda', function () {
+    $ayam = lstTx('ayam 2kg 30.000', 30_000);
+    lstTx('daia 28.500', 28_500);
+
+    $ask = lstSend('ayam 2 kg di hapus');
+    expect($ask)->toContain('Hapus transaksi ini?')->toContain('ayam 2kg');
+
+    lstSend('ya');
+    expect(Transaction::find($ayam->id))->toBeNull()
+        ->and(Transaction::where('tenant_id', $this->tenant->id)->count())->toBe(5);
+});
+
+it('daftar panjang: menyebut jumlah, total seharian, dan "yg sebelum nya" membuka halaman berikut', function () {
+    foreach (range(1, 9) as $n) {
+        lstTx("belanja {$n}", 1_000);
+    } // total 13 transaksi: 12 keluar (81rb + 9rb), 1 masuk
+
+    $first = lstSend('lihat transaksi');
+    expect($first)->toContain('1–10 dari 13')
+        ->toContain('Keluar: Rp 90.000')       // seluruh hari, bukan hanya 10 baris
+        ->toContain('Masih ada *3* transaksi lagi')
+        ->not->toContain('beli token listrik');
+
+    $more = lstSend('yg sebelum nya');
+    expect($more)->toContain('11–13 dari 13')
+        ->toContain('11. ')->toContain('13. ')
+        ->toContain('beli token listrik')
+        ->not->toContain('Masih ada');
+
+    // nomor berlanjut → "13 hapus" = transaksi tertua
+    expect(lstSend('13 hapus'))->toContain('beli token listrik');
+
+    expect(lstSend('sebelumnya'))->toContain('sudah semua transaksi');
+});
+
+it('"sebelumnya" tanpa daftar aktif tidak dianggap perintah daftar', function () {
+    expect(lstSend('sebelumnya'))->not->toContain('Transaksi Hari Ini')->not->toContain('sudah semua');
+});
