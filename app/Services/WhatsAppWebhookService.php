@@ -832,6 +832,11 @@ class WhatsAppWebhookService
             $mediaPath = null;
             $mediaFilename = null;
             $content = $this->sanitizeIncomingTextValue($content);
+            // Keterangan foto (caption): `body` gambar berisi URL media, jadi keterangan
+            // user dikirim gateway di field terpisah dan dipakai saat membaca struk.
+            $caption = is_string($waMessageData['caption'] ?? null)
+                ? mb_substr(trim($this->sanitizeIncomingTextValue((string) $waMessageData['caption'])), 0, 500)
+                : '';
             Log::debug('WhatsApp webhook: incoming payload summary', [
                 'session_id' => $sessionId,
                 'tenant_id' => $tenantId,
@@ -1088,6 +1093,7 @@ class WhatsAppWebhookService
                     'media_url' => $mediaUrl,
                     'media_path' => $mediaPath,
                     'filename' => $mediaFilename,
+                    'caption' => $caption !== '' ? $caption : null,
                     'location' => $waMessageData['location'] ?? null,
                     'contact' => $waMessageData['contact'] ?? null,
                     'mentions' => $waMessageData['mentionedIds'] ?? [],
@@ -1150,6 +1156,9 @@ class WhatsAppWebhookService
             }
             if (! empty($payload['raw_data']['filename'])) {
                 $metadata['filename'] = $payload['raw_data']['filename'];
+            }
+            if (! empty($payload['raw_data']['caption'])) {
+                $metadata['caption'] = $payload['raw_data']['caption'];
             }
 
             try {

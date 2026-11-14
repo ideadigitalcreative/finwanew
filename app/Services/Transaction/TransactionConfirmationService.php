@@ -319,13 +319,16 @@ class TransactionConfirmationService
      * MOVED FROM: ProcessIncomingMessage::sendReceiptConfirmation()
      * LINES: 4399-4490
      */
-    public function sendReceiptConfirmation(Transaction $transaction, array $items, ?string $merchant, int $remainingCount = 0): void
+    public function sendReceiptConfirmation(Transaction $transaction, array $items, ?string $merchant, int $remainingCount = 0, ?string $caption = null): void
     {
         $amount = number_format($transaction->amount, 0, ',', '.');
 
         $reply = "🧾 *Struk Tercatat!* ✅\n";
         if ($merchant) {
             $reply .= "🏪 *{$merchant}*\n";
+        }
+        if ($caption) {
+            $reply .= "📝 _{$caption}_\n";
         }
         $reply .= "\n";
 
@@ -452,13 +455,17 @@ class TransactionConfirmationService
         ?string $recipientAccount,
         ?string $senderAccount,
         ?string $referenceNumber,
-        ?string $transferNote
+        ?string $transferNote,
+        ?string $caption = null
     ): void {
         $amount = number_format($transaction->amount, 0, ',', '.');
 
         $reply = "🏦 *Transfer Tercatat!* ✅\n";
         if ($bankName) {
             $reply .= "🏪 *{$bankName}*\n";
+        }
+        if ($caption) {
+            $reply .= "📝 _{$caption}_\n";
         }
         $reply .= "\n";
 

@@ -432,16 +432,25 @@ class OcrProcessorService
                     $description .= " - {$transferNote}";
                 }
 
+                // Keterangan foto dari user: kategori, dompet & deskripsi ikut keterangan
+                $hints = $this->captionHints($isIncoming, $isIncoming ? null : $bankName);
+                if ($hints['caption'] !== null) {
+                    $description = "{$hints['caption']} — {$description}";
+                }
+
                 $txData = [
                     'type' => $isIncoming ? 'income' : 'expense',
                     'amount' => $total,
-                    'category_type' => $isIncoming ? 'pendapatan_transfer' : 'pengeluaran_transfer',
-                    'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw),
+                    'category_type' => $hints['category_type'] ?? ($isIncoming ? 'pendapatan_transfer' : 'pengeluaran_transfer'),
+                    'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw ?: $hints['date']),
                     'description' => mb_substr($description, 0, 255),
                     'source' => 'transfer_ai',
                     'confidence_score' => 0.95,
-                    'account_name' => null,
+                    'account_name' => $hints['account_name'],
                 ];
+                if ($hints['caption'] !== null) {
+                    $txData['metadata'] = ['caption' => $hints['caption']];
+                }
 
                 $transaction = $this->transactionService->createTransaction($txData, false);
                 if (! $transaction) {
@@ -464,7 +473,8 @@ class OcrProcessorService
                     $recipientAccount,
                     $senderAccount,
                     $referenceNumber,
-                    $transferNote
+                    $transferNote,
+                    $hints['caption']
                 );
 
                 return;
@@ -565,16 +575,26 @@ class OcrProcessorService
                 }
             }
 
+            // Keterangan foto dari user: kategori, dompet & deskripsi ikut keterangan
+            $hints = $this->captionHints(false);
+            $description = $merchant ? "Belanja di {$merchant}" : 'Belanja dari struk';
+            if ($hints['caption'] !== null) {
+                $description = "{$hints['caption']} — {$description}";
+            }
+
             $txData = [
                 'type' => 'expense',
                 'amount' => $total,
-                'category_type' => $categoryType,
-                'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw),
-                'description' => $merchant ? "Belanja di {$merchant}" : 'Belanja dari struk',
+                'category_type' => $hints['category_type'] ?? $categoryType,
+                'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw ?: $hints['date']),
+                'description' => mb_substr($description, 0, 255),
                 'source' => 'receipt_ai',
                 'confidence_score' => 0.95,
-                'account_name' => null,
+                'account_name' => $hints['account_name'],
             ];
+            if ($hints['caption'] !== null) {
+                $txData['metadata'] = ['caption' => $hints['caption']];
+            }
 
             $transaction = $this->transactionService->createTransaction($txData, false);
             if (! $transaction) {
@@ -589,7 +609,7 @@ class OcrProcessorService
                 ]),
             ]);
 
-            $this->confirmationService->sendReceiptConfirmation($transaction, $items, $merchant);
+            $this->confirmationService->sendReceiptConfirmation($transaction, $items, $merchant, 0, $hints['caption']);
 
             // Cek silang: jumlah item (+pajak) vs total. Beda jauh → kemungkinan salah baca,
             // minta user memeriksa (transaksi tetap tercatat & bisa dikoreksi).
@@ -616,6 +636,115 @@ class OcrProcessorService
             ]);
             $this->handleOcrFailure($ocrJob, $e->getMessage());
         }
+    }
+
+    /**
+     * Keterangan (caption) yang diketik user bersama foto struk, mis.
+     * "Beli minum kemarin lewat rek mandiri". Kosong bila tidak ada.
+     */
+    protected function caption(): string
+    {
+        $meta = is_array($this->message->metadata) ? $this->message->metadata : [];
+        $raw = is_array($this->message->raw_data) ? $this->message->raw_data : [];
+        $caption = $meta['caption'] ?? $raw['caption'] ?? '';
+        if (! is_string($caption)) {
+            return '';
+        }
+        $caption = trim((string) preg_replace('/\s+/u', ' ', $caption));
+
+        // Bukan keterangan: referensi media (URL / path upload)
+        if ($caption === '' || preg_match('#^(https?://|/?storage/|whatsapp/)#i', $caption)) {
+            return '';
+        }
+
+        return mb_substr($caption, 0, 200);
+    }
+
+    /**
+     * Petunjuk dari keterangan foto. Struk tetap sumber nominal & tanggal; keterangan
+     * user menentukan kategori, dompet, dan deskripsi (struk tidak tahu itu "beli minum").
+     *
+     * @param  string|null  $sourceBank  bank sumber dana di bukti transfer keluar —
+     *                                   dipakai memilih dompet bila keterangan tidak menyebutnya
+     * @return array{caption: ?string, category_type: ?string, account_name: ?string, date: ?string}
+     */
+    protected function captionHints(bool $isIncome, ?string $sourceBank = null): array
+    {
+        $caption = $this->caption();
+        $hints = ['caption' => $caption !== '' ? $caption : null, 'category_type' => null, 'account_name' => null, 'date' => null];
+        $tenantId = (int) $this->message->tenant_id;
+
+        if ($caption !== '') {
+            try {
+                $inference = (new \App\Services\Transaction\CategoryInferenceService)->infer($caption, $isIncome, $tenantId);
+                $cat = $inference['category_type'] ?? null;
+                $prefix = $isIncome ? 'pendapatan_' : 'pengeluaran_';
+                if (is_string($cat) && str_starts_with($cat, $prefix) && ! str_ends_with($cat, '_lainnya')) {
+                    $hints['category_type'] = $cat;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Receipt caption: category inference failed', ['error' => $e->getMessage()]);
+            }
+
+            $hints['date'] = (new \App\Services\Transaction\TransactionExtractorService)->extractDateFromText($caption);
+            $hints['account_name'] = $this->walletFromCaption($caption, $tenantId);
+        }
+
+        // Keterangan tidak menyebut dompet → pakai bank sumber dana di bukti transfer,
+        // hanya bila user memang punya dompet bernama bank itu.
+        if ($hints['account_name'] === null && $sourceBank) {
+            $balance = app(\App\Services\BalanceService::class)->findOrCreateBalance($tenantId, $sourceBank, null);
+            $hints['account_name'] = $balance?->account_name;
+        }
+
+        if ($hints['caption'] !== null || $hints['account_name'] !== null) {
+            Log::info('Receipt caption hints', [
+                'message_id' => $this->message->id,
+                'has_caption' => $hints['caption'] !== null,
+                'category_type' => $hints['category_type'],
+                'account_name' => $hints['account_name'],
+            ]);
+        }
+
+        return $hints;
+    }
+
+    /**
+     * Dompet milik tenant yang disebut di keterangan ("lewat rek mandiri" → "Bank Mandiri").
+     * Hanya mengembalikan dompet yang SUDAH ada — tidak pernah membuat dompet baru.
+     */
+    protected function walletFromCaption(string $caption, int $tenantId): ?string
+    {
+        $balanceService = app(\App\Services\BalanceService::class);
+
+        $named = (new \App\Services\Transaction\TransactionExtractorService)->extractAccountNameFromMessage($caption);
+        if ($named) {
+            $balance = $balanceService->findOrCreateBalance($tenantId, $named, null);
+            if ($balance) {
+                return $balance->account_name;
+            }
+        }
+
+        // Nama dompet (tanpa awalan "Bank"/"Dompet"/"Rekening") muncul sebagai kata utuh
+        $captionLower = mb_strtolower($caption);
+        $best = null;
+        $bestLen = 0;
+        $wallets = \App\Models\Balance::where('tenant_id', $tenantId)->where('is_active', true)->pluck('account_name');
+        foreach ($wallets as $name) {
+            $full = mb_strtolower(trim((string) $name));
+            $short = trim((string) preg_replace('/^(bank|dompet|rekening|rek|e-?wallet|wallet)\s+/u', '', $full));
+            foreach (array_unique([$full, $short]) as $needle) {
+                if (mb_strlen($needle) < 3 || in_array($needle, ['utama', 'pribadi', 'saya'], true)) {
+                    continue;
+                }
+                if (mb_strlen($needle) > $bestLen && preg_match('/(?<![\p{L}\p{N}])'.preg_quote($needle, '/').'(?![\p{L}\p{N}])/u', $captionLower)) {
+                    $best = (string) $name;
+                    $bestLen = mb_strlen($needle);
+                }
+            }
+        }
+
+        return $best;
     }
 
     /**

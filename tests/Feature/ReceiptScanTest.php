@@ -69,7 +69,7 @@ function scanWorld(): array
     return [$tenant, $channel, $user];
 }
 
-function scanSend(array $world, ?string $path = null): array
+function scanSend(array $world, ?string $path = null, ?string $caption = null): array
 {
     [$tenant, $channel] = $world;
     $GLOBALS['scan_replies'] = [];
@@ -78,7 +78,7 @@ function scanSend(array $world, ?string $path = null): array
         'tenant_id' => $tenant->id, 'channel_id' => $channel->id, 'channel' => 'whatsapp',
         'channel_account' => '628999000333', 'sender_id' => SCAN_SENDER,
         'message_id' => 'scan-'.uniqid(), 'type' => 'image', 'content' => $path,
-        'metadata' => ['mimetype' => 'image/jpeg', 'media_url' => $path], 'timestamp' => time(),
+        'metadata' => array_filter(['mimetype' => 'image/jpeg', 'media_url' => $path, 'caption' => $caption]), 'timestamp' => time(),
     ]);
     (new ProcessIncomingMessage($message))->handle();
 
@@ -297,4 +297,64 @@ it('bukti transfer KE orang lain tetap pengeluaran, referensi sama tidak dobel',
     $txs = Transaction::where('tenant_id', $this->world[0]->id)->get();
     expect($txs)->toHaveCount(1)
         ->and($txs->first()->type)->toBe('expense');
+});
+
+// ── Keterangan (caption) foto ──
+
+it('keterangan foto menentukan kategori, dompet, dan deskripsi bukti QRIS', function () {
+    $tenant = $this->world[0];
+    Balance::create([
+        'tenant_id' => $tenant->id, 'account_name' => 'Bank Mandiri', 'account_type' => 'bank', 'currency' => 'IDR',
+        'balance' => 500000, 'balance_date' => now()->toDateString(), 'is_active' => true, 'is_default' => false,
+    ]);
+    Http::fake(['*generativelanguage*' => Http::response(geminiJson([
+        'document_type' => 'bank_transfer', 'bank_name' => 'Bank Mandiri', 'merchant_name' => 'ALGO BANDUNG 1 - QRIS',
+        'recipient_name' => 'ALGO BANDUNG 1 - QRIS', 'sender_name' => 'Orang Lain', 'sender_account' => '5113',
+        'date' => now()->subDay()->toDateString(), 'total_amount' => 7200, 'reference_number' => 'REF-CAP-1', 'items' => [],
+    ]))]);
+
+    $replies = implode("
+", scanSend($this->world, null, 'Beli minum kemarin lewat rek mandiri'));
+
+    $tx = Transaction::with(['category', 'balance'])->where('tenant_id', $tenant->id)->latest('id')->first();
+    expect($tx->type)->toBe('expense')
+        ->and((int) $tx->amount)->toBe(7200)
+        ->and($tx->category->type)->not->toBe('pengeluaran_transfer')
+        ->and($tx->balance->account_name)->toBe('Bank Mandiri')
+        ->and($tx->description)->toContain('Beli minum')
+        ->and($tx->description)->toContain('ALGO BANDUNG')
+        ->and($tx->transaction_date->toDateString())->toBe(now()->subDay()->toDateString())
+        ->and($replies)->toContain('Beli minum kemarin lewat rek mandiri')
+        ->and($replies)->toContain('Sisa saldo Bank Mandiri');
+});
+
+it('tanpa keterangan, bukti transfer keluar memakai dompet bank sumber dana bila ada', function () {
+    $tenant = $this->world[0];
+    Balance::create([
+        'tenant_id' => $tenant->id, 'account_name' => 'Bank Mandiri', 'account_type' => 'bank', 'currency' => 'IDR',
+        'balance' => 500000, 'balance_date' => now()->toDateString(), 'is_active' => true, 'is_default' => false,
+    ]);
+    Http::fake(['*generativelanguage*' => Http::response(geminiJson([
+        'document_type' => 'bank_transfer', 'bank_name' => 'Bank Mandiri', 'merchant_name' => 'Budi Santoso',
+        'recipient_name' => 'Budi Santoso', 'total_amount' => 50000, 'reference_number' => 'REF-CAP-2', 'items' => [],
+    ]))]);
+
+    scanSend($this->world);
+
+    $tx = Transaction::with(['category', 'balance'])->where('tenant_id', $tenant->id)->latest('id')->first();
+    expect($tx->category->type)->toBe('pengeluaran_transfer')
+        ->and($tx->balance->account_name)->toBe('Bank Mandiri');
+});
+
+it('keterangan pada struk belanja dipakai untuk kategori dan deskripsi', function () {
+    Http::fake(['*generativelanguage*' => Http::response(geminiJson([
+        'document_type' => 'receipt', 'merchant_name' => 'Toko Jaya', 'date' => now()->toDateString(),
+        'items' => [], 'tax' => 0, 'total_amount' => 40000,
+    ]))]);
+
+    scanSend($this->world, null, 'isi bensin motor');
+
+    $tx = Transaction::with('category')->where('tenant_id', $this->world[0]->id)->latest('id')->first();
+    expect($tx->description)->toContain('isi bensin motor')
+        ->and($tx->category->type)->not->toBe('pengeluaran_belanja');
 });
