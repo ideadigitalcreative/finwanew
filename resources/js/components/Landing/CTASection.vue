@@ -22,25 +22,34 @@
 
     <section
         id="testimonials"
-        class="max-w-[1200px] mx-auto flex flex-col py-[40px] px-[20px] md:py-[50px] md:px-[30px] lg:py-[70px] lg:px-[50px] gap-[20px] md:gap-[30px] rounded-[32px] mb-16 bg-[linear-gradient(180deg,#59c323_0%,#4da818_48%,#3d9014_100%)]"
+        class="max-w-[1200px] mx-auto flex flex-col rounded-3xl mb-16 overflow-hidden relative"
     >
-        <div class="flex flex-col gap-[20px] md:gap-[30px] items-center text-center">
+        <div class="absolute inset-0 bg-gradient-to-b from-[#3d9014]/10 via-white/80 to-white"></div>
+        <div class="absolute -top-10 -left-8 w-32 h-32 bg-white/60 rounded-full blur-[50px]"></div>
+        <div class="absolute -top-10 -right-8 w-32 h-32 bg-white/60 rounded-full blur-[50px]"></div>
+        <div class="absolute -top-8 left-4 w-36 h-36 bg-[#3d9014]/30 rounded-full blur-[55px]"></div>
+        <div class="absolute -top-6 right-8 w-32 h-32 bg-[#3d9014]/25 rounded-full blur-[50px]"></div>
+        <div class="absolute top-2 left-1/3 w-28 h-28 bg-[#3d9014]/25 rounded-full blur-[45px]"></div>
+        <div class="absolute top-4 -right-4 w-24 h-24 bg-[#3d9014]/20 rounded-full blur-[40px]"></div>
+        <div class="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-white via-white/80 to-transparent"></div>
+
+        <div class="relative z-10 flex flex-col gap-[20px] md:gap-[30px] items-center text-center py-[40px] px-[20px] md:py-[50px] md:px-[30px] lg:py-[60px] lg:px-[50px]">
             <div class="gradient-badge flex w-fit items-center gap-[6px] rounded-full border border-[#f0c9a8] bg-[#fff3e6]/95 p-[8px_16px] backdrop-blur-sm">
                 <Medal class="h-5 w-5 shrink-0 text-[#fa8605]" />
                 <p class="text-xs font-medium text-[#8a4608] md:text-sm">Lebih Hemat & Teratur</p>
             </div>
             <div class="flex flex-col px-4">
-                <h2 class="font-bold text-[24px] md:text-3xl lg:text-4xl leading-tight text-white">Review Aplikasi FinWa dari Pengguna</h2>
-                <p class="text-white/85 text-sm md:text-base lg:text-lg -tracking-[2%] mt-2">Berikut ini kata mereka yang sudah menggunakan Finwa.</p>
+                <h2 class="font-bold text-[24px] md:text-3xl lg:text-4xl leading-tight bg-gradient-to-br from-[#59c323] via-[#4da818] to-[#3d9014] bg-clip-text text-transparent">Review Aplikasi FinWa dari Pengguna</h2>
+                <p class="text-[var(--fw-600)] text-sm md:text-base lg:text-lg -tracking-[2%] mt-2">Berikut ini kata mereka yang sudah menggunakan Finwa.</p>
             </div>
         </div>
         
-        <div class="testi w-full overflow-hidden flex flex-col gap-6 relative">
+        <div class="testi w-full overflow-hidden flex flex-col gap-6 relative z-10 py-[10px] px-[20px] md:py-[15px] md:px-[30px] lg:py-[20px] lg:px-[50px] pb-[40px] md:pb-[50px] lg:pb-[60px]">
             <!-- Row 1: Slide Left -->
             <div class="group/slider flex flex-nowrap w-max items-center hover:pause-animate">
                 <div class="testi-container animate-slideToL flex gap-6 pl-6 items-center flex-nowrap">
                     <!-- Loop items multiple times for infinite scroll illusion -->
-                    <div v-for="(testi, i) in testimonials1" :key="`row1-${i}`" class="test-card w-[280px] flex flex-col h-full rounded-xl border border-gray-200/90 bg-white gap-2 p-4 transition-colors hover:border-[color:var(--fw-400)]">
+                    <div v-for="(testi, i) in testimonials1" :key="`row1-${i}`" class="test-card w-[280px] flex flex-col h-full rounded-xl border border-neutral-200/80 bg-neutral-50/60 gap-2 p-4 transition-colors hover:border-[color:var(--fw-400)] hover:bg-white hover:shadow-sm">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 flex shrink-0 rounded-full overflow-hidden bg-[var(--fw-100)] items-center justify-center text-[var(--fw-600)]">
                                 <User class="w-6 h-6" />
@@ -58,7 +67,7 @@
             <!-- Row 2: Slide Right -->
             <div class="group/slider flex flex-nowrap w-max items-center hover:pause-animate">
                 <div class="logo-container animate-slideToR flex gap-6 pl-6 items-center flex-nowrap">
-                    <div v-for="(testi, i) in testimonials2" :key="`row2-${i}`" class="test-card w-[280px] flex flex-col h-full rounded-xl border border-gray-200/90 bg-white gap-2 p-4 transition-colors hover:border-[color:var(--fw-400)]">
+                    <div v-for="(testi, i) in testimonials2" :key="`row2-${i}`" class="test-card w-[280px] flex flex-col h-full rounded-xl border border-neutral-200/80 bg-neutral-50/60 gap-2 p-4 transition-colors hover:border-[color:var(--fw-400)] hover:bg-white hover:shadow-sm">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 flex shrink-0 rounded-full overflow-hidden bg-[var(--fw-100)] items-center justify-center text-[var(--fw-600)]">
                                 <User class="w-6 h-6" />

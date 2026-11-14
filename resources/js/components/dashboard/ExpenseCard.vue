@@ -1,102 +1,67 @@
 <script setup lang="ts">
-import { TrendingDown, TrendingUp, Zap } from 'lucide-vue-next';
+import { computed } from 'vue';
 
 interface Props {
     expense: number;
     period: string;
-    changePercent: number;
+    // null = tidak ada data bulan lalu sebagai pembanding
+    changePercent: number | null;
     saved: number;
     targetPercent: number;
+    hasBudget?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+    hasBudget: false,
+});
 
-const formatCurrency = (amount: number) => {
+const formatFull = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
         style: 'currency',
         currency: 'IDR',
-        minimumFractionDigits: 0
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
     }).format(amount);
 };
+
+const formatCompact = (amount: number) => {
+    return 'Rp ' + new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(amount);
+};
+
+// Kalau ada anggaran tampilkan pemakaian pagu; kalau tidak, perbandingan dengan bulan lalu
+const footnote = computed(() => {
+    if (props.hasBudget) {
+        return { icon: 'pie_chart', text: `${props.targetPercent.toLocaleString('id-ID')}% dari pagu anggaran` };
+    }
+    if (props.changePercent === null || props.changePercent === undefined) {
+        return { icon: 'info', text: 'Belum ada data bulan lalu' };
+    }
+    const v = props.changePercent;
+    const sign = v > 0 ? '+' : v < 0 ? '−' : '';
+    return { icon: v >= 0 ? 'trending_up' : 'trending_down', text: `${sign}${Math.abs(v).toLocaleString('id-ID')}% vs bulan lalu` };
+});
 </script>
 
 <template>
-    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 transition-all duration-500 animate-fade-in-up" style="animation-delay: 0.3s">
-        <div class="flex items-center justify-between mb-2 md:mb-2.5">
-            <span class="text-xs text-muted-foreground bg-muted/30 backdrop-blur-sm px-2 py-0.5 rounded-full">{{ period }}</span>
-        </div>
-        
-        <div class="mb-3 md:mb-4">
-            <span class="amount-primary text-2xl md:text-3xl">{{ formatCurrency(expense) }}</span>
-            <p class="text-sm text-muted-foreground mt-0.5">Total pengeluaran</p>
-        </div>
-        
-        <div class="flex items-center gap-2 md:gap-3 mb-4 md:mb-5 flex-wrap">
-            <!-- Dynamic Change Indicator -->
-            <div v-if="changePercent <= 0" class="flex items-center gap-1 md:gap-1.5 bg-primary/10 backdrop-blur-sm px-2 py-0.5 rounded-full">
-                <TrendingDown class="w-3.5 h-3.5 md:w-3.5 md:h-3.5 text-primary" />
-                <span class="text-xs text-muted-foreground">Turun</span>
-                <span class="text-sm font-medium text-primary">{{ Math.abs(changePercent) }}%</span>
+    <div class="bg-[#ffc9d0] text-[#8c1d3c] dark:bg-rose-950/50 dark:text-rose-200 border border-white/60 dark:border-rose-800/40 rounded-2xl p-4 relative overflow-hidden flex flex-col justify-between font-['Plus_Jakarta_Sans',sans-serif] flex-1 min-w-0 @container transition-all duration-300">
+        <!-- Decorative Glow -->
+        <div class="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-white/30 dark:bg-rose-400/10 blur-xl pointer-events-none"></div>
+        <div class="relative z-10 flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-extrabold uppercase tracking-wider">Pengeluaran Bulan Ini</span>
+                <div class="w-7 h-7 shrink-0 rounded-full bg-white dark:bg-white/10 flex items-center justify-center shadow-sm" aria-hidden="true">
+                    <span class="material-symbols-outlined text-[16px]">arrow_upward</span>
+                </div>
             </div>
-            <div v-else class="flex items-center gap-1 md:gap-1.5 bg-destructive/10 backdrop-blur-sm px-2 py-0.5 rounded-full">
-                <TrendingUp class="w-3.5 h-3.5 md:w-3.5 md:h-3.5 text-destructive" />
-                <span class="text-xs text-muted-foreground">Naik</span>
-                <span class="text-sm font-medium text-destructive">{{ changePercent }}%</span>
+            <div class="text-xl md:text-2xl font-extrabold tracking-tight leading-tight tabular-nums" :title="formatFull(expense)">
+                <!-- Format ringkas bila kartu sempit supaya nominal tidak terpotong -->
+                <span class="@[15rem]:hidden whitespace-nowrap">{{ formatCompact(expense) }}</span>
+                <span class="hidden @[15rem]:inline whitespace-nowrap">{{ formatFull(expense) }}</span>
             </div>
-
-            <div class="flex items-center gap-1 md:gap-1.5 bg-primary/10 backdrop-blur-sm px-2 py-0.5 rounded-full">
-                <TrendingUp class="w-3.5 h-3.5 md:w-3.5 md:h-3.5 text-primary" />
-                <span class="text-xs text-muted-foreground">Hemat</span>
-                <span class="text-sm font-medium text-primary">+{{ formatCurrency(saved) }}</span>
+            <div class="flex items-start gap-1 text-xs font-semibold leading-snug">
+                <span class="material-symbols-outlined text-[14px]" aria-hidden="true">{{ footnote.icon }}</span>
+                <span>{{ footnote.text }}</span>
             </div>
-        </div>
-        
-        <!-- Scale indicator -->
-        <div class="flex items-center justify-between text-xs text-muted-foreground mb-1.5 px-1">
-            <span>0</span>
-            <span>50</span>
-            <span>100</span>
-        </div>
-        
-        <!-- Progress bar with markers -->
-        <div class="relative h-2.5 md:h-3 bg-muted/30 backdrop-blur-sm rounded-full overflow-hidden mb-3 md:mb-4 border border-border/20">
-            <div 
-                class="absolute top-0 left-0 h-full bg-gradient-to-r from-primary/60 via-primary to-chart-expense rounded-full transition-all duration-500 group-hover:from-primary/80"
-                :style="{ width: targetPercent + '%' }"
-            />
-            <!-- Marker lines -->
-            <div class="absolute top-0 left-0 w-full h-full flex">
-                <div v-for="i in 20" :key="i" class="flex-1 border-r border-background/10 last:border-r-0" />
-            </div>
-        </div>
-        
-        <div class="text-center bg-accent/20 backdrop-blur-sm rounded-lg p-2 border border-accent/20">
-            <p class="text-xs text-muted-foreground mb-0.5">{{ period }}</p>
-            <p class="text-sm text-foreground font-medium flex items-center justify-center gap-1">
-                Target tercapai {{ targetPercent }}% <Zap class="w-3.5 h-3.5 text-warning" />
-            </p>
         </div>
     </div>
 </template>
-
-<style scoped>
-.amount-primary {
-    font-variant-numeric: tabular-nums;
-}
-
-.animate-fade-in-up {
-    animation: fade-in-up 0.5s ease-out forwards;
-    opacity: 0;
-}
-
-@keyframes fade-in-up {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-</style>

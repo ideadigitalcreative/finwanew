@@ -23,6 +23,16 @@ class SendDailyReminder extends Command
 
     public function handle(): int
     {
+        // Blast ON  → semua akun kecuali yang mengetik "matikan reminder" (perilaku lama).
+        // Blast OFF → HANYA akun yang mengetik "aktifkan reminder" (opt-in), supaya
+        //             tidak ada pesan massal ke user yang tidak memintanya.
+        $blastMode = (bool) config('services.reminder_blasts.enabled', false);
+        if (! $blastMode && ! config('services.user_reminders.enabled', true)) {
+            $this->info('Pengingat harian dinonaktifkan. Lewati.');
+
+            return Command::SUCCESS;
+        }
+
         $this->info('Starting Daily Reminder...');
 
         $currentHour = Carbon::now('Asia/Jakarta')->hour;
@@ -67,7 +77,9 @@ class SendDailyReminder extends Command
                 $reminderHour = $settings['reminder_hour'] ?? self::DEFAULT_REMINDER_HOUR;
 
                 // CRITICAL: Check if user has disabled daily reminder
-                $reminderEnabled = $settings['daily_reminder_enabled'] ?? true; // Default true for backward compatibility
+                $reminderEnabled = $blastMode
+                    ? ($settings['daily_reminder_enabled'] ?? true)       // perilaku lama: default aktif
+                    : (($settings['daily_reminder_enabled'] ?? null) === true); // opt-in eksplisit
 
                 if (! $reminderEnabled) {
                     $skipped++;
@@ -324,6 +336,8 @@ class SendDailyReminder extends Command
             return null;
         }
 
+        Budget::loadBulkSpending($budgets);
+
         $now = Carbon::now('Asia/Jakarta');
         $startOfMonth = $now->copy()->startOfMonth();
         $daysInMonth = $now->daysInMonth;
@@ -424,7 +438,7 @@ class SendDailyReminder extends Command
             // Format phone number
             $formattedNumber = $this->formatPhoneNumber($phoneNumber);
 
-            $result = $whatsAppService->sendMessage($sessionId, $formattedNumber, $message);
+            $result = $whatsAppService->sendMessage($sessionId, $formattedNumber, $message, 'text', null, false);
 
             if (! ($result['success'] ?? false)) {
                 throw new \Exception($result['error'] ?? 'Failed to send message');

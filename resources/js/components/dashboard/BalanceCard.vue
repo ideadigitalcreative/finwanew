@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { ChevronDown, Wallet, TrendingUp } from 'lucide-vue-next';
+import { ref, computed } from 'vue';
+
+interface Wallet {
+    account_name: string;
+    balance: number;
+    currency: string;
+    updated_at?: string | null;
+}
 
 interface Props {
     balance: number;
@@ -8,9 +15,27 @@ interface Props {
     cashflow: number;
     bonus: number;
     period?: string;
+    userName?: string;
+    wallets?: Wallet[];
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+    userName: 'Kawan',
+    period: 'Bulan ini',
+    wallets: () => [],
+});
+
+const emit = defineEmits<{
+    (e: 'transfer'): void;
+    (e: 'add-wallet'): void;
+}>();
+
+const balanceHidden = ref(localStorage.getItem('finwa_hide_balance') === 'true');
+const toggleBalance = () => {
+    balanceHidden.value = !balanceHidden.value;
+    localStorage.setItem('finwa_hide_balance', balanceHidden.value ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent('balance-visibility-changed', { detail: balanceHidden.value }));
+};
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -21,79 +46,113 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-const currentMonthLabel = () => {
-    const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    const now = new Date();
-    return months[now.getMonth()];
+const formatCompact = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 1 }).format(amount);
 };
 
-const formatShortDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '';
-    return `${d.getDate()} ${months[d.getMonth()]}`;
-};
+// Waktu pembaruan saldo terakhir (dari data rekening, bukan teks statis)
+const lastUpdatedLabel = computed(() => {
+    const times = props.wallets
+        .map(w => (w.updated_at ? new Date(w.updated_at).getTime() : NaN))
+        .filter(t => !isNaN(t));
+    if (times.length === 0) return null;
+    return new Date(Math.max(...times)).toLocaleString('id-ID', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
+});
+
+const financialStatusNote = computed(() => {
+    if (props.cashflow > 0) {
+        return {
+            title: 'Surplus bulan ini.',
+            body: `Pemasukan melebihi pengeluaran sebesar ${formatCurrency(props.cashflow)}.`,
+            highlightClass: 'text-[#006c4f] dark:text-emerald-400',
+        };
+    } else if (props.cashflow < 0) {
+        return {
+            title: 'Defisit bulan ini.',
+            body: `Pengeluaran melebihi pemasukan sebesar ${formatCurrency(Math.abs(props.cashflow))}.`,
+            highlightClass: 'text-[#93000a] dark:text-rose-400',
+        };
+    }
+    return {
+        title: 'Arus kas seimbang.',
+        body: 'Pemasukan dan pengeluaran bulan ini sama besar.',
+        highlightClass: 'text-[#745c00] dark:text-amber-400',
+    };
+});
 </script>
 
 <template>
-    <div class="group bg-card/60 backdrop-blur-2xl rounded-[13px] p-4 md:p-5 border border-gray-200/50 dark:border-gray-700/30 transition-all duration-500 animate-fade-in-up" style="animation-delay: 0.1s">
-        <div class="flex items-center justify-between mb-3 md:mb-4">
-            <h3 class="text-sm md:text-base font-medium text-muted-foreground">Saldo Saya</h3>
-            <button class="flex items-center gap-1 md:gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors bg-muted/30 backdrop-blur-sm px-2 py-1 rounded-full">
-                {{ period || 'Bulan ini' }}
-                <ChevronDown class="w-3 h-3 md:w-3.5 md:h-3.5" />
-            </button>
-        </div>
-        
-        <div class="mb-4 md:mb-5">
-            <span class="amount-primary text-3xl md:text-4xl bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">{{ formatCurrency(balance) }}</span>
-        </div>
-        
-        <div class="space-y-2 md:space-y-3">
-            <!-- Last Income -->
-            <div class="flex items-center gap-3 p-2.5 rounded-xl bg-accent/30 backdrop-blur-sm border border-accent/20 group-hover:bg-accent/40 transition-all">
-                <div class="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-accent/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                    <Wallet class="w-4 h-4 md:w-4.5 md:h-4.5 text-accent-foreground" />
+    <!-- Kartu Saldo Utama -->
+    <section class="relative overflow-hidden rounded-2xl bg-white dark:bg-[#23231f] p-5 border border-[#eae8e2] dark:border-white/10 flex flex-col justify-between font-['Plus_Jakarta_Sans',sans-serif] transition-all duration-300">
+
+        <!-- Decorative Backdrop Glow -->
+        <div class="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-[#ffd23f]/30 blur-2xl pointer-events-none"></div>
+        <div class="absolute -left-10 -bottom-10 w-40 h-40 rounded-full bg-[#51fac1]/40 blur-2xl pointer-events-none"></div>
+
+        <div class="relative flex flex-col gap-3.5">
+            <!-- Top Label & Status Pill -->
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-[#ffd23f] text-[#574500]">
+                        <span class="material-symbols-outlined text-[18px]">account_balance_wallet</span>
+                    </span>
+                    <div class="flex items-center gap-1">
+                        <span class="text-xs font-bold uppercase tracking-wider text-[#4d4634] dark:text-muted-foreground">Total Saldo Bersih</span>
+                        <button
+                            @click="toggleBalance"
+                            type="button"
+                            :aria-label="balanceHidden ? 'Tampilkan saldo' : 'Sembunyikan saldo'"
+                            :aria-pressed="balanceHidden"
+                            class="min-w-10 min-h-10 -my-2 rounded-full hover:bg-[#f0eee8] dark:hover:bg-white/10 transition-colors inline-flex items-center justify-center text-[#4d4634] dark:text-muted-foreground active:scale-95"
+                        >
+                            <span class="material-symbols-outlined text-[18px]" aria-hidden="true">
+                                {{ balanceHidden ? 'visibility_off' : 'visibility' }}
+                            </span>
+                        </button>
+                    </div>
                 </div>
-                <span class="text-sm text-muted-foreground flex-1 min-w-0 truncate">
-                    Pendapatan terakhir{{ lastIncomeDate ? ' (' + formatShortDate(lastIncomeDate) + ')' : '' }}
-                </span>
-                <span class="text-sm font-semibold text-primary flex-shrink-0">+{{ formatCurrency(lastIncome) }}</span>
             </div>
 
-            <!-- Monthly Cashflow -->
-            <div class="flex items-center gap-3 p-2.5 rounded-xl bg-accent/30 backdrop-blur-sm border border-accent/20 group-hover:bg-accent/40 transition-all">
-                <div class="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-accent/50 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                    <TrendingUp class="w-4 h-4 md:w-4.5 md:h-4.5 text-accent-foreground" />
-                </div>
-                <span class="text-sm text-muted-foreground flex-1 min-w-0 truncate">Arus kas ({{ currentMonthLabel() }})</span>
-                <span class="text-sm font-semibold flex-shrink-0" :class="cashflow >= 0 ? 'text-emerald-500' : 'text-red-500'">
-                    {{ cashflow >= 0 ? '+' : '' }}{{ formatCurrency(cashflow) }}
+            <!-- Amount Display & Growth Pill -->
+            <div class="flex flex-wrap items-baseline gap-2.5">
+                <span
+                    class="text-3xl md:text-[40px] font-extrabold tracking-tight text-[#1b1c19] dark:text-foreground leading-none transition-opacity duration-150"
+                    :class="{ 'opacity-80': balanceHidden }"
+                >
+                    {{ balanceHidden ? '••••••••••' : formatCurrency(balance) }}
+                </span>
+                <!-- Arus kas bersih bulan ini (pemasukan − pengeluaran), dalam rupiah -->
+                <span
+                    v-if="!balanceHidden"
+                    class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-xs font-extrabold bg-[#f0eee8] dark:bg-white/10"
+                    :class="cashflow >= 0 ? 'text-[#006c4f] dark:text-emerald-400' : 'text-[#93000a] dark:text-rose-400'"
+                    :title="`Arus kas bersih ${period}: ${formatCurrency(cashflow)}`"
+                >
+                    <span class="material-symbols-outlined text-[14px]" aria-hidden="true">{{ cashflow >= 0 ? 'trending_up' : 'trending_down' }}</span>
+                    <span>{{ cashflow > 0 ? '+' : cashflow < 0 ? '−' : '' }}Rp {{ formatCompact(Math.abs(cashflow)) }} arus kas bln ini</span>
                 </span>
             </div>
+
+            <!-- Ringkasan status arus kas -->
+            <p class="text-xs text-[#4d4634] dark:text-muted-foreground leading-relaxed max-w-[94%]">
+                <span class="font-bold" :class="financialStatusNote.highlightClass">{{ financialStatusNote.title }}</span>
+                {{ financialStatusNote.body }}
+            </p>
+
+            <!-- Saldo per rekening ditampilkan di WalletCards (Kantong Aktif) agar tidak dobel -->
+
+            <!-- Footer Quick Action inside Card -->
+            <div class="flex flex-wrap items-center justify-between gap-2.5 pt-1.5 border-t border-[#eae8e2] dark:border-white/10">
+                <div class="flex items-center gap-1.5 text-xs font-medium text-[#4d4634] dark:text-muted-foreground">
+                    <template v-if="lastUpdatedLabel">
+                        <span class="material-symbols-outlined text-[14px]" aria-hidden="true">schedule</span>
+                        Saldo diperbarui {{ lastUpdatedLabel }}
+                    </template>
+                    <template v-else>{{ wallets.length }} rekening aktif</template>
+                </div>
+            </div>
         </div>
-    </div>
+    </section>
 </template>
-
-<style scoped>
-.amount-primary {
-    font-variant-numeric: tabular-nums;
-}
-
-.animate-fade-in-up {
-    animation: fade-in-up 0.5s ease-out forwards;
-    opacity: 0;
-}
-
-@keyframes fade-in-up {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-</style>

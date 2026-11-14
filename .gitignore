@@ -218,3 +218,13 @@ __pycache__/
 /Type)
 /type
 /analisa_hutang_piutang
+
+# Ekspor pesan mentah golden set (bisa berisi data user asli)
+/tests/golden/_raw_export.tsv
+
+# Materi video/desain & berkas debug lokal — bukan bagian aplikasi, jangan di-deploy
+/motion/
+/figma-html/
+/ponytail/
+/.dbg/
+/pest_run.txt

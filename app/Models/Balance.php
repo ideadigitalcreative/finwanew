@@ -37,4 +37,28 @@ class Balance extends Model
     {
         return $this->hasMany(Transaction::class);
     }
+
+    /**
+     * Tambah/kurangi saldo secara ATOMIK di database
+     * (UPDATE balances SET balance = balance + ?), lalu sinkronkan atribut model.
+     *
+     * Pola lama `$balance->balance += X; $balance->save();` adalah
+     * read-modify-write: dua pesan yang diproses bersamaan bisa saling
+     * menimpa sehingga salah satu perubahan saldo hilang.
+     *
+     * Atribut `balance` ditandai bersih setelahnya, jadi `save()` berikutnya
+     * (mis. untuk balance_date) tidak menimpa nilai saldo dari database.
+     */
+    public function adjustBalance(float|int|string $delta): void
+    {
+        $delta = (float) $delta;
+        if ($delta == 0.0 || ! $this->exists) {
+            return;
+        }
+
+        static::query()->whereKey($this->getKey())->increment('balance', $delta);
+
+        $this->balance = static::query()->whereKey($this->getKey())->value('balance');
+        $this->syncOriginalAttribute('balance');
+    }
 }

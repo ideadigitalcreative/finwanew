@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
+import { type BreadcrumbItem } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import { Users, CreditCard, MessageSquare, DollarSign, Wallet, TrendingUp, Activity, Clock, AlertTriangle, ArrowUpRight, ArrowDownRight, ChevronRight } from 'lucide-vue-next';
+import { Users, CreditCard, Clock, AlertTriangle, ChevronRight, TrendingUp, ArrowUpRight, Building2, Activity, DollarSign, Calendar, Package, ExternalLink } from 'lucide-vue-next';
 import { onClickOutside } from '@vueuse/core';
 import superadminRoutes from '@/routes/superadmin/index';
 
@@ -12,7 +13,10 @@ const periodDropdownRef = ref(null);
 
 onClickOutside(periodDropdownRef, () => isPeriodDropdownOpen.value = false);
 
-
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Super Admin', href: '/superadmin/dashboard' },
+    { title: 'Dashboard', href: '/superadmin/dashboard' },
+];
 
 const superadmin = {
     dashboard: () => superadminRoutes.dashboard.url(),
@@ -69,6 +73,11 @@ interface MonthlyRevenue {
     revenue: number;
 }
 
+interface UserGrowth {
+    month: string;
+    users: number;
+}
+
 interface RecentSubscription {
     id: number;
     tenant_name: string;
@@ -98,6 +107,7 @@ interface Props {
     pendingSubscriptions: PendingSubscription[];
     expiringSubscriptions: ExpiringSubscription[];
     monthlyRevenue: MonthlyRevenue[];
+    userGrowth: UserGrowth[];
 }
 
 const props = defineProps<Props>();
@@ -109,52 +119,10 @@ const tenantsWithUsers = computed(() => {
     });
 });
 
-// Calculate max revenue for chart scaling
 const maxRevenue = computed(() => {
     return Math.max(...props.monthlyRevenue.map(m => m.revenue), 1);
 });
 
-// Generate chart data including path and Y-axis labels
-const chartData = computed(() => {
-    if (props.monthlyRevenue.length === 0) return { path: '', yLabels: [] };
-    
-    const width = 100;
-    const height = 60;
-    const paddingLeft = 12;  // Space for Y-axis labels
-    const paddingRight = 2;
-    const paddingTop = 5;
-    const paddingBottom = 5;
-    const max = maxRevenue.value;
-    
-    const points = props.monthlyRevenue.map((item, index) => {
-        const x = paddingLeft + (index / (props.monthlyRevenue.length - 1)) * (width - paddingLeft - paddingRight);
-        const safeMax = max === 0 ? 1 : max;
-        const y = paddingTop + (1 - (item.revenue / safeMax)) * (height - paddingTop - paddingBottom);
-        return { x, y, value: item.revenue, month: item.month };
-    });
-    
-    // Create smooth curve using cubic bezier for smoother lines
-    let path = `M ${points[0].x},${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-        const prev = points[i - 1];
-        const curr = points[i];
-        const cpX = (prev.x + curr.x) / 2;
-        path += ` C ${cpX},${prev.y} ${cpX},${curr.y} ${curr.x},${curr.y}`;
-    }
-    
-    // Generate Y-axis labels
-    const yLabels = [];
-    const steps = 5;
-    for (let i = 0; i <= steps; i++) {
-        const value = (max / steps) * (steps - i);
-        const yPos = paddingTop + (i / steps) * (height - paddingTop - paddingBottom);
-        yLabels.push({ value, yPos });
-    }
-    
-    return { points, path, yLabels, height, paddingLeft, paddingRight, paddingTop, paddingBottom };
-});
-
-// Calculate user growth percentage
 const userGrowthPercentage = computed(() => {
     if (props.stats.new_users_last_week === 0) {
         return props.stats.new_users_this_week > 0 ? 100 : 0;
@@ -184,7 +152,7 @@ const formatTimeAgo = (date: string) => {
     const now = new Date();
     const past = new Date(date);
     const diffInHours = Math.floor((now.getTime() - past.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) return 'Baru saja';
     if (diffInHours < 24) return `${diffInHours} jam lalu`;
     const diffInDays = Math.floor(diffInHours / 24);
@@ -194,83 +162,97 @@ const formatTimeAgo = (date: string) => {
 
 const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-        active: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-        pending: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-        expired: 'bg-red-500/10 text-red-600 dark:text-red-400',
-        cancelled: 'bg-gray-500/10 text-gray-600 dark:text-gray-400',
+        active: 'bg-[#51fac1]/15 text-[#007152] dark:text-emerald-400',
+        pending: 'bg-[#ffd23f]/20 text-[#725a00] dark:text-amber-300',
+        expired: 'bg-[#ffc9d0]/30 text-[#93000a] dark:text-rose-400',
+        cancelled: 'bg-[#4d4634]/10 text-[#4d4634] dark:text-gray-400',
     };
     return styles[status] || styles.pending;
 };
 
-// Calculate bar height percentage
-const getBarHeight = (revenue: number) => {
+const BAR_AREA_HEIGHT = 128;
+const BAR_MIN_HEIGHT = 8;
+
+// 'Aug 2026' → 'Aug 26'
+const shortMonthLabel = (month: string) => month.replace(/\d{2}(\d{2})$/, '$1');
+
+const getRevenueBarHeight = (revenue: number) => {
     const max = maxRevenue.value;
-    if (max <= 0 || revenue <= 0) return 0;
-    return (revenue / max) * 100;
+    if (max <= 0 || revenue <= 0) return BAR_MIN_HEIGHT;
+    const height = (revenue / max) * BAR_AREA_HEIGHT;
+    return Math.max(BAR_MIN_HEIGHT, Math.round(height));
+};
+
+const maxUsers = computed(() => {
+    return Math.max(...props.userGrowth.map(u => u.users), 1);
+});
+
+const getUserBarHeight = (users: number) => {
+    const max = maxUsers.value;
+    if (max <= 0 || users <= 0) return BAR_MIN_HEIGHT;
+    const height = (users / max) * BAR_AREA_HEIGHT;
+    return Math.max(BAR_MIN_HEIGHT, Math.round(height));
 };
 </script>
 
 <template>
     <Head title="Super Admin Dashboard" />
 
-    <AppLayout>
-        <div class="flex h-full flex-1 flex-col gap-5 p-6">
+    <AppLayout :breadcrumbs="breadcrumbs">
+        <div class="flex h-full flex-1 flex-col gap-5 p-4 md:p-6 font-['Plus_Jakarta_Sans',sans-serif] bg-[#fbf9f3] dark:bg-background text-foreground">
             <!-- Header -->
             <div>
-                <h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
-                <p class="text-sm text-muted-foreground">Overview sistem dan statistik</p>
+                <h1 class="text-2xl font-bold tracking-tight text-[#1b1c19] dark:text-foreground">Dashboard Super Admin</h1>
+                <p class="text-sm text-[#4d4634] dark:text-muted-foreground mt-0.5">Pantau performa sistem, revenue, dan aktivitas tenant secara real-time.</p>
             </div>
 
             <!-- Alert Cards -->
             <div v-if="stats.pending_subscriptions > 0 || stats.expiring_soon > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Pending Subscriptions -->
-                <Link 
-                    v-if="stats.pending_subscriptions > 0"
-                    :href="superadmin.subscriptions.index()"
-                    class="group rounded-2xl bg-white dark:bg-gray-900/50 p-5 border border-gray-100 dark:border-gray-800 hover:shadow-md transition-all"
-                >
-                    <div class="flex items-center justify-between">
+                <Link v-if="stats.pending_subscriptions > 0" :href="superadmin.subscriptions.index()"
+                    class="group relative overflow-hidden rounded-2xl bg-white dark:bg-[#23231f] p-5 border border-[#eae8e2] dark:border-white/10 transition-all duration-300 hover:shadow-[0_4px_24px_rgba(255,210,63,0.25)]">
+                    <div class="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-[#ffd23f]/20 blur-2xl pointer-events-none"></div>
+                    <div class="relative flex items-center justify-between">
                         <div class="flex items-center gap-4">
-                            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/10">
-                                <Clock class="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ffe089] text-[#241a00]">
+                                <Clock class="h-5 w-5" />
                             </div>
                             <div>
-                                <p class="text-sm text-muted-foreground">Menunggu Approval</p>
-                                <p class="text-xl font-bold">{{ stats.pending_subscriptions }}</p>
+                                <p class="text-xs font-bold uppercase tracking-wider text-[#4d4634] dark:text-muted-foreground">Menunggu Approval</p>
+                                <p class="text-2xl font-extrabold text-[#1b1c19] dark:text-foreground">{{ stats.pending_subscriptions }}</p>
                             </div>
                         </div>
-                        <ChevronRight class="h-5 w-5 text-gray-300 group-hover:text-gray-500 group-hover:translate-x-1 transition-all" />
+                        <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-[#f5f3ee] dark:bg-white/10 text-[#4d4634] dark:text-muted-foreground transition-all group-hover:translate-x-1 group-hover:bg-[#ffd23f] group-hover:text-[#574500]"><ChevronRight class="h-4 w-4" /></span>
                     </div>
-                    <div v-if="pendingSubscriptions.length > 0" class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                    <div v-if="pendingSubscriptions.length > 0" class="relative mt-4 pt-4 border-t border-[#eae8e2] dark:border-white/10 space-y-2.5">
                         <div v-for="sub in pendingSubscriptions.slice(0, 2)" :key="sub.id" class="flex items-center justify-between text-sm">
-                            <span class="text-gray-600 dark:text-gray-400 truncate max-w-[180px]">{{ sub.tenant_name }}</span>
-                            <span class="text-xs text-gray-400">{{ formatTimeAgo(sub.created_at) }}</span>
+                            <span class="font-semibold text-[#1b1c19] dark:text-foreground truncate max-w-[180px]">{{ sub.tenant_name }}</span>
+                            <span class="text-xs text-[#4d4634] dark:text-muted-foreground">{{ formatTimeAgo(sub.created_at) }}</span>
                         </div>
                     </div>
                 </Link>
 
                 <!-- Expiring Soon -->
-                <Link 
-                    v-if="stats.expiring_soon > 0"
-                    :href="superadmin.subscriptions.index()"
-                    class="group rounded-2xl bg-white dark:bg-gray-900/50 p-5 border border-gray-100 dark:border-gray-800 hover:shadow-md transition-all"
-                >
-                    <div class="flex items-center justify-between">
+                <Link v-if="stats.expiring_soon > 0" :href="superadmin.subscriptions.index()"
+                    class="group relative overflow-hidden rounded-2xl bg-white dark:bg-[#23231f] p-5 border border-[#eae8e2] dark:border-white/10 transition-all duration-300 hover:shadow-[0_4px_24px_rgba(255,150,170,0.25)]">
+                    <div class="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-[#ffc9d0]/40 blur-2xl pointer-events-none"></div>
+                    <div class="relative flex items-center justify-between">
                         <div class="flex items-center gap-4">
-                            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-500/10">
-                                <AlertTriangle class="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ffc9d0] text-[#93000a]">
+                                <AlertTriangle class="h-5 w-5" />
                             </div>
                             <div>
-                                <p class="text-sm text-muted-foreground">Akan Expired</p>
-                                <p class="text-xl font-bold">{{ stats.expiring_soon }}</p>
+                                <p class="text-xs font-bold uppercase tracking-wider text-[#4d4634] dark:text-muted-foreground">Akan Expired</p>
+                                <p class="text-2xl font-extrabold text-[#1b1c19] dark:text-foreground">{{ stats.expiring_soon }}</p>
                             </div>
                         </div>
-                        <ChevronRight class="h-5 w-5 text-gray-300 group-hover:text-gray-500 group-hover:translate-x-1 transition-all" />
+                        <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-[#f5f3ee] dark:bg-white/10 text-[#4d4634] dark:text-muted-foreground transition-all group-hover:translate-x-1 group-hover:bg-[#ffc9d0] group-hover:text-[#93000a]"><ChevronRight class="h-4 w-4" /></span>
                     </div>
-                    <div v-if="expiringSubscriptions.length > 0" class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                    <div v-if="expiringSubscriptions.length > 0" class="relative mt-4 pt-4 border-t border-[#eae8e2] dark:border-white/10 space-y-2.5">
                         <div v-for="sub in expiringSubscriptions.slice(0, 2)" :key="sub.id" class="flex items-center justify-between text-sm">
-                            <span class="text-gray-600 dark:text-gray-400 truncate max-w-[180px]">{{ sub.tenant_name }}</span>
-                            <span class="text-xs font-medium" :class="sub.days_left <= 1 ? 'text-rose-500' : 'text-amber-500'">
+                            <span class="font-semibold text-[#1b1c19] dark:text-foreground truncate max-w-[180px]">{{ sub.tenant_name }}</span>
+                            <span class="text-xs font-bold"
+                                :class="sub.days_left <= 1 ? 'text-[#93000a] dark:text-rose-400' : 'text-[#725a00] dark:text-amber-300'">
                                 {{ sub.days_left }} hari lagi
                             </span>
                         </div>
@@ -281,198 +263,172 @@ const getBarHeight = (revenue: number) => {
             <!-- Main Stats Grid -->
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <!-- Total Users -->
-                <div class="rounded-2xl bg-white dark:bg-gray-900/50 p-5 border border-gray-100 dark:border-gray-800">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10">
-                            <Users class="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <div class="relative overflow-hidden rounded-2xl bg-[#ffd23f] text-[#574500] p-5 border border-white/60 shadow-[0_2px_20px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_4px_24px_rgba(255,210,63,0.25)]">
+                    <div class="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-white/30 blur-xl pointer-events-none"></div>
+                    <div class="relative z-10 flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold uppercase tracking-wider">Total Users</span>
+                            <div class="w-7 h-7 rounded-full bg-white/60 flex items-center justify-center">
+                                <Users class="h-4 w-4 text-[#574500]" />
+                            </div>
                         </div>
-                        <span class="text-xs text-muted-foreground">Total Users</span>
+                        <p class="text-2xl md:text-3xl font-extrabold tracking-tight">{{ stats.total_users }}</p>
+                        <div class="flex items-center gap-1 text-[11px] font-bold">
+                            <TrendingUp class="h-3 w-3" />
+                            <span>{{ userGrowthPercentage }}% minggu ini</span>
+                        </div>
                     </div>
-                    <p class="text-2xl font-bold">{{ stats.total_users }}</p>
                 </div>
 
                 <!-- Revenue -->
-                <div class="rounded-2xl bg-white dark:bg-gray-900/50 p-5 border border-gray-100 dark:border-gray-800">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
-                            <DollarSign class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <div class="relative overflow-hidden rounded-2xl bg-[#51fac1] text-[#007152] p-5 border border-white/60 shadow-[0_2px_20px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_4px_24px_rgba(81,130,203,0.25)]">
+                    <div class="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-white/30 blur-xl pointer-events-none"></div>
+                    <div class="relative z-10 flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold uppercase tracking-wider">Total Revenue</span>
+                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/60 text-[#007152]">
+                                <DollarSign class="h-4 w-4" />
+                            </span>
                         </div>
-                        <span class="text-xs text-muted-foreground">Revenue</span>
+                        <p class="text-2xl md:text-3xl font-extrabold tracking-tight">{{ formatCurrencyShort(stats.total_revenue) }}</p>
+                        <div class="flex items-center gap-1 text-[11px] font-bold">
+                            <ArrowUpRight class="h-3 w-3" />
+                            <span>Dari semua tenant</span>
+                        </div>
                     </div>
-                    <p class="text-2xl font-bold">{{ formatCurrencyShort(stats.total_revenue) }}</p>
                 </div>
 
                 <!-- Active Subscriptions -->
-                <div class="rounded-2xl bg-white dark:bg-gray-900/50 p-5 border border-gray-100 dark:border-gray-800">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/10">
-                            <CreditCard class="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <div class="relative overflow-hidden rounded-2xl bg-[#ffc9d0] text-[#93000a] p-5 border border-white/60 shadow-[0_2px_20px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_4px_24px_rgba(255,150,170,0.25)]">
+                    <div class="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-white/30 blur-xl pointer-events-none"></div>
+                    <div class="relative z-10 flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold uppercase tracking-wider">Langganan Aktif</span>
+                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/60 text-[#93000a]">
+                                <CreditCard class="h-4 w-4" />
+                            </span>
                         </div>
-                        <span class="text-xs text-muted-foreground">Active Subs</span>
+                        <p class="text-2xl md:text-3xl font-extrabold tracking-tight">{{ stats.active_subscriptions }}</p>
+                        <div class="flex items-center gap-1 text-[11px] font-bold">
+                            <Activity class="h-3 w-3" />
+                            <span>{{ stats.total_subscriptions }} langganan</span>
+                        </div>
                     </div>
-                    <p class="text-2xl font-bold">{{ stats.active_subscriptions }}</p>
                 </div>
 
                 <!-- Conversion Rate -->
-                <div class="rounded-2xl bg-white dark:bg-gray-900/50 p-5 border border-gray-100 dark:border-gray-800">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/10">
-                            <Activity class="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                <div class="relative overflow-hidden rounded-2xl bg-[#fbf9f3] text-[#1b1c19] p-5 border border-[#eae8e2] dark:border-white/10 dark:bg-[#23231f] dark:text-foreground shadow-[0_2px_20px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0_4px_24px_rgba(255,210,63,0.25)]">
+                    <div class="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-[#51fac1]/15 blur-xl pointer-events-none"></div>
+                    <div class="relative z-10 flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#4d4634] dark:text-muted-foreground">Conversion Rate</span>
+                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#51fac1]/20 text-[#007152] dark:text-emerald-400">
+                                <Package class="h-4 w-4" />
+                            </span>
                         </div>
-                        <span class="text-xs text-muted-foreground">Conversion</span>
+                        <p class="text-2xl md:text-3xl font-extrabold tracking-tight">{{ stats.conversion_rate }}%</p>
+                        <div class="flex items-center gap-1 text-[11px] font-bold text-[#4d4634] dark:text-muted-foreground">
+                            <Building2 class="h-3 w-3" />
+                            <span>Tenant dengan langganan</span>
+                        </div>
                     </div>
-                    <p class="text-2xl font-bold">{{ stats.conversion_rate }}%</p>
                 </div>
             </div>
 
-            <!-- Revenue Chart + Growth -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <!-- Revenue Bar Chart - DealDeck Style -->
-                <div class="lg:col-span-2 rounded-3xl bg-white dark:bg-gray-900 p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] border border-gray-100 dark:border-gray-800">
-                    <div class="flex flex-col md:flex-row md:items-start justify-between mb-8">
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-1">Revenue Overview</h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400">
-                                Track your monthly revenue
-                            </p>
-                            <!-- Legend -->
-                            <div class="flex items-center gap-4 mt-4">
-                                <div class="flex items-center gap-2">
-                                    <span class="w-2.5 h-2.5 rounded-full bg-gray-200"></span>
-                                    <span class="text-xs text-gray-500 font-medium">Target</span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <span class="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
-                                    <span class="text-xs text-gray-500 font-medium">Actual</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Time Filter -->
-                        <div class="relative mt-4 md:mt-0 z-20" ref="periodDropdownRef">
-                            <button 
-                                @click="isPeriodDropdownOpen = !isPeriodDropdownOpen"
-                                class="flex items-center gap-2 text-sm font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-xl transition-colors border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-                            >
-                                {{ selectedPeriod }}
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 transition-transform duration-200" :class="{ 'rotate-180': isPeriodDropdownOpen }"><path d="m6 9 6 6 6-6"/></svg>
-                            </button>
-                            
-                            <!-- Dropdown Menu -->
-                            <transition
-                                enter-active-class="transition ease-out duration-100"
-                                enter-from-class="transform opacity-0 scale-95"
-                                enter-to-class="transform opacity-100 scale-100"
-                                leave-active-class="transition ease-in duration-75"
-                                leave-from-class="transform opacity-100 scale-100"
-                                leave-to-class="transform opacity-0 scale-95"
-                            >
-                                <div v-if="isPeriodDropdownOpen" class="absolute right-0 mt-2 w-36 origin-top-right rounded-xl bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50 border border-gray-100 dark:border-gray-700 overflow-hidden">
-                                    <div class="py-1">
-                                        <button
-                                            v-for="period in ['This Week', 'This Month', 'This Year']"
-                                            :key="period"
-                                            @click="selectedPeriod = period; isPeriodDropdownOpen = false"
-                                            class="flex w-full items-center px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                            :class="{ 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 font-medium': selectedPeriod === period }"
-                                        >
-                                            {{ period }}
-                                        </button>
-                                    </div>
-                                </div>
-                            </transition>
-                        </div>
+            <!-- Period Dropdown -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2 text-sm text-[#4d4634] dark:text-muted-foreground">
+                    <Calendar class="h-4 w-4" />
+                    <span>Periode: <span class="font-bold text-[#1b1c19] dark:text-foreground">{{ selectedPeriod }}</span></span>
+                </div>
+                <div ref="periodDropdownRef" class="relative">
+                    <button
+                        @click="isPeriodDropdownOpen = !isPeriodDropdownOpen"
+                        class="inline-flex items-center gap-2 rounded-xl border border-[#eae8e2] dark:border-white/10 bg-white dark:bg-[#23231f] px-3 py-1.5 text-xs font-bold text-[#1b1c19] dark:text-foreground transition-colors hover:bg-[#f5f3ee] dark:hover:bg-white/10">
+                        <Calendar class="h-3.5 w-3.5" />
+                        {{ selectedPeriod }}
+                        <ChevronRight class="h-3.5 w-3.5 transition-transform" :class="isPeriodDropdownOpen ? 'rotate-90' : ''" />
+                    </button>
+                    <div v-if="isPeriodDropdownOpen"
+                        class="absolute right-0 top-full z-20 mt-1.5 w-40 overflow-hidden rounded-xl border border-[#eae8e2] dark:border-white/10 bg-white dark:bg-[#23231f] shadow-lg">
+                        <button v-for="period in ['This Month', 'Last Month', 'This Year']" :key="period"
+                            @click="selectedPeriod = period; isPeriodDropdownOpen = false"
+                            class="block w-full px-3 py-2 text-left text-xs font-semibold text-[#1b1c19] dark:text-foreground transition-colors hover:bg-[#f5f3ee] dark:hover:bg-white/10"
+                            :class="selectedPeriod === period ? 'bg-[#ffd23f]/20 text-[#574500] dark:bg-[#ffd23f]/10 dark:text-[#ffd23f]' : ''">
+                            {{ period }}
+                        </button>
                     </div>
-                    
-                    <!-- Bar Chart Container -->
-                    <div class="relative mt-2">
-                        <!-- Y-axis Labels -->
-                        <div class="absolute left-0 top-0 bottom-8 w-8 flex flex-col justify-between text-right z-10">
-                            <span v-for="(label, index) in chartData.yLabels" :key="index" class="text-[11px] text-gray-400 font-medium leading-none">
-                                {{ formatCurrencyShort(label.value).replace('rb', 'K').replace('jt', 'M') }}
-                            </span>
-                        </div>
-                        
-                        <!-- Chart Area -->
-                        <div class="ml-10 relative h-64">
-                            <!-- Horizontal Grid Lines -->
-                            <div class="absolute inset-0 flex flex-col justify-between pointer-events-none">
-                                <div v-for="i in 6" :key="i" class="w-full border-t border-dashed border-gray-100 dark:border-gray-700/50"></div>
-                            </div>
-                            
-                            <!-- Bar Chart -->
-                            <div class="relative h-full flex items-end justify-between px-2 gap-3 sm:gap-4 md:gap-6">
-                                <div 
-                                    v-for="(item, index) in monthlyRevenue" 
-                                    :key="item.month"
-                                    class="flex-1 h-full flex items-end justify-center group relative"
-                                >
-                                    <!-- Back Bar (Target - Dummy visual 80% of max) -->
-                                    <div class="absolute w-full max-w-[12px] sm:max-w-[24px] bg-gray-100 dark:bg-gray-800 rounded-full h-[80%] bottom-0 -z-10"></div>
+                </div>
+            </div>
 
-                                    <!-- Front Bar (Actual) -->
-                                    <div 
-                                        class="w-full max-w-[12px] sm:max-w-[24px] rounded-full bg-gradient-to-b from-indigo-500 to-indigo-700 hover:from-indigo-400 hover:to-indigo-600 transition-all duration-300 cursor-pointer relative shadow-[0_4px_10px_rgba(79,70,229,0.3)]"
-                                        :style="{ 
-                                            height: getBarHeight(item.revenue) + '%',
-                                            minHeight: item.revenue > 0 ? '6px' : '0'
-                                        }"
-                                    >
-                                        <!-- Floating Tooltip -->
-                                        <div class="absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-xl scale-90 group-hover:scale-100 translate-y-2 group-hover:translate-y-0">
-                                            {{ formatCurrency(item.revenue) }}
-                                            <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45"></div>
-                                        </div>
-                                    </div>
-                                </div>
+            <!-- Charts Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- Revenue Chart -->
+                <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-[#23231f] p-5 border border-[#eae8e2] dark:border-white/10">
+                    <div class="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-[#ffd23f]/20 blur-2xl pointer-events-none"></div>
+                    <div class="relative flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ffe089] text-[#241a00]">
+                                <DollarSign class="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-[#1b1c19] dark:text-foreground">Revenue Bulanan</h3>
+                                <p class="text-xs text-[#4d4634] dark:text-muted-foreground">6 bulan terakhir</p>
                             </div>
                         </div>
-                        
-                        <!-- X-axis Month labels -->
-                        <div class="ml-10 flex justify-between mt-4 px-2 gap-3 sm:gap-4 md:gap-6">
-                            <span 
-                                v-for="item in monthlyRevenue" 
-                                :key="item.month" 
-                                class="flex-1 text-center text-[11px] text-gray-400 font-medium"
-                            >
-                                {{ item.month.split(' ')[0].substring(0, 3) }}
-                            </span>
+                        <span class="inline-flex items-center gap-1 rounded-full bg-[#ffd23f]/20 px-2.5 py-1 text-[11px] font-bold text-[#725a00] dark:bg-[#ffd23f]/10 dark:text-amber-300">
+                            <TrendingUp class="h-3 w-3" />
+                            {{ formatCurrencyShort(stats.total_revenue) }}
+                        </span>
+                    </div>
+                    <div class="relative z-10">
+                        <div class="flex h-48 items-end gap-2">
+                            <div v-for="(item, index) in monthlyRevenue" :key="index"
+                                class="group relative flex flex-1 flex-col items-center gap-1.5">
+                                <div class="relative w-full flex flex-col items-center"
+                                    :style="{ height: getRevenueBarHeight(item.revenue) + 'px' }">
+                                    <span class="pointer-events-none absolute -top-5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-[#1b1c19] dark:text-foreground">
+                                        {{ formatCurrencyShort(item.revenue) }}
+                                    </span>
+                                    <div class="absolute inset-y-0 left-1/2 w-4 sm:w-7 md:w-10 -translate-x-1/2 rounded-full bg-gradient-to-t from-[#ffd23f] to-[#ffe089] transition-all duration-500 group-hover:from-[#ffb800] group-hover:to-[#ffd23f]"></div>
+                                </div>
+                                <span class="text-[10px] font-semibold text-[#4d4634] dark:text-muted-foreground">{{ shortMonthLabel(item.month) }}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Growth Metrics -->
-                <div class="rounded-2xl bg-white dark:bg-gray-900/50 p-5 border border-gray-100 dark:border-gray-800">
-                    <h3 class="font-semibold mb-4">Growth</h3>
-                    
-                    <div class="space-y-3">
-                        <!-- New Users -->
-                        <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-                            <div class="flex items-center justify-between mb-1">
-                                <span class="text-xs text-muted-foreground">User Baru</span>
-                                <span 
-                                    :class="userGrowthPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'"
-                                    class="flex items-center text-xs font-medium gap-0.5"
-                                >
-                                    <ArrowUpRight v-if="userGrowthPercentage >= 0" class="h-3 w-3" />
-                                    <ArrowDownRight v-else class="h-3 w-3" />
-                                    {{ Math.abs(userGrowthPercentage) }}%
-                                </span>
+                <!-- User Growth Chart -->
+                <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-[#23231f] p-5 border border-[#eae8e2] dark:border-white/10">
+                    <div class="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-[#51fac1]/20 blur-2xl pointer-events-none"></div>
+                    <div class="relative flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#51fac1] text-[#007152]">
+                                <Users class="h-5 w-5" />
                             </div>
-                            <p class="text-xl font-bold">{{ stats.new_users_this_week }}</p>
-                            <p class="text-[10px] text-muted-foreground">minggu ini</p>
+                            <div>
+                                <h3 class="font-bold text-[#1b1c19] dark:text-foreground">Pertumbuhan User</h3>
+                                <p class="text-xs text-[#4d4634] dark:text-muted-foreground">User baru per bulan</p>
+                            </div>
                         </div>
-
-                        <!-- Active Tenants -->
-                        <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-                            <span class="text-xs text-muted-foreground">Tenant Aktif</span>
-                            <p class="text-xl font-bold mt-1">{{ stats.active_tenants }}</p>
-                        </div>
-
-                        <!-- Banks -->
-                        <div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-                            <span class="text-xs text-muted-foreground">Bank Aktif</span>
-                            <p class="text-xl font-bold mt-1">{{ stats.total_banks }}</p>
+                        <span class="inline-flex items-center gap-1 rounded-full bg-[#51fac1]/20 px-2.5 py-1 text-[11px] font-bold text-[#007152] dark:bg-emerald-500/10 dark:text-emerald-400">
+                            <Users class="h-3 w-3" />
+                            {{ stats.total_users }} user
+                        </span>
+                    </div>
+                    <div class="relative z-10">
+                        <div class="flex h-48 items-end gap-2">
+                            <div v-for="(item, index) in userGrowth" :key="index"
+                                class="group relative flex flex-1 flex-col items-center gap-1.5">
+                                <div class="relative w-full flex flex-col items-center"
+                                    :style="{ height: getUserBarHeight(item.users) + 'px' }">
+                                    <span class="pointer-events-none absolute -top-5 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-[#1b1c19] dark:text-foreground">
+                                        {{ item.users }} user
+                                    </span>
+                                    <div class="absolute inset-y-0 left-1/2 w-4 sm:w-7 md:w-10 -translate-x-1/2 rounded-full bg-gradient-to-t from-[#51fac1] to-[#a5ffd0] transition-all duration-500 group-hover:from-[#2ee6a8] group-hover:to-[#51fac1]"></div>
+                                </div>
+                                <span class="text-[10px] font-semibold text-[#4d4634] dark:text-muted-foreground">{{ shortMonthLabel(item.month) }}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -481,67 +437,89 @@ const getBarHeight = (revenue: number) => {
             <!-- Recent Activity Grid -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <!-- Recent Tenants -->
-                <div class="rounded-2xl bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 overflow-hidden">
-                    <div class="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
-                        <h3 class="font-semibold">Tenant Terbaru</h3>
-                        <Link :href="superadmin.users.index()" class="text-xs text-primary hover:underline flex items-center gap-1">
-                            Lihat semua <ChevronRight class="h-3 w-3" />
+                <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-[#23231f] p-5 border border-[#eae8e2] dark:border-white/10">
+                    <div class="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-[#ffc9d0]/30 blur-2xl pointer-events-none"></div>
+                    <div class="relative flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ffc9d0] text-[#93000a]">
+                                <Building2 class="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-[#1b1c19] dark:text-foreground">Recent Tenants</h3>
+                                <p class="text-xs text-[#4d4634] dark:text-muted-foreground">Tenant terbaru dengan user</p>
+                            </div>
+                        </div>
+                        <Link :href="superadmin.users.index()" class="inline-flex items-center gap-1 text-xs font-bold text-[#725a00] dark:text-amber-300 transition-colors hover:text-[#574500]">
+                            <ExternalLink class="h-3.5 w-3.5" />
+                            Lihat Semua
                         </Link>
                     </div>
-                    <div class="divide-y divide-gray-100 dark:divide-gray-800">
-                        <div
-                            v-for="tenant in tenantsWithUsers"
-                            :key="tenant.id"
-                            class="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                        >
-                            <div class="flex items-center gap-3">
-                                <div class="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-medium">
-                                    {{ tenant.name.charAt(0).toUpperCase() }}
+                    <div class="relative z-10 space-y-3">
+                        <div v-if="tenantsWithUsers.length === 0" class="rounded-xl bg-[#f5f3ee] dark:bg-white/5 p-4 text-center text-sm text-[#4d4634] dark:text-muted-foreground">
+                            Belum ada tenant dengan user.
+                        </div>
+                        <div v-for="tenant in tenantsWithUsers" :key="tenant.id"
+                            class="flex items-center justify-between gap-3 rounded-xl border border-[#eae8e2] dark:border-white/10 bg-[#fbf9f3] dark:bg-white/5 p-3.5 transition-all duration-200 hover:border-[#ffd23f] hover:shadow-[0_2px_12px_rgba(255,210,63,0.15)]">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#ffd23f] text-[#574500]">
+                                    <Building2 class="h-4 w-4" />
                                 </div>
-                                <div>
-                                    <p class="font-medium text-sm">{{ tenant.name }}</p>
-                                    <p class="text-xs text-muted-foreground">{{ tenant.users_count }} users</p>
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-bold text-[#1b1c19] dark:text-foreground">{{ tenant.name }}</p>
+                                    <p class="text-[11px] text-[#4d4634] dark:text-muted-foreground">{{ tenant.users_count }} user</p>
                                 </div>
                             </div>
-                            <span
-                                :class="tenant.is_active ? 'bg-emerald-500/10 text-emerald-600' : 'bg-gray-500/10 text-gray-600'"
-                                class="px-2 py-0.5 text-[10px] font-medium rounded-full"
-                            >
-                                {{ tenant.is_active ? 'Aktif' : 'Nonaktif' }}
-                            </span>
-                        </div>
-                        <div v-if="tenantsWithUsers.length === 0" class="p-8 text-center text-sm text-muted-foreground">
-                            Belum ada tenant
+                            <div class="flex shrink-0 items-center gap-2">
+                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                                    :class="getStatusBadge(tenant.is_active ? 'active' : 'cancelled')">
+                                    {{ tenant.is_active ? 'Aktif' : 'Nonaktif' }}
+                                </span>
+                                <span class="text-[10px] text-[#4d4634] dark:text-muted-foreground">{{ formatTimeAgo(tenant.created_at) }}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Recent Subscriptions -->
-                <div class="rounded-2xl bg-white dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 overflow-hidden">
-                    <div class="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
-                        <h3 class="font-semibold">Subscription Terbaru</h3>
-                        <Link :href="superadmin.subscriptions.index()" class="text-xs text-primary hover:underline flex items-center gap-1">
-                            Lihat semua <ChevronRight class="h-3 w-3" />
+                <div class="relative overflow-hidden rounded-2xl bg-white dark:bg-[#23231f] p-5 border border-[#eae8e2] dark:border-white/10">
+                    <div class="absolute -right-10 -top-10 w-36 h-36 rounded-full bg-[#51fac1]/25 blur-2xl pointer-events-none"></div>
+                    <div class="relative flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#51fac1] text-[#007152]">
+                                <CreditCard class="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-[#1b1c19] dark:text-foreground">Recent Subscriptions</h3>
+                                <p class="text-xs text-[#4d4634] dark:text-muted-foreground">Langganan terbaru</p>
+                            </div>
+                        </div>
+                        <Link :href="superadmin.subscriptions.index()" class="inline-flex items-center gap-1 text-xs font-bold text-[#725a00] dark:text-amber-300 transition-colors hover:text-[#574500]">
+                            <ExternalLink class="h-3.5 w-3.5" />
+                            Lihat Semua
                         </Link>
                     </div>
-                    <div class="divide-y divide-gray-100 dark:divide-gray-800">
-                        <div
-                            v-for="sub in recentSubscriptions"
-                            :key="sub.id"
-                            class="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                        >
-                            <div>
-                                <p class="font-medium text-sm">{{ sub.tenant_name }}</p>
-                                <p class="text-xs text-muted-foreground mt-0.5">
-                                    {{ formatCurrencyShort(sub.price) }} • {{ sub.duration_months }} bulan
-                                </p>
-                            </div>
-                            <span :class="getStatusBadge(sub.status)" class="px-2 py-0.5 text-[10px] font-medium rounded-full">
-                                {{ sub.status }}
-                            </span>
+                    <div class="relative z-10 space-y-3">
+                        <div v-if="recentSubscriptions.length === 0" class="rounded-xl bg-[#f5f3ee] dark:bg-white/5 p-4 text-center text-sm text-[#4d4634] dark:text-muted-foreground">
+                            Belum ada langganan.
                         </div>
-                        <div v-if="recentSubscriptions.length === 0" class="p-8 text-center text-sm text-muted-foreground">
-                            Belum ada subscription
+                        <div v-for="sub in recentSubscriptions" :key="sub.id"
+                            class="flex items-center justify-between gap-3 rounded-xl border border-[#eae8e2] dark:border-white/10 bg-[#fbf9f3] dark:bg-white/5 p-3.5 transition-all duration-200 hover:border-[#51fac1] hover:shadow-[0_2px_12px_rgba(81,250,193,0.15)]">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#51fac1] text-[#007152]">
+                                    <Package class="h-4 w-4" />
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-bold text-[#1b1c19] dark:text-foreground">{{ sub.tenant_name }}</p>
+                                    <p class="text-[11px] text-[#4d4634] dark:text-muted-foreground capitalize">{{ sub.plan }} · {{ sub.duration_months }} bulan</p>
+                                </div>
+                            </div>
+                            <div class="flex shrink-0 items-center gap-2">
+                                <span class="text-sm font-extrabold text-[#1b1c19] dark:text-foreground">{{ formatCurrency(sub.price) }}</span>
+                                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                                    :class="getStatusBadge(sub.status)">
+                                    {{ sub.status }}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>

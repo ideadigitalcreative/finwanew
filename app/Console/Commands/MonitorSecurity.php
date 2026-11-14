@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -54,18 +55,12 @@ class MonitorSecurity extends Command
     {
         $this->info('🧹 Cleaning expired rate limit entries...');
 
-        // This is handled automatically by Laravel's cache system
-        // but we can force cleanup of specific patterns
-        $keys = Cache::store('database')->getRedis()->keys('laravel_cache:ddos:*');
-        $cleaned = 0;
-
-        foreach ($keys as $key) {
-            $cleanKey = str_replace('laravel_cache:', '', $key);
-            if (! Cache::has($cleanKey)) {
-                Cache::store('database')->getRedis()->del($key);
-                $cleaned++;
-            }
-        }
+        // Clean expired cache entries with ddos-related keys from database
+        $cacheTable = config('cache.stores.database.table', 'cache');
+        $cleaned = DB::table($cacheTable)
+            ->where('key', 'like', '%ddos%')
+            ->where('expiration', '<=', now()->timestamp)
+            ->delete();
 
         $this->info("🗑️ Cleaned {$cleaned} expired entries");
     }
@@ -77,9 +72,12 @@ class MonitorSecurity extends Command
     {
         $this->info('📊 Checking rate limits...');
 
-        // Get rate limit statistics from cache
-        $keys = Cache::store('database')->getRedis()->keys('laravel_cache:ddos:*');
-        $activeLimits = count($keys);
+        // Get rate limit statistics from database cache
+        $cacheTable = config('cache.stores.database.table', 'cache');
+        $activeLimits = DB::table($cacheTable)
+            ->where('key', 'like', '%ddos%')
+            ->where('expiration', '>', now()->timestamp)
+            ->count();
 
         $this->info("📈 Active rate limit entries: {$activeLimits}");
 

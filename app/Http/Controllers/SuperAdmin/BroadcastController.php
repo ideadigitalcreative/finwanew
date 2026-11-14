@@ -200,7 +200,7 @@ class BroadcastController extends Controller
                     usleep(500000); // 500ms delay
                 }
 
-                $result = $this->whatsAppService->sendMessage($sessionId, $phoneNumber, $message);
+                $result = $this->whatsAppService->sendMessage($sessionId, $phoneNumber, $message, 'text', null, false);
 
                 if ($result['success']) {
                     $results['success'][] = $phoneNumber;
@@ -336,7 +336,7 @@ class BroadcastController extends Controller
         }
 
         try {
-            $result = $this->whatsAppService->sendMessage($sessionId, $phoneNumber, $message);
+            $result = $this->whatsAppService->sendMessage($sessionId, $phoneNumber, $message, 'text', null, false);
 
             if ($result['success']) {
                 Log::info('Single message sent by super admin', [

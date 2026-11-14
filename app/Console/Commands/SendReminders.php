@@ -17,6 +17,13 @@ class SendReminders extends Command
 
     public function handle(): int
     {
+        // Pengingat buatan user BUKAN blast — ikut FINWA_USER_REMINDERS_ENABLED (default aktif)
+        if (! config('services.user_reminders.enabled', true)) {
+            $this->info('Pengingat user dinonaktifkan (FINWA_USER_REMINDERS_ENABLED=false). Lewati.');
+
+            return Command::SUCCESS;
+        }
+
         $this->info('Checking for pending reminders...');
 
         $now = now();
@@ -24,7 +31,7 @@ class SendReminders extends Command
         // Get active reminders that are due
         $reminders = Reminder::where('is_active', true)
             ->where('next_send_at', '<=', $now)
-            ->with(['tenant.user', 'tenant.channels'])
+            ->with(['tenant', 'tenant.channels'])
             ->get();
 
         $sent = 0;
@@ -72,11 +79,17 @@ class SendReminders extends Command
     {
         $tenant = $reminder->tenant;
 
-        if (! $tenant || ! $tenant->user) {
+        if (! $tenant) {
             return false;
         }
 
-        $user = $tenant->user;
+        // Get the owner/first user of the tenant
+        $user = \App\Models\User::where('tenant_id', $tenant->id)->first();
+        
+        if (! $user) {
+            return false;
+        }
+
         $whatsappNumber = $user->whatsapp_number;
 
         if (! $whatsappNumber) {
@@ -141,7 +154,7 @@ class SendReminders extends Command
 
         // Send via WhatsApp
         $whatsappService = app(WhatsAppService::class);
-        $result = $whatsappService->sendMessage($sessionId, $whatsappNumber, $message);
+        $result = $whatsappService->sendMessage($sessionId, $whatsappNumber, $message, 'text', null, false);
 
         return $result['success'] ?? false;
     }

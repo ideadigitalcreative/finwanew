@@ -1,4 +1,11 @@
 User-agent: *
 Allow: /
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /two-factor-challenge
+Disallow: /confirm-password
+Disallow: /verify-email
 
 Sitemap: https://finwa.web.id/sitemap.xml

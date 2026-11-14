@@ -103,6 +103,29 @@ class WhatsAppWebhookService
                 }
             }
 
+            // ── PESAN GRUP ──────────────────────────────────────────────────────
+            // Ditangani gerbang khusus SEBELUM alur pendaftaran / penautan perangkat /
+            // pemetaan LID — alur itu dirancang untuk chat pribadi dan berbahaya bila
+            // dijalankan dengan ID grup (mis. menautkan grup ke user yang salah).
+            if (\App\Services\WhatsApp\GroupMessageGate::isGroupPayload($waMessageData)) {
+                return (new \App\Services\WhatsApp\GroupMessageGate)->handle(
+                    $waMessageData,
+                    $sessionId,
+                    $channel,
+                    $messageId,
+                    fn (array $payload) => $this->forwardToCoreApi($payload),
+                    // Foto di grup: hanya referensi media yang dikirim gateway di pesan ini
+                    // (tanpa pencarian "unggahan terbaru", yang bisa menempelkan foto lain)
+                    function (array $wa): ?string {
+                        $ref = $this->sanitizeIncomingTextValue((string) ($wa['body'] ?? ''));
+
+                        return $ref !== '' && $this->isUsableMediaReference($ref)
+                            ? $this->normalizeIncomingMediaReference($ref)
+                            : null;
+                    }
+                );
+            }
+
             // Force routing check enabled to fix issue where users are read as default tenant 1
             // This ensures Premium Users are correctly mapped to their own tenants
             if ($senderId && is_string($senderId)) {
@@ -129,6 +152,7 @@ class WhatsAppWebhookService
                 $isExplicitReg = str_contains($rawBodyClean, 'ketik daftar untuk mulai') ||
                                  str_contains($rawBodyClean, 'halo kak, saya mau daftar finwa') ||
                                  str_contains($rawBodyClean, 'daftar finwa') ||
+                                 preg_match('/\b(?:mau|ingin)\s+daftar\b/u', $rawBodyClean) ||
                                  trim($rawBodyClean) === 'daftar' ||
                                  trim($rawBodyClean) === 'registrasi';
 
@@ -139,6 +163,27 @@ class WhatsAppWebhookService
 
                     // Deduplication (15s)
                     $lockKey = $messageId ? "wa_reg_reply:msg:{$messageId}" : 'wa_reg_reply:hash:'.md5($regKey.'|'.$rawBodyClean);
+
+                    // Nomor sudah terdaftar → jangan mulai alur pendaftaran lagi.
+                    $registeredUser = $this->findRegisteredSender($senderId, $originalFrom);
+                    if ($registeredUser) {
+                        if (! Cache::add($lockKey, true, now()->addSeconds(15))) {
+                            return ['success' => true, 'handled' => 'registration_already_registered_dedup'];
+                        }
+
+                        Log::info('Registration intent from already registered user', ['user_id' => $registeredUser->id, 'phone' => $cleanPhone]);
+                        \App\Helpers\WhatsAppRegistrationHelper::clearFlow($regKey);
+
+                        try {
+                            $this->sendReplyMessage($tenantId, $channelAccount, $senderId, $originalFrom,
+                                \App\Helpers\WhatsAppRegistrationHelper::getAlreadyRegisteredMessage($registeredUser));
+                        } catch (\Exception $e) {
+                            Log::error('Failed to send already-registered reply', ['error' => $e->getMessage()]);
+                        }
+
+                        return ['success' => true, 'handled' => 'registration_already_registered'];
+                    }
+
                     if (Cache::add($lockKey, true, now()->addSeconds(15))) {
                         Log::info('High-priority registration intent (EARLY) detected', ['phone' => $cleanPhone, 'reg_key' => $regKey]);
 
@@ -189,8 +234,13 @@ class WhatsAppWebhookService
                 $msgBodyRaw = trim($waMessageData['body'] ?? '');
 
                 // 1. Token-based linking (NEW): LINK ABC-123
-                if (preg_match('/^link\s+([A-Z0-9]{3}-[A-Z0-9]{3})$/i', $msgBodyRaw, $tokenMatches)) {
-                    $tokenValue = strtoupper($tokenMatches[1]);
+                if (preg_match('/^link\s+([A-Z0-9]{3}-?[A-Z0-9]{3})$/i', $msgBodyRaw, $tokenMatches)) {
+                    $tokenValue = strtoupper(str_replace('-', '', $tokenMatches[1]));
+                    // Make sure token always has the hyphen for querying DB (ABC-123)
+                    if (strlen($tokenValue) === 6 && !str_contains($tokenValue, '-')) {
+                        $tokenValue = substr($tokenValue, 0, 3) . '-' . substr($tokenValue, 3, 3);
+                    }
+                    
                     $linkToken = \App\Models\DeviceLinkToken::where('token', $tokenValue)
                         ->where('expires_at', '>', now())
                         ->first();
@@ -226,9 +276,15 @@ class WhatsAppWebhookService
                     $phoneToLink = $linkMatches[1];
                     Log::info('Intercepting LINK command', ['phone' => $phoneToLink, 'sender' => $senderId]);
 
+                    // Clean input number to ensure it starts with 62
+                    $cleanInputPhone = $phoneToLink;
+                    if (str_starts_with($cleanInputPhone, '0')) {
+                        $cleanInputPhone = '62' . substr($cleanInputPhone, 1);
+                    }
+
                     // Use helper to find user
-                    $existingUser = $this->findUserByPhoneNumber($phoneToLink);
-                    $cleanPhone = $mappingService->cleanPhoneNumber($phoneToLink); // Needed for linking
+                    $existingUser = $this->findUserByPhoneNumber($cleanInputPhone);
+                    $cleanPhone = $mappingService->cleanPhoneNumber($cleanInputPhone); // Needed for linking
 
                     if ($existingUser) {
                         // CHECK SUBSCRIPTION BEFORE LINKING - Fix for expired users linking devices
@@ -369,34 +425,31 @@ class WhatsAppWebhookService
                 // subsequent messages from this LID will be decryptable.
                 // ================================================================
                 if ($actualTenantId === null && ! empty($originalFrom) && empty(trim($waMessageData['body'] ?? '')) && ! $isInRegFlow) {
-                    // Check if there's a pending DeviceLinkToken — if so, this is an existing
-                    // user trying to verify (not a new user). Let the rescue block below handle it.
-                    $hasPendingToken = \App\Models\DeviceLinkToken::where('expires_at', '>', now())->exists();
+                    // Catatan: dulu ada pengecekan DeviceLinkToken aktif (global, milik user
+                    // mana pun) di sini yang membuat user baru tidak masuk alur daftar dan
+                    // malah di-auto-link ke akun orang lain. Pengecekan itu dihapus — user
+                    // lama yang ingin menautkan perangkat tetap bisa mengetik `LINK <kode>`.
+                    $cleanPhone = $mappingService->cleanPhoneNumber($senderId);
 
-                    if (! $hasPendingToken) {
-                        $cleanPhone = $mappingService->cleanPhoneNumber($senderId);
+                    Log::info('Empty body from unrecognized LID - starting registration flow', [
+                        'sender_id' => $senderId,
+                        'original_from' => $originalFrom,
+                        'clean_phone' => $cleanPhone,
+                    ]);
 
-                        Log::info('Empty body from unrecognized LID - starting registration flow', [
-                            'sender_id' => $senderId,
-                            'original_from' => $originalFrom,
-                            'clean_phone' => $cleanPhone,
-                        ]);
+                    \App\Helpers\WhatsAppRegistrationHelper::startFlow($cleanPhone);
+                    $replyMessage = \App\Helpers\WhatsAppRegistrationHelper::getAskNameMessage();
 
-                        \App\Helpers\WhatsAppRegistrationHelper::startFlow($cleanPhone);
-                        $replyMessage = \App\Helpers\WhatsAppRegistrationHelper::getAskNameMessage();
+                    $whatsappService = new \App\Services\WhatsAppService;
+                    $channelSessionId = "wa_{$tenantId}_{$channelAccount}";
 
-                        $whatsappService = new \App\Services\WhatsAppService;
-                        $channelSessionId = "wa_{$tenantId}_{$channelAccount}";
-
-                        try {
-                            $whatsappService->sendMessageToLid($channelSessionId, $originalFrom, $replyMessage);
-                        } catch (\Exception $e) {
-                            Log::error('Failed to send registration prompt to LID', ['error' => $e->getMessage()]);
-                        }
-
-                        return ['success' => true, 'handled' => 'registration_start_empty_body_lid'];
+                    try {
+                        $whatsappService->sendMessageToLid($channelSessionId, $originalFrom, $replyMessage);
+                    } catch (\Exception $e) {
+                        Log::error('Failed to send registration prompt to LID', ['error' => $e->getMessage()]);
                     }
-                    // else: has pending token, fall through to rescue block below
+
+                    return ['success' => true, 'handled' => 'registration_start_empty_body_lid'];
                 }
 
                 if ($actualTenantId === null && ! empty($originalFrom) && ! $isRegIntent && ! $isInRegFlow) {
@@ -435,52 +488,11 @@ class WhatsAppWebhookService
                         }
                     }
 
-                    // Case 2: Check for pending DeviceLinkToken (user just added WA number from dashboard)
-                    if (! $rescueSuccess) {
-                        $pendingTokens = \App\Models\DeviceLinkToken::where('expires_at', '>', now())
-                            ->with('user')
-                            ->get();
-
-                        foreach ($pendingTokens as $pt) {
-                            if ($pt->user) {
-                                // Check if this token's user has no LID mapping yet
-                                $hasLid = \App\Models\UserLidMapping::where('user_id', $pt->user->id)->exists();
-                                if (! $hasLid) {
-                                    // This user has a pending token and no LID - likely the sender
-                                    // Only auto-link if there's exactly ONE pending token without LID
-                                    // to avoid ambiguity
-                                    $candidateCount = $pendingTokens->filter(function ($t) {
-                                        return $t->user && ! \App\Models\UserLidMapping::where('user_id', $t->user->id)->exists();
-                                    })->count();
-
-                                    if ($candidateCount === 1) {
-                                        $lidToSave = str_replace(['@lid', '@c.us'], '', $originalFrom);
-                                        \App\Models\UserLidMapping::linkLidToUser(
-                                            $lidToSave, $pt->user->id, $pt->user->tenant_id, $pt->user->whatsapp_number
-                                        );
-                                        $pt->delete(); // Consume the token
-                                        $actualTenantId = $pt->user->tenant_id;
-                                        $rescueSuccess = true;
-
-                                        Log::info('Rescue auto-link: matched via pending DeviceLinkToken', [
-                                            'user_id' => $pt->user->id,
-                                            'lid' => $lidToSave,
-                                            'token' => $pt->token,
-                                        ]);
-
-                                        // Send confirmation
-                                        $successMsg = "✅ *Perangkat Terhubung!*\n\n".
-                                            "Halo {$pt->user->name},\n".
-                                            "Perangkat ini berhasil dihubungkan secara otomatis.\n\n".
-                                            'Sekarang Anda dapat melanjutkan aktivitas.';
-                                        $this->sendReplyMessage($tenantId, $channelAccount, $senderId, $originalFrom, $successMsg);
-
-                                        return ['success' => true, 'handled' => 'lid_auto_linked_via_token'];
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // Case 2 (DIHAPUS): auto-link LID ke user yang punya DeviceLinkToken aktif.
+                    // Logika ini TIDAK AMAN: siapa pun (termasuk calon user baru) yang chat
+                    // saat ada token aktif milik user lain akan langsung terhubung ke akun
+                    // user tersebut. Penautan perangkat sekarang WAJIB lewat perintah
+                    // `LINK <kode>` yang mencocokkan token secara eksplisit.
 
                     // If rescue failed, show the standard prompt
                     if (! $rescueSuccess) {
@@ -708,6 +720,15 @@ class WhatsAppWebhookService
                         }
                     }
 
+                    $registeredUser = $isReg ? $this->findRegisteredSender($senderId, $originalFrom ?? null) : null;
+                    if ($registeredUser) {
+                        // Nomor sudah terdaftar tapi langganan tidak aktif → arahkan perpanjang, bukan daftar ulang.
+                        $this->sendReplyMessage($tenantId, $channelAccount, $senderId, $originalFrom ?? null,
+                            \App\Helpers\WhatsAppRegistrationHelper::getAlreadyRegisteredMessage($registeredUser, true));
+
+                        return ['success' => true, 'handled' => 'registration_already_registered_expired'];
+                    }
+
                     if ($isReg) {
                         // Start registration flow
                         $cleanPhone = $mappingService->cleanPhoneNumber($senderId);
@@ -820,6 +841,11 @@ class WhatsAppWebhookService
             $mediaPath = null;
             $mediaFilename = null;
             $content = $this->sanitizeIncomingTextValue($content);
+            // Keterangan foto (caption): `body` gambar berisi URL media, jadi keterangan
+            // user dikirim gateway di field terpisah dan dipakai saat membaca struk.
+            $caption = is_string($waMessageData['caption'] ?? null)
+                ? mb_substr(trim($this->sanitizeIncomingTextValue((string) $waMessageData['caption'])), 0, 500)
+                : '';
             Log::debug('WhatsApp webhook: incoming payload summary', [
                 'session_id' => $sessionId,
                 'tenant_id' => $tenantId,
@@ -1043,8 +1069,26 @@ class WhatsAppWebhookService
                 ]);
             }
 
+            // Video: gateway tidak mengunduh medianya, `body` berisi keterangan video saja.
+            // Jangan sampai pencarian media cadangan menempelkan foto lain ke pesan ini —
+            // tandai sebagai video supaya job membalas dengan jelas (atau memproses
+            // keterangannya sebagai teks).
+            $isVideo = $waType === 'video';
+            if ($isVideo) {
+                $type = 'image';
+                $videoCaption = is_string($waMessageData['body'] ?? null) ? trim($this->sanitizeIncomingTextValue((string) $waMessageData['body'])) : '';
+                $content = $this->isUsableMediaReference($videoCaption) ? '' : $videoCaption;
+                $caption = mb_substr($content, 0, 500);
+                $mediaUrl = $mediaPath = $mediaFilename = null;
+            }
+
             // Check if we have original LID (for reply fallback)
             $originalFrom = $waMessageData['originalFrom'] ?? null;
+
+            // Reply context (Fase 1 reply-edit): metadata kutipan dari gateway
+            $replyContext = is_array($waMessageData['replyContext'] ?? null)
+                ? $waMessageData['replyContext']
+                : null;
 
             // Prepare payload sesuai standar
             $payload = [
@@ -1071,9 +1115,12 @@ class WhatsAppWebhookService
                     'media_url' => $mediaUrl,
                     'media_path' => $mediaPath,
                     'filename' => $mediaFilename,
+                    'caption' => $caption !== '' ? $caption : null,
+                    'wa_type' => $waType,
                     'location' => $waMessageData['location'] ?? null,
                     'contact' => $waMessageData['contact'] ?? null,
                     'mentions' => $waMessageData['mentionedIds'] ?? [],
+                    'reply_context' => $replyContext,
                 ],
             ];
 
@@ -1115,6 +1162,12 @@ class WhatsAppWebhookService
             if (! empty($payload['raw_data']['isGroup'])) {
                 $metadata['is_group'] = $payload['raw_data']['isGroup'];
             }
+            // Grup: tujuan balasan + identitas anggota pengirim
+            foreach (['group_jid', 'author_lid', 'author_name'] as $groupKey) {
+                if (! empty($payload['raw_data'][$groupKey])) {
+                    $metadata[$groupKey] = $payload['raw_data'][$groupKey];
+                }
+            }
             if (! empty($payload['raw_data']['mimetype'])) {
                 $metadata['mimetype'] = $payload['raw_data']['mimetype'];
             }
@@ -1126,6 +1179,15 @@ class WhatsAppWebhookService
             }
             if (! empty($payload['raw_data']['filename'])) {
                 $metadata['filename'] = $payload['raw_data']['filename'];
+            }
+            if (! empty($payload['raw_data']['caption'])) {
+                $metadata['caption'] = $payload['raw_data']['caption'];
+            }
+            if (($payload['raw_data']['wa_type'] ?? null) === 'video') {
+                $metadata['wa_type'] = 'video';
+            }
+            if (! empty($payload['raw_data']['group_answer_only'])) {
+                $metadata['group_answer_only'] = true;
             }
 
             try {
@@ -1255,12 +1317,8 @@ class WhatsAppWebhookService
             // Set cache for 5 minutes to prevent duplicate messages
             Cache::put($cacheKey, true, now()->addMinutes(5));
 
-            $message = "👋 *Selamat Datang di FinWa!*\n\n".
-                "Untuk memulai, FinWa perlu menghubungkan perangkat ini ke akun Anda.\n\n".
-                "*Caranya sangat mudah:*\n".
-                "Balas dengan nomor HP yang Anda daftarkan.\n".
-                "Contoh: `6285159205506`\n\n".
-                '💡 *Tips:* Gunakan format 62xxx (tanpa tanda +)';
+            $message = "👋 Halo! Anda belum terdaftar.\n\n".
+                "Ketik *DAFTAR* untuk buat akun gratis ✅";
 
             $whatsappService = new WhatsAppService;
 
@@ -1480,12 +1538,9 @@ class WhatsAppWebhookService
                 $message = preg_replace('/[[:^print:]]/', '', $message);
                 $message = trim($message);
 
-                // Temporarily disabled validation to fix registration block
-                /*
                 if (mb_strlen($message) < 3) {
-                    return 'Maaf, nama terlalu pendek. Silakan kirim nama lengkap Anda:';
+                    return 'Maaf, nama terlalu pendek. Silakan kirim *nama lengkap* Anda (contoh: Budi Santoso):';
                 }
-                */
 
                 // Save name and move to next step
                 \App\Helpers\WhatsAppRegistrationHelper::saveData($phoneNumber, ['name' => $message]);
@@ -1550,6 +1605,21 @@ class WhatsAppWebhookService
         $mappingService = new WhatsAppUserMappingService;
 
         return $mappingService->findUserByWhatsAppNumber($phoneNumber);
+    }
+
+    /**
+     * Find registered user for the sender (phone number or LID/originalFrom)
+     */
+    protected function findRegisteredSender(?string $senderId, ?string $originalFrom): ?\App\Models\User
+    {
+        foreach (array_filter([$senderId, $originalFrom]) as $candidate) {
+            $user = $this->findUserByPhoneNumber($candidate);
+            if ($user) {
+                return $user;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -70,14 +70,26 @@ class FinancialQueryService
     {
         $now = Carbon::now();
 
-        $monthNames = [
-            'januari' => 1, 'februari' => 2, 'maret' => 3, 'april' => 4,
-            'mei' => 5, 'juni' => 6, 'juli' => 7, 'agustus' => 8,
-            'september' => 9, 'oktober' => 10, 'november' => 11, 'desember' => 12,
-            'jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4,
-            'jun' => 6, 'jul' => 7, 'ags' => 8, 'agt' => 8,
-            'sep' => 9, 'okt' => 10, 'nov' => 11, 'des' => 12,
-        ];
+        // Satu sumber: config/finwa_query.php
+        $monthNames = config('finwa_query.month_names', []);
+
+        // === "N bulan/minggu/hari lalu" = SATU periode itu saja ===
+        // "2 bulan lalu" (di bulan Okt) = Agustus, bukan rentang Agustus–sekarang.
+        if (preg_match('/\b(\d+)\s*(hari|minggu|bulan)\s*(?:yang\s+)?lalu\b/i', $question, $agoMatch)) {
+            $n = (int) $agoMatch[1];
+            $unit = strtolower($agoMatch[2]);
+            [$start, $end] = match ($unit) {
+                'hari' => [$now->copy()->subDays($n)->startOfDay(), $now->copy()->subDays($n)->endOfDay()],
+                'minggu' => [$now->copy()->subWeeks($n)->startOfWeek(), $now->copy()->subWeeks($n)->endOfWeek()],
+                'bulan' => [$now->copy()->subMonthsNoOverflow($n)->startOfMonth(), $now->copy()->subMonthsNoOverflow($n)->endOfMonth()],
+            };
+
+            return [
+                'start' => $start,
+                'end' => $end,
+                'label' => "{$n} {$unit} lalu",
+            ];
+        }
 
         // === "N hari/minggu/bulan terakhir" ===
         if (preg_match('/(\d+)\s*(hari|minggu|bulan|tahun)\s*(terakhir|lalu|kebelakang)/i', $question, $nMatch)) {
@@ -222,11 +234,22 @@ class FinancialQueryService
             ];
         }
 
-        if (str_contains($question, 'minggu lalu')) {
+        if (str_contains($question, 'minggu lalu') || str_contains($question, 'minggu kemarin')) {
             return [
                 'start' => $now->copy()->subWeek()->startOfWeek(),
                 'end' => $now->copy()->subWeek()->endOfWeek(),
                 'label' => 'minggu lalu',
+            ];
+        }
+
+        // "bulan lalu"/"bulan kemarin" WAJIB dicek sebelum "kemarin", kalau tidak
+        // "bulan kemarin" terbaca sebagai kemarin (1 hari).
+        // subMonthNoOverflow: 31 Mar → Feb (subMonth() biasa meloncat ke 3 Mar).
+        if (str_contains($question, 'bulan lalu') || str_contains($question, 'bln lalu') || str_contains($question, 'bulan kemarin') || str_contains($question, 'bln kemarin')) {
+            return [
+                'start' => $now->copy()->subMonthNoOverflow()->startOfMonth(),
+                'end' => $now->copy()->subMonthNoOverflow()->endOfMonth(),
+                'label' => 'bulan lalu',
             ];
         }
 
@@ -235,23 +258,6 @@ class FinancialQueryService
                 'start' => $now->copy()->subDay()->startOfDay(),
                 'end' => $now->copy()->subDay()->endOfDay(),
                 'label' => 'kemarin',
-            ];
-        }
-
-        if (str_contains($question, 'bulan lalu') || str_contains($question, 'bln lalu') || str_contains($question, 'bulan kemarin')) {
-            return [
-                'start' => $now->copy()->subMonth()->startOfMonth(),
-                'end' => $now->copy()->subMonth()->endOfMonth(),
-                'label' => 'bulan lalu',
-            ];
-        }
-
-        // === 2 bulan lalu (tanpa angka eksplisit) ===
-        if (str_contains($question, '2 bulan lalu')) {
-            return [
-                'start' => $now->copy()->subMonths(2)->startOfMonth(),
-                'end' => $now->copy()->subMonths(2)->endOfMonth(),
-                'label' => '2 bulan lalu',
             ];
         }
 
@@ -280,6 +286,13 @@ class FinancialQueryService
 
         // Check if asking for list/detail
         if (str_contains($question, 'daftar') || str_contains($question, 'list') || str_contains($question, 'apa saja') || str_contains($question, 'sebutkan') || str_contains($question, 'tunjukkan') || str_contains($question, 'tampilkan') || str_contains($question, 'rincian') || str_contains($question, 'detail') || str_contains($question, 'rinci')) {
+            $requested['list'] = true;
+        }
+
+        // "lihat transaksi september", "transaksi kemarin" → daftar transaksi,
+        // kecuali jelas meminta angka ringkasan ("berapa transaksi bulan ini").
+        if (preg_match('/\btransaksi\b/u', $question)
+            && ! preg_match('/\b(berapa|total|ringkasan|rekap|jumlah)\b/u', $question)) {
             $requested['list'] = true;
         }
 
@@ -338,6 +351,18 @@ class FinancialQueryService
             'sedekah' => 'Donasi',
             'santunan' => 'Donasi',
             'zakat' => 'Donasi',
+            'baby' => 'Baby & Anak',
+            'bayi' => 'Baby & Anak',
+            'popok' => 'Baby & Anak',
+            'anak' => 'Baby & Anak',
+            'hewan' => 'Hewan Peliharaan',
+            'kucing' => 'Hewan Peliharaan',
+            'anjing' => 'Hewan Peliharaan',
+            'pet' => 'Hewan Peliharaan',
+            'gadget' => 'Gadget & Elektronik',
+            'elektronik' => 'Gadget & Elektronik',
+            'hp' => 'Gadget & Elektronik',
+            'laptop' => 'Gadget & Elektronik',
         ];
 
         foreach ($categoryMappings as $keyword => $categoryName) {
@@ -352,9 +377,24 @@ class FinancialQueryService
             $requested['summary'] = true;
         }
 
-        // If no specific request, show summary
+        // If no specific request, show summary only if period keyword detected
+        // Prevents random messages (e.g., "edd") from defaulting to monthly summary
         if (! $requested['income'] && ! $requested['expense'] && ! $requested['balance'] && ! $requested['list']) {
-            $requested['summary'] = true;
+            $periodWords = array_merge(
+                config('finwa_query.period_keywords', []),
+                array_keys(config('finwa_query.month_names', [])),
+                ['terakhir'],
+            );
+            $hasPeriodKeyword = preg_match('/(?<![\p{L}\p{N}])(?:'.implode('|', array_map(fn ($p) => preg_quote($p, '/'), $periodWords)).')(?![\p{L}\p{N}])/iu', $question);
+            $hasQueryIndicator = preg_match('/\b(ringkasan|rekap|total|berapa|cek|lihat|laporan|sisa|habis)\b/i', $question);
+            if ($hasPeriodKeyword || $hasQueryIndicator) {
+                $requested['summary'] = true;
+            } else {
+                $requested['is_valid_query'] = false;
+                // Simpan pertanyaan asli agar balasan guard (Chat LLM) bisa
+                // merujuk teks pesan user.
+                $requested['question'] = $question;
+            }
         }
 
         return $requested;
@@ -440,6 +480,21 @@ class FinancialQueryService
      */
     protected function generateAnswer(array $requested, array $data, array $period): string
     {
+        // Guard: Jika pesan bukan query keuangan yang valid
+        if (isset($requested['is_valid_query']) && $requested['is_valid_query'] === false) {
+            // CHAT LLM (Hybrid §6A): pesan umum yang lolos sampai sini
+            // (mis. "Bagaimana cara atur keuangan dengan baik") dijawab LLM
+            // konfigurasi admin. Gagal → balasan bantuan lokal.
+            $llmAnswer = (new \App\Services\AI\FinWaChatService)->answer($requested['question'] ?? '');
+            if ($llmAnswer !== null) {
+                return $llmAnswer;
+            }
+
+            return "🤔 Pesan Anda tidak saya mengerti.\n\n".
+                "Ketik _help_ untuk panduan penggunaan.\n\n".
+                "💬 Butuh bantuan? Hubungi: https://wa.me/6285242766676";
+        }
+
         // If asking for list/detail
         if ($requested['list']) {
             return $this->generateListAnswer($requested, $data, $period);
@@ -525,74 +580,63 @@ class FinancialQueryService
         // Filter by type if specified
         if ($listType === 'income') {
             $transactions = $transactions->where('type', 'income');
-            $title = "💰 *Daftar Pemasukan {$period['label']}*";
+            $title = "💰 *Pemasukan {$period['label']}*";
         } elseif ($listType === 'expense') {
             $transactions = $transactions->where('type', 'expense');
-            // Special title for "belanjaan"
             if ($categoryFilter === 'pengeluaran_belanja') {
-                $title = "🛍️ *Daftar Belanjaan {$period['label']}*";
+                $title = "🛍️ *Belanjaan {$period['label']}*";
             } else {
-                $title = "💸 *Daftar Pengeluaran {$period['label']}*";
+                $title = "💸 *Pengeluaran {$period['label']}*";
             }
         } else {
-            // Both types
-            $title = "📋 *Daftar Transaksi {$period['label']}*";
+            $title = "📋 *Transaksi {$period['label']}*";
         }
 
-        // Filter by category if specified (e.g., "belanjaan" = pengeluaran_belanja)
+        // Filter by category if specified
         if ($categoryFilter) {
             $transactions = $transactions->filter(function ($tx) use ($categoryFilter) {
                 return $tx->category && $tx->category->type === $categoryFilter;
             });
         }
 
-        $answer = $title."\n\n";
-
         if ($transactions->isEmpty()) {
-            if ($categoryFilter === 'pengeluaran_belanja') {
-                $answer .= "Tidak ada belanjaan pada periode ini.\n";
-            } else {
-                $answer .= "Tidak ada transaksi pada periode ini.\n";
-            }
-
-            return $answer;
+            return $title."\n\nTidak ada transaksi.";
         }
 
-        // Sort by date (newest first)
-        $transactions = $transactions->sortByDesc('transaction_date');
+        // Total dihitung dari SEMUA transaksi periode (bukan hanya yang ditampilkan)
+        $totalTransactions = $transactions->count();
+        $incomeAll = (float) $transactions->where('type', 'income')->sum('amount');
+        $expenseAll = (float) $transactions->where('type', 'expense')->sum('amount');
 
-        // Limit to 20 transactions to avoid message too long
-        $transactions = $transactions->take(20);
+        // Sort by date (newest first) and limit
+        $limit = 10;
+        $transactions = $transactions->sortByDesc('transaction_date')->take($limit);
 
-        $count = 0;
-        $totalAmount = 0;
+        $answer = $title."\n";
+
         foreach ($transactions as $tx) {
-            $count++;
             $type = $tx->type === 'income' ? '💰' : '💸';
             $amount = (float) $tx->amount;
-            $totalAmount += $amount;
             $amountFormatted = number_format($amount, 0, ',', '.');
-            $category = $tx->category->name ?? 'Lainnya';
-            $description = $tx->description ?? '-';
-            $date = $tx->transaction_date ? $tx->transaction_date->format('d/m/Y') : '-';
+            // Keterangan tanpa nominal — nominal sudah tampil di kolom tersendiri
+            $desc = \App\Helpers\KeywordNormalizer::stripAmountFromDescription($tx->description);
 
-            $answer .= "{$count}. {$type} Rp {$amountFormatted}\n";
-            $answer .= "   📁 {$category}\n";
-            if ($description && $description !== '-') {
-                $answer .= "   📝 {$description}\n";
+            // Compact format: single line per item
+            $answer .= "{$type} *Rp {$amountFormatted}*";
+            if ($desc) {
+                $answer .= " - {$desc}";
             }
-            $answer .= "   📅 {$date}\n\n";
+            $answer .= "\n";
         }
 
-        // Add total summary
-        if ($count > 0) {
-            $answer .= "━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
-            $answer .= '📊 *Total: Rp '.number_format($totalAmount, 0, ',', '.')."*\n";
-            $answer .= "📝 *Jumlah Transaksi: {$count}*\n";
-        }
-
-        if ($count >= 20) {
-            $answer .= "\n... (menampilkan 20 transaksi terbaru)\n";
+        // Summary
+        $net = $incomeAll - $expenseAll;
+        $answer .= "\n";
+        if ($incomeAll > 0) $answer .= '💰 Masuk: Rp '.number_format($incomeAll, 0, ',', '.')."\n";
+        if ($expenseAll > 0) $answer .= '💸 Keluar: Rp '.number_format($expenseAll, 0, ',', '.')."\n";
+        $answer .= "📊 Net: Rp ".number_format($net, 0, ',', '.');
+        if ($totalTransactions > $limit) {
+            $answer .= "\n📝 Total: {$totalTransactions} transaksi ({$limit} terbaru)";
         }
 
         return $answer;

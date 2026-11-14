@@ -35,7 +35,7 @@ class DeviceLinkToken extends Model
         return self::create([
             'user_id' => $userId,
             'token' => self::generateUniqueToken(),
-            'expires_at' => now()->addMinutes(15), // Token valid for 15 minutes
+            'expires_at' => now()->addHours(24), // Token valid for 24 hours
         ]);
     }
 

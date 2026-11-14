@@ -116,31 +116,9 @@ const isActive = computed(() => {
 </script>
 
 <template>
-    <!-- Smooth Gradient Container - No borders, blends smoothly -->
-    <div class="w-full rounded-3xl p-4 relative overflow-hidden">
-        
-        <!-- Base gradient: green concentrated at top, fading to white at bottom -->
-        <div class="absolute inset-0 bg-gradient-to-b from-emerald-100 via-white/80 to-white dark:from-emerald-900/40 dark:via-gray-800/80 dark:to-gray-800"></div>
-        
-        <!-- White overlay at top corners for softer look -->
-        <div class="absolute -top-10 -left-8 w-32 h-32 bg-white/60 dark:bg-gray-800/40 rounded-full blur-[50px]"></div>
-        <div class="absolute -top-10 -right-8 w-32 h-32 bg-white/60 dark:bg-gray-800/40 rounded-full blur-[50px]"></div>
-        
-        <!-- Green blobs - concentrated at top left -->
-        <div class="absolute -top-8 left-4 w-36 h-36 bg-emerald-400/40 dark:bg-emerald-500/30 rounded-full blur-[55px]"></div>
-        
-        <!-- Green blob - top right -->
-        <div class="absolute -top-6 right-8 w-32 h-32 bg-teal-400/35 dark:bg-teal-400/25 rounded-full blur-[50px]"></div>
-        
-        <!-- Intense green blob - slightly above center -->
-        <div class="absolute top-2 left-1/3 w-28 h-28 bg-emerald-500/30 dark:bg-emerald-400/25 rounded-full blur-[45px]"></div>
-        
-        <!-- Small accent blob - right side -->
-        <div class="absolute top-4 -right-4 w-24 h-24 bg-emerald-300/25 dark:bg-emerald-400/15 rounded-full blur-[40px]"></div>
-        
-        <!-- White fade at bottom for clean finish -->
-        <div class="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-white via-white/80 to-transparent dark:from-gray-800 dark:via-gray-800/80 dark:to-transparent"></div>
-        
+    <!-- Kartu polos seragam dengan kartu lain -->
+    <div class="w-full max-w-full rounded-2xl p-4 relative overflow-hidden overflow-x-hidden bg-white dark:bg-[#23231f] border border-[#eae8e2] dark:border-white/10">
+
         <!-- Activity Status Row -->
         <div class="flex items-center justify-between mb-3 relative z-10">
             <!-- Status Badge -->
@@ -164,7 +142,7 @@ const isActive = computed(() => {
             </div>
 
             <!-- Transaction Count & Last Activity -->
-            <div class="flex items-center gap-3 text-[11px]">
+            <div class="flex items-center gap-3 text-xs">
                 <span class="text-emerald-700 dark:text-emerald-300 font-semibold">
                     {{ totalThisMonth }} transaksi
                 </span>
@@ -178,8 +156,10 @@ const isActive = computed(() => {
         <!-- Month Navigation Header -->
         <div class="flex items-center justify-center gap-4 mb-4 relative z-10">
             <button 
+                type="button"
+                aria-label="Minggu sebelumnya"
                 @click="prevWeek"
-                class="p-2 rounded-full hover:bg-emerald-500/15 transition-all text-emerald-700 dark:text-emerald-300 hover:scale-105"
+                class="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-emerald-500/15 transition-all text-emerald-700 dark:text-emerald-300 hover:scale-105"
             >
                 <ChevronLeft class="w-5 h-5" />
             </button>
@@ -190,8 +170,10 @@ const isActive = computed(() => {
                 {{ monthLabel }}
             </button>
             <button 
+                type="button"
+                aria-label="Minggu berikutnya"
                 @click="nextWeek"
-                class="p-2 rounded-full hover:bg-emerald-500/15 transition-all text-emerald-700 dark:text-emerald-300 hover:scale-105"
+                class="inline-flex h-10 w-10 items-center justify-center rounded-full hover:bg-emerald-500/15 transition-all text-emerald-700 dark:text-emerald-300 hover:scale-105"
             >
                 <ChevronRight class="w-5 h-5" />
             </button>
@@ -213,7 +195,7 @@ const isActive = computed(() => {
                 >
                     <!-- Day Name -->
                     <span 
-                        class="text-[9px] font-semibold uppercase tracking-wider mb-1.5"
+                        class="text-xs font-semibold uppercase tracking-wider mb-1.5"
                         :class="day.isToday ? 'text-emerald-700 dark:text-emerald-300' : 'text-gray-400 dark:text-gray-500'"
                     >
                         {{ day.dayName }}
@@ -259,7 +241,7 @@ const isActive = computed(() => {
                     <!-- Daily expense label below circle -->
                     <span 
                         v-if="day.expenseLabel"
-                        class="text-[11px] font-bold mt-1.5 text-red-500 dark:text-red-400 leading-none"
+                        class="text-xs font-bold mt-1.5 text-red-500 dark:text-red-400 leading-none"
                     >
                         -{{ day.expenseLabel }}
                     </span>

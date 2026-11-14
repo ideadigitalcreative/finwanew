@@ -51,7 +51,7 @@ const formatCurrency = (amount: number) => {
                 
                 <div v-if="Math.abs(averageChange) < 900" class="flex items-center gap-1.5 md:gap-2 mt-3 bg-background/40 px-2 py-1 rounded-lg w-fit">
                     <BarChart3 class="w-3.5 h-3.5 md:w-4 md:h-4" :class="averageChange >= 0 ? 'text-primary' : 'text-destructive'" />
-                    <span class="text-[10px] md:text-xs text-muted-foreground">vs Bulan Lalu</span>
+                    <span class="text-[11px] md:text-xs text-muted-foreground">vs Bulan Lalu</span>
                     <span class="text-xs md:text-sm font-semibold" :class="averageChange >= 0 ? 'text-primary' : 'text-destructive'">
                         {{ averageChange >= 0 ? '+' : '' }}{{ averageChange }}%
                     </span>

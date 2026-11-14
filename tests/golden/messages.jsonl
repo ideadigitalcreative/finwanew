@@ -1,0 +1,263 @@
+{"id":"reg-01","text":"Saldo awal 3215000","intent":"pending_confirmation","type":null,"amount":3215000,"items":1,"tags":["regression","bug1"]}
+{"id":"reg-02","text":"pemasukann cash 150000","intent":"transaction","type":"income","amount":150000,"items":1,"tags":["regression","bug2","typo"]}
+{"id":"reg-03","text":"ringkasan bulanan ini","intent":"query","type":null,"amount":null,"items":null,"tags":["regression","bug3"]}
+{"id":"reg-04","text":"Pengeluaran mengganti motor hilang punya anggota LBH 3jt di tf ke rekening BNI","intent":"transaction","type":"expense","amount":3000000,"items":1,"tags":["regression","bug4","declared"]}
+{"id":"reg-05","text":"Beli rokok 24000 sama jajan 6000","intent":"transaction","type":"expense","amount":30000,"items":2,"tags":["regression","bug5","batch"]}
+{"id":"exp-01","text":"makan siang 40 rb","intent":"transaction","type":"expense","amount":40000,"items":1,"tags":[]}
+{"id":"exp-02","text":"beli rokok 24000","intent":"transaction","type":"expense","amount":24000,"items":1,"tags":[]}
+{"id":"exp-03","text":"kopi 15000","intent":"transaction","type":"expense","amount":15000,"items":1,"tags":[]}
+{"id":"exp-04","text":"beli bensin 50000","intent":"transaction","type":"expense","amount":50000,"items":1,"tags":[]}
+{"id":"exp-05","text":"beli sayur 35000","intent":"transaction","type":"expense","amount":35000,"items":1,"tags":[]}
+{"id":"exp-06","text":"bayar listrik 250000","intent":"transaction","type":"expense","amount":250000,"items":1,"tags":[]}
+{"id":"exp-07","text":"bayar internet 350000","intent":"transaction","type":"expense","amount":350000,"items":1,"tags":[]}
+{"id":"exp-08","text":"beli pulsa 50000","intent":"transaction","type":"expense","amount":50000,"items":1,"tags":[]}
+{"id":"exp-09","text":"parkir 5000","intent":"transaction","type":"expense","amount":5000,"items":1,"tags":[]}
+{"id":"exp-10","text":"ongkos ojek 15000","intent":"transaction","type":"expense","amount":15000,"items":1,"tags":[]}
+{"id":"exp-11","text":"beli bakso 18000","intent":"transaction","type":"expense","amount":18000,"items":1,"tags":[]}
+{"id":"exp-12","text":"nasi goreng 25rb","intent":"transaction","type":"expense","amount":25000,"items":1,"tags":[]}
+{"id":"exp-13","text":"beli sepatu 350rb","intent":"transaction","type":"expense","amount":350000,"items":1,"tags":[]}
+{"id":"exp-14","text":"beli baju 150rb","intent":"transaction","type":"expense","amount":150000,"items":1,"tags":[]}
+{"id":"exp-15","text":"jajan anak 20000","intent":"transaction","type":"expense","amount":20000,"items":1,"tags":[]}
+{"id":"exp-16","text":"kasih ortu 500rb","intent":"transaction","type":"expense","amount":500000,"items":1,"tags":[]}
+{"id":"exp-17","text":"beli obat 45000","intent":"transaction","type":"expense","amount":45000,"items":1,"tags":[]}
+{"id":"exp-18","text":"sarapan 12000","intent":"transaction","type":"expense","amount":12000,"items":1,"tags":[]}
+{"id":"exp-19","text":"makan malam 65rb","intent":"transaction","type":"expense","amount":65000,"items":1,"tags":[]}
+{"id":"exp-20","text":"kopi kenangan 18rb","intent":"transaction","type":"expense","amount":18000,"items":1,"tags":[]}
+{"id":"exp-21","text":"beli gas 200000","intent":"transaction","type":"expense","amount":200000,"items":1,"tags":[]}
+{"id":"exp-22","text":"bayar tagihan listrik 300rb","intent":"transaction","type":"expense","amount":300000,"items":1,"tags":[]}
+{"id":"exp-23","text":"gojek 20rb","intent":"transaction","type":"expense","amount":20000,"items":1,"tags":[]}
+{"id":"exp-24","text":"beli buku 120000","intent":"transaction","type":"expense","amount":120000,"items":1,"tags":[]}
+{"id":"exp-25","text":"beli pulsa listrik 100000","intent":"transaction","type":"expense","amount":100000,"items":1,"tags":[]}
+{"id":"exp-26","text":"cabut gigi 500000","intent":"transaction","type":"expense","amount":500000,"items":1,"tags":[]}
+{"id":"exp-27","text":"beli susu 85000","intent":"transaction","type":"expense","amount":85000,"items":1,"tags":[]}
+{"id":"exp-28","text":"beli celana 200rb","intent":"transaction","type":"expense","amount":200000,"items":1,"tags":[]}
+{"id":"exp-29","text":"bayar wifi 320000","intent":"transaction","type":"expense","amount":320000,"items":1,"tags":[]}
+{"id":"exp-30","text":"beli kue 30000","intent":"transaction","type":"expense","amount":30000,"items":1,"tags":[]}
+{"id":"exp-31","text":"beli ayam 55000","intent":"transaction","type":"expense","amount":55000,"items":1,"tags":[]}
+{"id":"exp-32","text":"isi ulang token 100rb","intent":"transaction","type":"expense","amount":100000,"items":1,"tags":[]}
+{"id":"exp-33","text":"beli tiket 150000","intent":"transaction","type":"expense","amount":150000,"items":1,"tags":[]}
+{"id":"exp-34","text":"donasi 50000","intent":"transaction","type":"expense","amount":50000,"items":1,"tags":[]}
+{"id":"exp-35","text":"beli kado 200000","intent":"transaction","type":"expense","amount":200000,"items":1,"tags":[]}
+{"id":"exp-36","text":"biaya admin 6500","intent":"transaction","type":"expense","amount":6500,"items":1,"tags":[]}
+{"id":"exp-37","text":"beli snack 25000","intent":"transaction","type":"expense","amount":25000,"items":1,"tags":[]}
+{"id":"exp-38","text":"beli sabun 30000","intent":"transaction","type":"expense","amount":30000,"items":1,"tags":[]}
+{"id":"exp-39","text":"makan siang di kantor 30rb","intent":"transaction","type":"expense","amount":30000,"items":1,"tags":[]}
+{"id":"exp-40","text":"beli telur 28000","intent":"transaction","type":"expense","amount":28000,"items":1,"tags":[]}
+{"id":"exp-41","text":"pijat 100000","intent":"transaction","type":"expense","amount":100000,"items":1,"tags":[]}
+{"id":"exp-42","text":"bayar uang sekolah 1500000","intent":"transaction","type":"expense","amount":1500000,"items":1,"tags":[]}
+{"id":"exp-43","text":"beli beras 12kg 180000","intent":"transaction","type":"expense","amount":180000,"items":1,"tags":[]}
+{"id":"exp-44","text":"bayar iuran 75000","intent":"transaction","type":"expense","amount":75000,"items":1,"tags":[]}
+{"id":"exp-45","text":"beli kacamata 850000","intent":"transaction","type":"expense","amount":850000,"items":1,"tags":[]}
+{"id":"exp-46","text":"makan bareng teman 147000","intent":"transaction","type":"expense","amount":147000,"items":1,"tags":[]}
+{"id":"exp-47","text":"beli jaket 275000","intent":"transaction","type":"expense","amount":275000,"items":1,"tags":[]}
+{"id":"exp-48","text":"parkir motor 10000","intent":"transaction","type":"expense","amount":10000,"items":1,"tags":[]}
+{"id":"exp-49","text":"beli kopi starbucks 65000","intent":"transaction","type":"expense","amount":65000,"items":1,"tags":[]}
+{"id":"exp-50","text":"beli gunting 25000","intent":"transaction","type":"expense","amount":25000,"items":1,"tags":[]}
+{"id":"exp-51","text":"bayar tagihan 100000","intent":"transaction","type":"expense","amount":100000,"items":1,"tags":[]}
+{"id":"exp-52","text":"beli ayam goreng 40000","intent":"transaction","type":"expense","amount":40000,"items":1,"tags":[]}
+{"id":"exp-53","text":"beli parfum 320000","intent":"transaction","type":"expense","amount":320000,"items":1,"tags":[]}
+{"id":"exp-54","text":"beli keyboard 450000","intent":"transaction","type":"expense","amount":450000,"items":1,"tags":[]}
+{"id":"exp-55","text":"beli roti 15000","intent":"transaction","type":"expense","amount":15000,"items":1,"tags":[]}
+{"id":"exp-56","text":"bayar laundry 40000","intent":"transaction","type":"expense","amount":40000,"items":1,"tags":[]}
+{"id":"exp-57","text":"beli lipstick 350000","intent":"transaction","type":"expense","amount":350000,"items":1,"tags":[]}
+{"id":"exp-58","text":"beli helm 750000","intent":"transaction","type":"expense","amount":750000,"items":1,"tags":[]}
+{"id":"exp-59","text":"beli nasi padang 30000","intent":"transaction","type":"expense","amount":30000,"items":1,"tags":[]}
+{"id":"exp-60","text":"beli kopi susu 24000","intent":"transaction","type":"expense","amount":24000,"items":1,"tags":[]}
+{"id":"exp-61","text":"beli bayam 10rb","intent":"transaction","type":"expense","amount":10000,"items":1,"tags":[]}
+{"id":"exp-62","text":"beli rokok 13rb","intent":"transaction","type":"expense","amount":13000,"items":1,"tags":[]}
+{"id":"exp-63","text":"beli kopi susu 20k","intent":"transaction","type":"expense","amount":20000,"items":1,"tags":[]}
+{"id":"exp-64","text":"makan warteg 15rb","intent":"transaction","type":"expense","amount":15000,"items":1,"tags":[]}
+{"id":"exp-65","text":"sarapan lontong sayur 15k","intent":"transaction","type":"expense","amount":15000,"items":1,"tags":[]}
+{"id":"exp-66","text":"beli tahu sumedang 5000","intent":"transaction","type":"expense","amount":5000,"items":1,"tags":[]}
+{"id":"exp-67","text":"nasi ayam penyet 23000","intent":"transaction","type":"expense","amount":23000,"items":1,"tags":[]}
+{"id":"exp-68","text":"beli kabel data 75000","intent":"transaction","type":"expense","amount":75000,"items":1,"tags":[]}
+{"id":"exp-69","text":"beli kebutuhan dapur 450000","intent":"transaction","type":"expense","amount":450000,"items":1,"tags":[]}
+{"id":"exp-70","text":"cuci motor 15000","intent":"transaction","type":"expense","amount":15000,"items":1,"tags":[]}
+{"id":"exp-71","text":"beli roti tawar 18000","intent":"transaction","type":"expense","amount":18000,"items":1,"tags":[]}
+{"id":"exp-72","text":"beli sabun cuci 32000","intent":"transaction","type":"expense","amount":32000,"items":1,"tags":[]}
+{"id":"exp-73","text":"makan siang 18000","intent":"transaction","type":"expense","amount":18000,"items":1,"tags":[]}
+{"id":"exp-74","text":"beli kopi 12000","intent":"transaction","type":"expense","amount":12000,"items":1,"tags":[]}
+{"id":"exp-75","text":"beli gorengan 5000","intent":"transaction","type":"expense","amount":5000,"items":1,"tags":[]}
+{"id":"exp-76","text":"beli gas LPG 3kg 230000","intent":"transaction","type":"expense","amount":230000,"items":1,"tags":["amount_multi"]}
+{"id":"inc-01","text":"terima uang 455000","intent":"transaction","type":"income","amount":455000,"items":1,"tags":[]}
+{"id":"inc-02","text":"gaji 4500000","intent":"transaction","type":"income","amount":4500000,"items":1,"tags":[]}
+{"id":"inc-03","text":"bonus 500rb","intent":"transaction","type":"income","amount":500000,"items":1,"tags":[]}
+{"id":"inc-04","text":"dapat proyek 2jt","intent":"transaction","type":"income","amount":2000000,"items":1,"tags":[]}
+{"id":"inc-05","text":"terima transfer 750rb","intent":"transaction","type":"income","amount":750000,"items":1,"tags":[]}
+{"id":"inc-06","text":"dapet THR 1500000","intent":"transaction","type":"income","amount":1500000,"items":1,"tags":[]}
+{"id":"inc-07","text":"freelance 800rb masuk","intent":"transaction","type":"income","amount":800000,"items":1,"tags":[]}
+{"id":"inc-08","text":"jual barang bekas 350000","intent":"transaction","type":"income","amount":350000,"items":1,"tags":[]}
+{"id":"inc-09","text":"pemasukan hasil jualan 2400000","intent":"transaction","type":"income","amount":2400000,"items":1,"tags":[]}
+{"id":"inc-10","text":"komisi 300000","intent":"transaction","type":"income","amount":300000,"items":1,"tags":[]}
+{"id":"inc-11","text":"pemasukan cash 200000","intent":"transaction","type":"income","amount":200000,"items":1,"tags":[]}
+{"id":"inc-12","text":"terima kiriman dari adik 500rb","intent":"transaction","type":"income","amount":500000,"items":1,"tags":[]}
+{"id":"inc-13","text":"dapat cashback 25000","intent":"transaction","type":"income","amount":25000,"items":1,"tags":[]}
+{"id":"inc-14","text":"gaji bulan ini 5jt","intent":"transaction","type":"income","amount":5000000,"items":1,"tags":[]}
+{"id":"inc-15","text":"terima pembayaran 1200000","intent":"transaction","type":"income","amount":1200000,"items":1,"tags":[]}
+{"id":"q-01","text":"cek saldo","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-02","text":"ringkasan bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-03","text":"berapa pengeluaran minggu ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-04","text":"berapa pemasukan bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-05","text":"lihat transaksi","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-06","text":"daftar rekening","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-07","text":"total pengeluaran hari ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-08","text":"ringkasan keuangan bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-09","text":"berapa saldo saya","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-10","text":"laporan pengeluaran bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":["report"]}
+{"id":"saldoset-01","text":"set saldo Tabungan Jago menjadi 305000","intent":"set_balance","type":null,"amount":305000,"items":null,"wallet":"Tabungan Jago","tags":[]}
+{"id":"saldoset-02","text":"ubah saldo Gopay jadi 500rb","intent":"set_balance","type":null,"amount":500000,"items":null,"wallet":"Gopay","tags":[]}
+{"id":"saldoset-03","text":"set saldo BCA menjadi 12000000","intent":"set_balance","type":null,"amount":12000000,"items":null,"wallet":"BCA","tags":[]}
+{"id":"saldoset-04","text":"set saldo Dana jadi 250000","intent":"set_balance","type":null,"amount":250000,"items":null,"wallet":"Dana","tags":[]}
+{"id":"trf-01","text":"transfer 340000 dari saldo BCA ke Saldo cash","intent":"transfer","type":"debit_internal","amount":340000,"items":2,"tags":[]}
+{"id":"trf-02","text":"pindah saldo 500000 dari BCA ke Mandiri","intent":"transfer","type":"debit_internal","amount":500000,"items":2,"tags":[]}
+{"id":"trf-03","text":"transfer 100000 dari Gopay ke BCA","intent":"transfer","type":"debit_internal","amount":100000,"items":2,"tags":[]}
+{"id":"batch-01","text":"beli bayam 10000 sama tahu 5000","intent":"transaction","type":"expense","amount":15000,"items":2,"tags":["batch"]}
+{"id":"batch-02","text":"makan siang 25000 dan parkir 5000","intent":"transaction","type":"expense","amount":30000,"items":2,"tags":["batch"]}
+{"id":"batch-03","text":"beli rokok 13000 sama air mineral 6000","intent":"transaction","type":"expense","amount":19000,"items":2,"tags":["batch"]}
+{"id":"batch-04","text":"kopi 15000 rokok 24000","intent":"transaction","type":"expense","amount":39000,"items":2,"tags":["batch"]}
+{"id":"debt-01","text":"hutang Budi 500000","intent":"pending_confirmation","type":"income","amount":500000,"items":1,"category":"pendapatan_hutang","tags":["ambiguous","debt_cash_mode"]}
+{"id":"debt-02","text":"piutang Andi 250000","intent":"pending_confirmation","type":"expense","amount":250000,"items":1,"category":"pengeluaran_piutang","tags":["ambiguous","debt_cash_mode"]}
+{"id":"debt-03","text":"bayar hutang ke Pak Budi 1jt","intent":"debt","type":"expense","amount":1000000,"items":1,"category":"pengeluaran_bayar_hutang","tags":[]}
+{"id":"debt-04","text":"dapat piutang dari Rina 800rb","intent":"debt","type":"income","amount":800000,"items":1,"category":"pendapatan_terima_piutang","tags":[]}
+{"id":"h-01","text":"help","intent":"help","type":null,"amount":null,"items":null,"marker":"Panduan FinWa","tags":[]}
+{"id":"h-02","text":"panduan","intent":"help","type":null,"amount":null,"items":null,"marker":"Panduan FinWa","tags":[]}
+{"id":"h-03","text":"bantuan","intent":"help","type":null,"amount":null,"items":null,"marker":"Panduan FinWa","tags":[]}
+{"id":"amb-01","text":"gaji 4500rb","intent":"pending_confirmation","type":"income","amount":4500000,"items":1,"tags":["ambiguous"]}
+{"id":"exp-77","text":"beli seblak 17000","intent":"transaction","type":"expense","amount":17000,"items":1,"tags":[]}
+{"id":"exp-78","text":"nasi uduk 8000","intent":"transaction","type":"expense","amount":8000,"items":1,"tags":[]}
+{"id":"exp-79","text":"makan malam 68000","intent":"transaction","type":"expense","amount":68000,"items":1,"tags":[]}
+{"id":"exp-80","text":"beli kaos 75000","intent":"transaction","type":"expense","amount":75000,"items":1,"tags":[]}
+{"id":"exp-81","text":"topup e-wallet 100000","intent":"transaction","type":"expense","amount":100000,"items":1,"tags":[]}
+{"id":"exp-82","text":"beli gorengan 5000 dari seabank","intent":"transaction","type":"expense","amount":5000,"items":1,"tags":[]}
+{"id":"exp-83","text":"beli bayam 10000 sama tahu sumedang 5000","intent":"transaction","type":"expense","amount":15000,"items":2,"tags":["batch"]}
+{"id":"dec-01","text":"Pengeluaran utama makan malam 15000","intent":"transaction","type":"expense","amount":15000,"items":1,"tags":["declared"]}
+{"id":"dec-02","text":"Pengeluaran harian beli rokok 10000","intent":"transaction","type":"expense","amount":10000,"items":1,"tags":["declared"]}
+{"id":"dec-03","text":"Pengeluaran makan siang kantor 30000","intent":"transaction","type":"expense","amount":30000,"items":1,"tags":["declared"]}
+{"id":"dec-04","text":"Pengeluaran transportasi ojek online 22000","intent":"transaction","type":"expense","amount":22000,"items":1,"tags":["declared"]}
+{"id":"dec-05","text":"Pengeluaran gaji karyawan 1200000","intent":"transaction","type":"expense","amount":1200000,"items":1,"tags":["declared","conflict"]}
+{"id":"dec-06","text":"Pengeluaran donasi 50000","intent":"transaction","type":"expense","amount":50000,"items":1,"tags":["declared"]}
+{"id":"dec-07","text":"Pengeluaran hiburan nonton bioskop 60000","intent":"transaction","type":"expense","amount":60000,"items":1,"tags":["declared"]}
+{"id":"dec-08","text":"Pengeluaran investasi beli reksadana 1000000","intent":"transaction","type":"expense","amount":1000000,"items":1,"tags":["declared"]}
+{"id":"dec-09","text":"Pengeluaran keluarga kasih mama 500000","intent":"transaction","type":"expense","amount":500000,"items":1,"tags":["declared"]}
+{"id":"dec-10","text":"Pengeluaran langganan bayar internet 350000","intent":"transaction","type":"expense","amount":350000,"items":1,"tags":["declared"]}
+{"id":"dec-11","text":"Pengeluaran utilitas bayar air 100000","intent":"transaction","type":"expense","amount":100000,"items":1,"tags":["declared"]}
+{"id":"dec-12","text":"Pengeluaran operasional listrik toko 800000","intent":"transaction","type":"expense","amount":800000,"items":1,"tags":["declared"]}
+{"id":"dec-13","text":"Pengeluaran modal beli perlengkapan usaha 2500000","intent":"transaction","type":"expense","amount":2500000,"items":1,"tags":["declared"]}
+{"id":"dec-14","text":"Pengeluaran lainnya biaya admin 6500","intent":"transaction","type":"expense","amount":6500,"items":1,"tags":["declared"]}
+{"id":"dec-15","text":"Pemasukan harian jualan gorengan 350000","intent":"transaction","type":"income","amount":350000,"items":1,"tags":["declared"]}
+{"id":"dec-16","text":"Pemasukan bonus lebaran 1000000","intent":"transaction","type":"income","amount":1000000,"items":1,"tags":["declared"]}
+{"id":"dec-17","text":"Pemasukan investasi dividen saham 450000","intent":"transaction","type":"income","amount":450000,"items":1,"tags":["declared"]}
+{"id":"dec-18","text":"Pemasukan transfer uang dari suami 2000000","intent":"transaction","type":"income","amount":2000000,"items":1,"tags":["declared"]}
+{"id":"dec-19","text":"Pemasukan gaji freelance 1500000","intent":"transaction","type":"income","amount":1500000,"items":1,"tags":["declared"]}
+{"id":"dec-20","text":"Pemasukan penjualan equipment 4800000","intent":"transaction","type":"income","amount":4800000,"items":1,"tags":["declared"]}
+{"id":"dec-21","text":"Pemasukan cashback promo 75000","intent":"transaction","type":"income","amount":75000,"items":1,"tags":["declared"]}
+{"id":"dec-22","text":"Pemasukan sewa kos 1750000","intent":"transaction","type":"income","amount":1750000,"items":1,"tags":["declared"]}
+{"id":"dec-23","text":"Pemasukan pendapatan proyek 5000000","intent":"transaction","type":"income","amount":5000000,"items":1,"tags":["declared"]}
+{"id":"dec-24","text":"Pemasukan komisi penjualan 250000","intent":"transaction","type":"income","amount":250000,"items":1,"tags":["declared"]}
+{"id":"q-11","text":"pengeluaran bulan ini berapa","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-12","text":"total pemasukan minggu ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-13","text":"cek saldo BCA","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-14","text":"riwayat transaksi hari ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-15","text":"berapa jumlah transaksi bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"g-01","text":"halo","intent":"greeting","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"g-02","text":"hai finwa","intent":"greeting","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"st-01","text":"ya","intent":"stateful","type":null,"amount":null,"items":null,"tags":["stateful","skip"]}
+{"id":"st-02","text":"hapus","intent":"stateful","type":null,"amount":null,"items":null,"tags":["stateful","skip"]}
+{"id":"st-03","text":"tidak","intent":"stateful","type":null,"amount":null,"items":null,"tags":["stateful","skip"]}
+{"id":"st-04","text":"/start","intent":"stateful","type":null,"amount":null,"items":null,"tags":["stateful","skip"]}
+{"id":"st-05","text":"register","intent":"stateful","type":null,"amount":null,"items":null,"tags":["stateful","skip"]}
+{"id":"st-06","text":"batal","intent":"stateful","type":null,"amount":null,"items":null,"tags":["stateful","skip"]}
+{"id":"exp-84","text":"beli rokok 15000 sama air 4000","intent":"transaction","type":"expense","amount":19000,"items":2,"tags":["batch"]}
+{"id":"exp-85","text":"beli rokok 15000","intent":"transaction","type":"expense","amount":15000,"items":1,"tags":[]}
+{"id":"exp-86","text":"jajan anak 50000","intent":"transaction","type":"expense","amount":50000,"items":1,"tags":[]}
+{"id":"exp-87","text":"bayar listrik 145000","intent":"transaction","type":"expense","amount":145000,"items":1,"tags":[]}
+{"id":"exp-88","text":"beli minyak goreng 1Liter 18rb","intent":"transaction","type":"expense","amount":18000,"items":1,"tags":[]}
+{"id":"exp-89","text":"makan di luar 156rb","intent":"transaction","type":"expense","amount":156000,"items":1,"tags":[]}
+{"id":"exp-90","text":"beli sabun mandi 26000","intent":"transaction","type":"expense","amount":26000,"items":1,"tags":[]}
+{"id":"exp-91","text":"ojek ke kantor 25000","intent":"transaction","type":"expense","amount":25000,"items":1,"tags":[]}
+{"id":"exp-92","text":"beli gula 15000","intent":"transaction","type":"expense","amount":15000,"items":1,"tags":[]}
+{"id":"exp-93","text":"bayar bpjs 150000","intent":"transaction","type":"expense","amount":150000,"items":1,"tags":[]}
+{"id":"exp-94","text":"beli dompet 199000","intent":"transaction","type":"expense","amount":199000,"items":1,"tags":[]}
+{"id":"exp-95","text":"kopi starbucks 65000","intent":"transaction","type":"expense","amount":65000,"items":1,"tags":[]}
+{"id":"exp-96","text":"beli hp 3200000","intent":"transaction","type":"expense","amount":3200000,"items":1,"tags":[]}
+{"id":"exp-97","text":"servis AC 350000","intent":"transaction","type":"expense","amount":350000,"items":1,"tags":[]}
+{"id":"exp-98","text":"beli popok bayi 220000","intent":"transaction","type":"expense","amount":220000,"items":1,"tags":[]}
+{"id":"exp-99","text":"sarapan bubur 10000","intent":"transaction","type":"expense","amount":10000,"items":1,"tags":[]}
+{"id":"exp-100","text":"beli rasa 20000","intent":"transaction","type":"expense","amount":20000,"items":1,"tags":[]}
+{"id":"exp-101","text":"makan siang padang 32000","intent":"transaction","type":"expense","amount":32000,"items":1,"tags":[]}
+{"id":"exp-102","text":"beli deterjen 14000","intent":"transaction","type":"expense","amount":14000,"items":1,"tags":[]}
+{"id":"inc-16","text":"pemasukan project 7500000","intent":"transaction","type":"income","amount":7500000,"items":1,"tags":[]}
+{"id":"inc-17","text":"terima transfer 1500000 dari Bapak Surya","intent":"transaction","type":"income","amount":1500000,"items":1,"tags":[]}
+{"id":"inc-18","text":"dapat uang hasil lebaran 2jt","intent":"transaction","type":"income","amount":2000000,"items":1,"tags":[]}
+{"id":"inc-19","text":"pemasukan cash 150000","intent":"transaction","type":"income","amount":150000,"items":1,"tags":[]}
+{"id":"inc-20","text":"pemasukan penjualan roti 450000","intent":"transaction","type":"income","amount":450000,"items":1,"tags":[]}
+{"id":"saldoset-05","text":"saldo 1000000","intent":"set_balance","type":null,"amount":1000000,"items":null,"wallet":null,"tags":["increase"]}
+{"id":"saldoset-06","text":"set saldo OVO jadi 500000","intent":"set_balance","type":null,"amount":500000,"items":null,"wallet":"OVO","tags":[]}
+{"id":"saldoset-07","text":"set saldo Mandiri menjadi 5000000","intent":"set_balance","type":null,"amount":5000000,"items":null,"wallet":"Mandiri","tags":[]}
+{"id":"q-16","text":"berapa pengeluaran saya bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-17","text":"ringkasan bulan lalu","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-18","text":"list transaksi hari ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-19","text":"cek cashflow bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-20","text":"gaji saya berapa","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-21","text":"belanjaan bulan ini berapa","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-22","text":"pengeluaran terbesar bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-23","text":"kas sekarang berapa","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-24","text":"dompet saya ada apa saja","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-25","text":"berapa total saldo rekening saya","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-26","text":"tampilkan laporan pemasukan","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-27","text":"sebutkan pengeluaran minggu ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-28","text":"laporan bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-29","text":"berapa pemasukan saya tahun ini","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"q-30","text":"tunjukkan riwayat transaksi","intent":"query","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"debt-05","text":"pinjam ke bank 5jt","intent":"debt","type":"income","amount":5000000,"items":1,"category":"pendapatan_hutang","tags":[]}
+{"id":"debt-06","text":"kasih pinjam ke Doni 300000","intent":"debt","type":"expense","amount":300000,"items":1,"category":"pengeluaran_piutang","tags":[]}
+{"id":"debt-07","text":"piutang dari klien 1500000","intent":"pending_confirmation","type":"expense","amount":1500000,"items":1,"category":"pengeluaran_piutang","tags":["ambiguous","debt_cash_mode"]}
+{"id":"debt-08","text":"piutang Noki 20000000","intent":"pending_confirmation","type":"expense","amount":20000000,"items":1,"category":"pengeluaran_piutang","tags":["ambiguous","debt_cash_mode"]}
+{"id":"debt-09","text":"Noki bayar hutang 600000","intent":"debt","type":"income","amount":600000,"items":1,"category":"pendapatan_terima_piutang","tags":[]}
+{"id":"debt-10","text":"hutang warung 85000","intent":"pending_confirmation","type":"income","amount":85000,"items":1,"category":"pendapatan_hutang","tags":["ambiguous","debt_cash_mode"]}
+{"id":"debt-11","text":"bayar utang ke mama 1jt","intent":"debt","type":"expense","amount":1000000,"items":1,"category":"pengeluaran_bayar_hutang","tags":[]}
+{"id":"debt-12","text":"dapat pelunasan piutang 2400000","intent":"debt","type":"income","amount":2400000,"items":1,"category":"pendapatan_terima_piutang","tags":[]}
+{"id":"g-03","text":"pagi","intent":"greeting","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"g-04","text":"siang finwa","intent":"greeting","type":null,"amount":null,"items":null,"tags":[]}
+{"id":"h-04","text":"cara pakai","intent":"help","type":null,"amount":null,"items":null,"marker":"Panduan FinWa","tags":[]}
+{"id":"h-05","text":"menu","intent":"help","type":null,"amount":null,"items":null,"marker":"Panduan FinWa","tags":[]}
+{"id":"p3-01","text":"lihat transaksi september","intent":"query","type":null,"amount":null,"items":null,"tags":["regression","p3","period"]}
+{"id":"p3-02","text":"rinciannya bulan lalu","intent":"query","type":null,"amount":null,"items":null,"tags":["regression","p3","period"]}
+{"id":"p3-03","text":"transaksi kemarin","intent":"query","type":null,"amount":null,"items":null,"tags":["regression","p3","period"]}
+{"id":"p3-04","text":"pengeluaran laptop bulan ini","intent":"query","type":null,"amount":null,"items":null,"tags":["regression","p3","substring"]}
+{"id":"p3-05","text":"pengeluaran 2 bulan lalu","intent":"query","type":null,"amount":null,"items":null,"tags":["regression","p3","period"]}
+{"id":"p3-06","text":"rekap okt","intent":"query","type":null,"amount":null,"items":null,"tags":["regression","p3","period"]}
+{"id":"p3-07","text":"pengeluaran bulan kemarin","intent":"query","type":null,"amount":null,"items":null,"tags":["regression","p3","period"]}
+{"id":"p3-08","text":"service motor ganti oli 50rb","intent":"transaction","type":"expense","amount":50000,"items":1,"tags":["regression","p3","ambiguous"]}
+{"id":"p3-09","text":"makan siang bukan sarapan 30rb","intent":"transaction","type":"expense","amount":30000,"items":1,"tags":["regression","p3","ambiguous"]}
+{"id":"p3-10","text":"beli pulsa total 50rb hari ini","intent":"transaction","type":"expense","amount":50000,"items":1,"tags":["regression","p3","query-vs-tx"]}
+{"id":"p3-11","text":"bayar daftar ulang bulan ini 500rb","intent":"transaction","type":"expense","amount":500000,"items":1,"tags":["regression","p3","query-vs-tx"]}
+{"id":"p3-12","text":"gaji masuk rekening bca 5jt","intent":"transaction","type":"income","amount":5000000,"items":1,"tags":["regression","p3","ambiguous"]}
+{"id":"p3-13","text":"beli kopi di coffee shop 35rb","intent":"transaction","type":"expense","amount":35000,"items":1,"tags":["regression","p3","substring"]}
+{"id":"p3-14","text":"bayar kursus bahasa inggris 300rb","intent":"transaction","type":"expense","amount":300000,"items":1,"tags":["regression","p3","substring"]}
+{"id": "tb-01", "text": "bayar 100rb kembalian 20rb", "intent": "transaction", "type": "expense", "amount": 80000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-02", "text": "gaji 3jt 400rb", "intent": "transaction", "type": "income", "amount": 3400000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-03", "text": "gaji 5jt potong bpjs 150rb", "intent": "transaction", "type": "income", "amount": 4850000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-04", "text": "beli sepatu 300rb harusnya 400rb", "intent": "transaction", "type": "expense", "amount": 400000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-05", "text": "beli bakso 20rb dan es teh 5rb", "intent": "transaction", "type": "expense", "amount": 25000, "items": 2, "tags": ["regression", "tahap-b"]}
+{"id": "tb-06", "text": "dapat uang dari ibu 500rb buat jajan", "intent": "transaction", "type": "income", "amount": 500000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-07", "text": "terima 2jt di kantor", "intent": "transaction", "type": "income", "amount": 2000000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-08", "text": "tiket masuk 50rb", "intent": "transaction", "type": "expense", "amount": 50000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-09", "text": "fee admin 6500", "intent": "transaction", "type": "expense", "amount": 6500, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-10", "text": "transfer dari istri 500rb", "intent": "transaction", "type": "income", "amount": 500000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-11", "text": "uang dari pembeli 200rb", "intent": "transaction", "type": "income", "amount": 200000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-12", "text": "gajian 5jt", "intent": "transaction", "type": "income", "amount": 5000000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-13", "text": "pesanan masuk 300rb", "intent": "transaction", "type": "income", "amount": 300000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-14", "text": "beli beras seratus ribu", "intent": "transaction", "type": "expense", "amount": 100000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-15", "text": "beli hp satu setengah juta", "intent": "transaction", "type": "expense", "amount": 1500000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-16", "text": "makan dua puluh lima ribu", "intent": "transaction", "type": "expense", "amount": 25000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-17", "text": "bayar tagihan bulanan wifi 350rb", "intent": "transaction", "type": "expense", "amount": 350000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-18", "text": "pulsa 50000 ke 0812345678", "intent": "transaction", "type": "expense", "amount": 50000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "tb-19", "text": "beli kursi 3x 1jt", "intent": "transaction", "type": "expense", "amount": 3000000, "items": 1, "tags": ["regression", "tahap-b"]}
+{"id": "amb1-01", "text": "sumbangan 50rb", "intent": "transaction", "type": "expense", "amount": 50000, "items": 1, "tags": ["regression", "ambigu", "tahap-1"]}
+{"id": "amb1-02", "text": "donasi masjid 100rb", "intent": "transaction", "type": "expense", "amount": 100000, "items": 1, "tags": ["regression", "ambigu", "tahap-1"]}
+{"id": "amb1-03", "text": "bunga deposito 50rb", "intent": "transaction", "type": "income", "amount": 50000, "items": 1, "tags": ["regression", "ambigu", "tahap-1"]}
+{"id": "amb1-04", "text": "bunga pinjaman 150rb", "intent": "transaction", "type": "expense", "amount": 150000, "items": 1, "tags": ["regression", "ambigu", "tahap-1"]}
+{"id": "amb1-05", "text": "beli 3 buku @20rb", "intent": "transaction", "type": "expense", "amount": 60000, "items": 1, "tags": ["regression", "ambigu", "tahap-1"]}
+{"id": "amb1-06", "text": "beli 2 kaos masing-masing 75rb", "intent": "transaction", "type": "expense", "amount": 150000, "items": 1, "tags": ["regression", "ambigu", "tahap-1"]}
+{"id": "amb1-07", "text": "budi pinjam 100rb", "intent": "transaction", "type": "expense", "amount": 100000, "items": 1, "tags": ["regression", "ambigu", "tahap-1"]}

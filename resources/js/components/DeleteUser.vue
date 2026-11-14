@@ -4,7 +4,6 @@ import { Form } from '@inertiajs/vue3';
 import { useTemplateRef } from 'vue';
 
 // Components
-import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,92 +23,100 @@ const passwordInput = useTemplateRef('passwordInput');
 </script>
 
 <template>
-    <div class="space-y-6">
-        <HeadingSmall
-            title="Delete account"
-            description="Delete your account and all of its resources"
-        />
+    <div class="space-y-4 font-['Plus_Jakarta_Sans',sans-serif]">
         <div
-            class="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-200/10 dark:bg-red-700/10"
+            class="space-y-2 rounded-xl border border-red-200/80 bg-red-50/60 p-4 dark:border-red-900/30 dark:bg-red-950/20"
         >
-            <div class="relative space-y-0.5 text-red-600 dark:text-red-100">
-                <p class="font-medium">Warning</p>
-                <p class="text-sm">
-                    Please proceed with caution, this cannot be undone.
+            <div class="relative space-y-1 text-red-700 dark:text-red-300">
+                <p class="text-xs font-bold flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-base">error</span>
+                    Peringatan Akun
+                </p>
+                <p class="text-xs text-[#4d4634]/80 dark:text-white/70 leading-relaxed">
+                    Setelah akun Anda dihapus, seluruh data keuangan, histori WhatsApp, dan celengan akan hilang permanen.
                 </p>
             </div>
-            <Dialog>
-                <DialogTrigger as-child>
-                    <Button variant="destructive" data-test="delete-user-button"
-                        >Delete account</Button
-                    >
-                </DialogTrigger>
-                <DialogContent>
-                    <Form
-                        v-bind="ProfileController.destroy.form()"
-                        reset-on-success
-                        @error="() => passwordInput?.$el?.focus()"
-                        :options="{
-                            preserveScroll: true,
-                        }"
-                        class="space-y-6"
-                        v-slot="{ errors, processing, reset, clearErrors }"
-                    >
-                        <DialogHeader class="space-y-3">
-                            <DialogTitle
-                                >Are you sure you want to delete your
-                                account?</DialogTitle
-                            >
-                            <DialogDescription>
-                                Once your account is deleted, all of its
-                                resources and data will also be permanently
-                                deleted. Please enter your password to confirm
-                                you would like to permanently delete your
-                                account.
-                            </DialogDescription>
-                        </DialogHeader>
+            
+            <div class="pt-2">
+                <Dialog>
+                    <DialogTrigger as-child>
+                        <Button 
+                            variant="destructive" 
+                            data-test="delete-user-button"
+                            class="w-full bg-red-600 hover:bg-red-700 text-white font-bold text-xs h-9 rounded-xl shadow-none inline-flex items-center justify-center gap-1.5"
+                        >
+                            <span class="material-symbols-outlined text-base">delete_forever</span>
+                            Hapus Akun Saya
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent class="rounded-2xl border border-[#eae8e2] dark:border-white/10 bg-white dark:bg-[#23231f] p-6 max-w-md">
+                        <Form
+                            v-bind="ProfileController.destroy.form()"
+                            reset-on-success
+                            @error="() => passwordInput?.$el?.focus()"
+                            :options="{
+                                preserveScroll: true,
+                            }"
+                            class="space-y-5"
+                            v-slot="{ errors, processing, reset, clearErrors }"
+                        >
+                            <DialogHeader class="space-y-2 text-left">
+                                <DialogTitle class="text-lg font-bold text-[#1b1c19] dark:text-white flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-red-600 text-xl">warning</span>
+                                    Konfirmasi Hapus Akun?
+                                </DialogTitle>
+                                <DialogDescription class="text-xs text-[#4d4634]/70 dark:text-white/60 leading-relaxed">
+                                    Tindakan ini tidak dapat dibatalkan. Masukkan kata sandi Anda untuk mengonfirmasi bahwa Anda benar-benar ingin menghapus akun ini secara permanen.
+                                </DialogDescription>
+                            </DialogHeader>
 
-                        <div class="grid gap-2">
-                            <Label for="password" class="sr-only"
-                                >Password</Label
-                            >
-                            <Input
-                                id="password"
-                                type="password"
-                                name="password"
-                                ref="passwordInput"
-                                placeholder="Password"
-                            />
-                            <InputError :message="errors.password" />
-                        </div>
+                            <div class="grid gap-1.5">
+                                <Label for="password" class="text-xs font-bold text-[#1b1c19] dark:text-white">
+                                    Kata Sandi Anda
+                                </Label>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    name="password"
+                                    ref="passwordInput"
+                                    placeholder="Ketik kata sandi untuk konfirmasi"
+                                    class="bg-[#f5f3ee]/40 dark:bg-white/5 border-[#eae8e2] dark:border-white/10 text-[#1b1c19] dark:text-white rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                                />
+                                <InputError :message="errors.password" />
+                            </div>
 
-                        <DialogFooter class="gap-2">
-                            <DialogClose as-child>
+                            <DialogFooter class="flex flex-col sm:flex-row gap-2 pt-2">
+                                <DialogClose as-child>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        @click="
+                                            () => {
+                                                clearErrors();
+                                                reset();
+                                            }
+                                        "
+                                        class="w-full sm:w-auto bg-[#f5f3ee] hover:bg-[#eae8e2] text-[#1b1c19] dark:bg-white/10 dark:hover:bg-white/15 dark:text-white rounded-xl text-xs font-bold h-9"
+                                    >
+                                        Batal
+                                    </Button>
+                                </DialogClose>
+
                                 <Button
-                                    variant="secondary"
-                                    @click="
-                                        () => {
-                                            clearErrors();
-                                            reset();
-                                        }
-                                    "
+                                    type="submit"
+                                    variant="destructive"
+                                    :disabled="processing"
+                                    data-test="confirm-delete-user-button"
+                                    class="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold h-9 shadow-none inline-flex items-center justify-center gap-1.5"
                                 >
-                                    Cancel
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                    Ya, Hapus Permanen
                                 </Button>
-                            </DialogClose>
-
-                            <Button
-                                type="submit"
-                                variant="destructive"
-                                :disabled="processing"
-                                data-test="confirm-delete-user-button"
-                            >
-                                Delete account
-                            </Button>
-                        </DialogFooter>
-                    </Form>
-                </DialogContent>
-            </Dialog>
+                            </DialogFooter>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
+            </div>
         </div>
     </div>
 </template>

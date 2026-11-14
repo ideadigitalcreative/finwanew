@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Channel;
 use App\Models\Subscription;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Models\UserWhatsAppNumber;
 use App\Services\SubscriptionLimitService;
 use App\Services\WhatsAppService;
@@ -45,8 +46,8 @@ class WhatsAppChannelController extends Controller
 
         // Daftar nomor admin yang tidak boleh ditampilkan di halaman user
         $adminNumbers = [
-            '6285762000079', // Nomor admin yang tidak boleh ditampilkan
-            '6285242766676', // Super admin number
+            config('services.finwa.admin_number'), // Nomor admin yang tidak boleh ditampilkan
+            config('services.finwa.super_admin_number'), // Super admin number
         ];
 
         $channels = Channel::where('tenant_id', $tenant->id)
@@ -243,34 +244,11 @@ class WhatsAppChannelController extends Controller
             ->get()
             ->filter(function ($number) {
                 // Hide LID numbers from user view
-                // LID format: long number that doesn't start with 62 (Indonesian format)
-                // Show only:
-                // 1. Primary numbers (always show)
-                // 2. Numbers starting with 62 (Indonesian phone numbers)
-                // 3. Numbers with less than 13 digits (normal phone numbers)
-
                 if ($number->is_primary) {
                     return true; // Always show primary number
                 }
 
-                $phoneNumber = $number->whatsapp_number;
-
-                // Check if it's a LID (long number, not Indonesian format)
-                // LID typically: 62363562709234 (starts with 623635... or similar non-standard prefix)
-                // Real Indonesian number: 628xxx (starts with 628)
-
-                // Hide if:
-                // - Starts with 62 but NOT 628 (likely LID)
-                // - OR has name containing "LID"
-                if (str_starts_with($phoneNumber, '62') && ! str_starts_with($phoneNumber, '628')) {
-                    return false; // Hide LID
-                }
-
-                if (str_contains(strtolower($number->name ?? ''), 'lid')) {
-                    return false; // Hide if name contains "LID"
-                }
-
-                return true; // Show normal numbers
+                return !$number->is_lid;
             })
             ->values() // Re-index array after filter
             ->map(function ($number) {
@@ -279,9 +257,17 @@ class WhatsAppChannelController extends Controller
                     'whatsapp_number' => $number->whatsapp_number,
                     'name' => $number->name,
                     'is_primary' => $number->is_primary,
+                    'default_balance_id' => $number->default_balance_id,
                     'created_at' => $number->created_at->format('Y-m-d H:i:s'),
                 ];
             });
+
+        // Dompet aktif akun — pilihan "dompet bawaan" per nomor
+        $wallets = \App\Models\Balance::where('tenant_id', $tenant->id)->where('is_active', true)
+            ->orderByDesc('is_default')->orderBy('account_name')
+            ->get(['id', 'account_name', 'is_default'])
+            ->map(fn ($b) => ['id' => $b->id, 'name' => $b->account_name, 'is_default' => (bool) $b->is_default])
+            ->values();
 
         // Get limit info
         $limitService = new SubscriptionLimitService;
@@ -293,6 +279,7 @@ class WhatsAppChannelController extends Controller
             'tenantIsActive' => $tenantIsActive,
             'hasActiveSubscription' => $hasActiveSubscription,
             'userWhatsAppNumbers' => $userWhatsAppNumbers,
+            'wallets' => $wallets,
             'limitInfo' => $limitInfo,
             'tenant_id' => $tenant->id,
         ]);
@@ -802,10 +789,12 @@ class WhatsAppChannelController extends Controller
             'whatsapp_number' => 'required|string|regex:/^[0-9+\-\s()]+$/|max:20',
             'name' => 'nullable|string|max:255',
             'is_primary' => 'nullable|boolean',
+            'default_balance_id' => 'nullable|integer',
         ]);
 
         $tenant = Tenant::findOrFail($request->tenant_id);
         $user = $request->user();
+        $defaultBalanceId = $this->resolveDefaultBalanceId($request, $tenant->id);
 
         // Clean phone number
         $phoneNumber = preg_replace('/[^0-9]/', '', $request->whatsapp_number);
@@ -866,6 +855,9 @@ class WhatsAppChannelController extends Controller
         }
 
         // Create number (already confirmed not duplicate)
+        // Detect if this is a LID pseudo phone (not a real Indonesian phone number)
+        $isLid = !preg_match('/^628\d{8,12}$/', $phoneNumber);
+
         $userWhatsAppNumber = UserWhatsAppNumber::create([
             'user_id' => $user->id,
             'tenant_id' => $tenant->id,
@@ -873,6 +865,8 @@ class WhatsAppChannelController extends Controller
             'name' => $request->name,
             'is_primary' => $isPrimary,
             'is_active' => true,
+            'is_lid' => $isLid,
+            'default_balance_id' => $defaultBalanceId,
         ]);
 
         // Sync users.whatsapp_number if:
@@ -959,7 +953,7 @@ class WhatsAppChannelController extends Controller
                     "Atau ketik manual: *LINK {$linkToken->token}*\n\n".
                     '_Setelah itu, Anda akan mendapatkan konfirmasi bahwa akun sudah siap digunakan._';
 
-                $result = $this->whatsappService->sendMessage($sessionId, $phoneNumber, $message);
+                $result = $this->whatsappService->sendMessage($sessionId, $phoneNumber, $message, 'text', null, false);
 
                 if ($result['success'] ?? false) {
                     $welcomeMessageSent = true;
@@ -1026,16 +1020,32 @@ class WhatsAppChannelController extends Controller
     /**
      * Update user WhatsApp number
      */
+    /**
+     * Dompet bawaan yang dipilih untuk sebuah nomor: harus dompet aktif milik tenant ini.
+     * Kosong / tidak sah → null (ikut dompet utama akun).
+     */
+    protected function resolveDefaultBalanceId(Request $request, int $tenantId): ?int
+    {
+        $id = (int) $request->input('default_balance_id', 0);
+        if ($id <= 0) {
+            return null;
+        }
+
+        return \App\Models\Balance::where('tenant_id', $tenantId)->where('is_active', true)->whereKey($id)->value('id');
+    }
+
     public function updateNumber(Request $request, UserWhatsAppNumber $userWhatsAppNumber)
     {
         $request->validate([
             'whatsapp_number' => 'required|string|regex:/^[0-9+\-\s()]+$/|max:20',
             'name' => 'nullable|string|max:255',
             'is_primary' => 'nullable|boolean',
+            'default_balance_id' => 'nullable|integer',
         ]);
 
         $tenant = Tenant::findOrFail($request->tenant_id);
         $user = $request->user();
+        $defaultBalanceId = $this->resolveDefaultBalanceId($request, $tenant->id);
 
         // Verify ownership
         if ($userWhatsAppNumber->user_id !== $user->id || $userWhatsAppNumber->tenant_id !== $tenant->id) {
@@ -1083,6 +1093,7 @@ class WhatsAppChannelController extends Controller
             'whatsapp_number' => $phoneNumber,
             'name' => $request->name,
             'is_primary' => $isPrimary,
+            'default_balance_id' => $defaultBalanceId,
         ]);
 
         // Sync users.whatsapp_number if this is the primary number
@@ -1218,5 +1229,56 @@ class WhatsAppChannelController extends Controller
         }
 
         return redirect()->back()->with('success', 'Nomor utama berhasil diubah');
+    }
+
+    /**
+     * Daftar transaksi milik satu nomor WhatsApp (detail per anggota)
+     */
+    public function numberTransactions(Request $request, UserWhatsAppNumber $userWhatsAppNumber): Response
+    {
+        $tenant = Tenant::findOrFail($request->tenant_id);
+        $user = $request->user();
+
+        // Verifikasi kepemilikan nomor
+        if ($userWhatsAppNumber->user_id !== $user->id || $userWhatsAppNumber->tenant_id !== $tenant->id) {
+            abort(403, 'Unauthorized');
+        }
+
+        $query = Transaction::where('tenant_id', $tenant->id)
+            ->where('user_whatsapp_number_id', $userWhatsAppNumber->id)
+            ->with(['category']);
+
+        // Filter tipe (pemasukan/pengeluaran) bila diminta
+        if (in_array($request->input('type'), ['income', 'expense'], true)) {
+            $query->where('type', $request->input('type'));
+        }
+
+        // Total dihitung dari seluruh hasil filter (bukan hanya halaman aktif)
+        $totalIncome = (clone $query)->where('type', 'income')->sum('amount');
+        $totalExpense = (clone $query)->where('type', 'expense')->sum('amount');
+
+        $transactions = $query
+            ->orderByRaw('COALESCE(created_at, updated_at, NOW()) DESC')
+            ->orderBy('id', 'desc')
+            ->paginate(20)
+            ->withQueryString();
+
+        return Inertia::render('WhatsApp/NumberTransactions', [
+            'number' => [
+                'id' => $userWhatsAppNumber->id,
+                'whatsapp_number' => $userWhatsAppNumber->whatsapp_number,
+                'name' => $userWhatsAppNumber->name,
+                'is_primary' => $userWhatsAppNumber->is_primary,
+                'is_lid' => $userWhatsAppNumber->is_lid,
+            ],
+            'totals' => [
+                'total_income' => (float) $totalIncome,
+                'total_expense' => (float) $totalExpense,
+                'net' => (float) ($totalIncome - $totalExpense),
+                'count' => $transactions->total(),
+            ],
+            'transactions' => $transactions,
+            'filters' => ['type' => $request->input('type', '')],
+        ]);
     }
 }

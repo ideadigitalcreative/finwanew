@@ -8,6 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempoten: tabel sudah ada dibuat di luar migrasi.
+        if (Schema::hasTable('achievements')) {
+            return;
+        }
+
         // Achievements table - Badge definitions
         Schema::create('achievements', function (Blueprint $table) {
             $table->id();

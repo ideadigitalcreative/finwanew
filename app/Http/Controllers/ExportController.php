@@ -40,10 +40,11 @@ class ExportController extends Controller
             'end_date' => 'nullable|date',
             'type' => 'nullable|in:income,expense',
             'status' => 'nullable|in:confirmed,review,rejected',
+            'number_id' => 'nullable',
         ]);
 
         $query = Transaction::where('tenant_id', $tenant->id)
-            ->with(['category', 'message'])
+            ->with(['category', 'message', 'whatsappNumber'])
             ->orderBy('transaction_date', 'desc');
 
         if ($request->has('start_date') && $request->start_date) {
@@ -62,6 +63,14 @@ class ExportController extends Controller
             $query->where('status', $request->status);
         }
 
+        if ($request->filled('number_id')) {
+            if ($request->number_id === 'none') {
+                $query->whereNull('user_whatsapp_number_id');
+            } else {
+                $query->where('user_whatsapp_number_id', (int) $request->number_id);
+            }
+        }
+
         $transactions = $query->get();
 
         if ($format === 'pdf') {
@@ -69,6 +78,16 @@ class ExportController extends Controller
         }
 
         return $this->exportExcel($transactions, $tenant);
+    }
+
+    protected function memberName(Transaction $tx): string
+    {
+        $number = $tx->whatsappNumber;
+        if (! $number) {
+            return '-';
+        }
+
+        return $number->name ?: $number->whatsapp_number;
     }
 
     protected function exportCsv($transactions, Tenant $tenant)
@@ -85,6 +104,7 @@ class ExportController extends Controller
             'Deskripsi',
             'Status',
             'Dibuat Pada',
+            'Anggota',
         ];
 
         $content = implode(',', $headers)."\n";
@@ -99,6 +119,7 @@ class ExportController extends Controller
                 $tx->description,
                 ucfirst($tx->status),
                 $tx->created_at->format('Y-m-d H:i:s'),
+                $this->memberName($tx),
             ];
 
             // Escape commas and quotes
@@ -134,6 +155,7 @@ class ExportController extends Controller
             'Deskripsi',
             'Status',
             'Dibuat Pada',
+            'Anggota',
         ];
 
         $sheet->fromArray([$headers], null, 'A1');
@@ -146,7 +168,7 @@ class ExportController extends Controller
                 'startColor' => ['rgb' => 'E0E0E0'],
             ],
         ];
-        $sheet->getStyle('A1:H1')->applyFromArray($headerStyle);
+        $sheet->getStyle('A1:I1')->applyFromArray($headerStyle);
 
         // Data
         $row = 2;
@@ -159,6 +181,7 @@ class ExportController extends Controller
             $sheet->setCellValue('F'.$row, $tx->description);
             $sheet->setCellValue('G'.$row, ucfirst($tx->status));
             $sheet->setCellValue('H'.$row, $tx->created_at->format('Y-m-d H:i:s'));
+            $sheet->setCellValue('I'.$row, $this->memberName($tx));
 
             // Format number
             $sheet->getStyle('D'.$row)->getNumberFormat()
@@ -168,7 +191,7 @@ class ExportController extends Controller
         }
 
         // Auto size columns
-        foreach (range('A', 'H') as $col) {
+        foreach (range('A', 'I') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
@@ -324,6 +347,7 @@ class ExportController extends Controller
                 <th>Jumlah</th>
                 <th>Sumber</th>
                 <th>Deskripsi</th>
+                <th>Anggota</th>
                 <th>Status</th>
             </tr>
         </thead>
@@ -341,6 +365,7 @@ class ExportController extends Controller
                 <td class="'.$amountClass.'">'.$amountPrefix.' Rp '.number_format($tx->amount, 0, ',', '.').'</td>
                 <td>'.htmlspecialchars($tx->source ?? '-').'</td>
                 <td>'.htmlspecialchars($tx->description).'</td>
+                <td>'.htmlspecialchars($this->memberName($tx)).'</td>
                 <td><span class="status-badge '.$statusClass.'">'.ucfirst($tx->status).'</span></td>
             </tr>';
         }

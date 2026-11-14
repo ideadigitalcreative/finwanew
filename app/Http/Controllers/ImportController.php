@@ -95,7 +95,7 @@ class ImportController extends Controller
                         ]);
                     }
 
-                    Transaction::create([
+                    app(\App\Services\Ledger\TransactionLedger::class)->record([
                         'tenant_id' => $tenant->id,
                         'category_id' => $category->id,
                         'type' => $type,

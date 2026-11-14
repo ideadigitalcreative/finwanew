@@ -15,7 +15,7 @@ php send_credentials.php <email> <phone_or_lid>
 
 **Contoh:**
 ```bash
-php send_credentials.php Rafada32@gmail.com 6285762000079
+php send_credentials.php Rafada32@gmail.com 6285159205506
 ```
 
 Script akan:

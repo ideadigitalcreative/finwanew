@@ -90,6 +90,33 @@ class FinancialQueryHandler
                 return;
             }
 
+            // VALIDASI: Pastikan pesan benar-benar merupakan query keuangan
+            // Cegah pesan tidak jelas (misal "edd", "halo", "ok") agar tidak
+            // default menjadi "Ringkasan Keuangan"
+            if (!$this->isRecognizedFinancialQuery($questionLower)) {
+                Log::info('Pesan bukan query keuangan yang dikenali, mencoba jawaban LLM', [
+                    'message_id' => $this->message->id,
+                    'question' => $question,
+                ]);
+
+                // CHAT LLM (Hybrid §6A): pertanyaan umum (mis. "Kelebihan finwa
+                // apa") dijawab LLM konfigurasi admin. Gagal → balasan lokal.
+                $llmAnswer = (new \App\Services\AI\FinWaChatService)->answer($question);
+                if ($llmAnswer !== null) {
+                    Log::info('Chat LLM: balasan terkirim', [
+                        'message_id' => $this->message->id,
+                        'answer_len' => mb_strlen($llmAnswer),
+                    ]);
+                    $this->sendReply($llmAnswer);
+
+                    return;
+                }
+
+                $this->sendReply(\App\Services\AI\FinWaChatService::fallbackReply());
+
+                return;
+            }
+
             $queryService = new FinancialQueryService;
             $result = $queryService->answerQuestion($this->message->tenant_id, $question);
 
@@ -127,6 +154,12 @@ class FinancialQueryHandler
                     'tagihan' => 'Tagihan',
                     'listrik' => 'Tagihan',
                     'pulsa' => 'Komunikasi',
+                    'baby' => 'Baby & Anak',
+                    'bayi' => 'Baby & Anak',
+                    'hewan' => 'Hewan Peliharaan',
+                    'kucing' => 'Hewan Peliharaan',
+                    'gadget' => 'Gadget & Elektronik',
+                    'elektronik' => 'Gadget & Elektronik',
                 ];
                 foreach ($categoryPatterns as $keyword => $cat) {
                     if (str_contains($questionLower, $keyword)) {
@@ -154,5 +187,36 @@ class FinancialQueryHandler
             ]);
             $this->sendReply('Maaf, terjadi error saat memproses pertanyaan Anda.');
         }
+    }
+
+    /**
+     * Validasi apakah pesan benar-benar merupakan query keuangan yang dikenali.
+     * Mencegah pesan acak (misal "edd", "ok", "test") diproses sebagai query
+     * yang default-nya menghasilkan Ringkasan Keuangan.
+     */
+    public function isRecognizedFinancialQuery(string $questionLower): bool
+    {
+        // Satu sumber: config/finwa_query.php (sama dengan routing di ProcessIncomingMessage)
+        $queryKeywords = array_merge(
+            config('finwa_query.query_keywords', []),
+            config('finwa_query.query_keywords_extra', []),
+            config('finwa_query.period_keywords', []),
+        );
+
+        foreach ($queryKeywords as $keyword) {
+            if (str_contains($questionLower, $keyword)) {
+                return true;
+            }
+        }
+
+        // Nama bulan sebagai kata utuh ("transaksi september", "rekap okt")
+        $months = array_keys(config('finwa_query.month_names', []));
+        if ($months && preg_match('/(?<![\p{L}\p{N}])(?:'.implode('|', array_map(fn ($m) => preg_quote($m, '/'), $months)).')(?![\p{L}\p{N}])/u', $questionLower)) {
+            return true;
+        }
+
+        // (Dulu: semua pesan bertanda "?" dianggap query keuangan → "apa itu dana
+        // darurat?" dibalas Ringkasan Keuangan. Sekarang pertanyaan umum jatuh ke Chat LLM.)
+        return false;
     }
 }

@@ -112,9 +112,17 @@ class BalanceService
         $name = trim($accountName);
         $nameLower = strtolower($name);
 
-        // Remove common prefixes
-        $nameLower = str_replace(['saldo', 'bank'], '', $nameLower);
+        // Strip common prefixes — only when they appear as standalone words.
+        // Using str_replace() here previously corrupted names containing
+        // "bank" as a substring (e.g. "Seabank" became "Sea"), causing
+        // lookups to fail and duplicate wallets to be created.
+        $nameLower = preg_replace('/\bsaldo\b\s*/u', '', $nameLower) ?? $nameLower;
+        $nameLower = preg_replace('/\bbank\b\s*/u', '', $nameLower) ?? $nameLower;
         $nameLower = trim($nameLower);
+
+        if ($nameLower === '') {
+            $nameLower = strtolower(trim($accountName));
+        }
 
         // Normalize bank names
         if ($nameLower === 'bca' || str_starts_with($nameLower, 'bca')) {
@@ -234,9 +242,9 @@ class BalanceService
 
                 // Calculate new balance
                 if ($transaction->type === 'income' || $transaction->type === 'kredit_internal') {
-                    $balance->balance += $transaction->amount;
+                    $balance->adjustBalance($transaction->amount);
                 } elseif ($transaction->type === 'expense' || $transaction->type === 'debit_internal') {
-                    $balance->balance -= $transaction->amount;
+                    $balance->adjustBalance(-($transaction->amount));
                 }
 
                 // Ensure balance doesn't go negative (optional check)
@@ -291,9 +299,9 @@ class BalanceService
 
                 // Reverse the transaction
                 if ($transaction->type === 'income' || $transaction->type === 'kredit_internal') {
-                    $balance->balance -= $transaction->amount;
+                    $balance->adjustBalance(-($transaction->amount));
                 } elseif ($transaction->type === 'expense' || $transaction->type === 'debit_internal') {
-                    $balance->balance += $transaction->amount;
+                    $balance->adjustBalance($transaction->amount);
                 }
 
                 $balance->save();

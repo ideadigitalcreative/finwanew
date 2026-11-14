@@ -3,6 +3,7 @@
 namespace App\Services\Category;
 
 use App\Models\Category;
+use Illuminate\Support\Facades\Log;
 
 /**
  * CategoryManagerService - Handles category creation and management
@@ -39,6 +40,7 @@ class CategoryManagerService
 
             // Pengeluaran
             ['type' => 'pengeluaran_makanan', 'name' => 'Makanan & Minuman', 'slug' => 'makanan-minuman', 'icon' => '🍽️', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_bahan_makanan', 'name' => 'Bahan Makanan & Bumbu Dapur', 'slug' => 'bahan-makanan-bumbu', 'icon' => '🍜', 'color' => '#f97316'],
             ['type' => 'pengeluaran_transport', 'name' => 'Transport', 'slug' => 'transport', 'icon' => '🚗', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_hunian', 'name' => 'Hunian', 'slug' => 'hunian', 'icon' => '🏠', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_utilitas', 'name' => 'Utilitas', 'slug' => 'utilitas', 'icon' => '⚡', 'color' => '#ef4444'],
@@ -58,13 +60,17 @@ class CategoryManagerService
             ['type' => 'pengeluaran_donasi', 'name' => 'Donasi', 'slug' => 'donasi', 'icon' => '❤️', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_gaji', 'name' => 'Gaji Karyawan', 'slug' => 'gaji-karyawan', 'icon' => '👷', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_keluarga', 'name' => 'Keluarga', 'slug' => 'keluarga', 'icon' => '👨‍👩‍👧‍👦', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_baby', 'name' => 'Baby & Anak', 'slug' => 'baby-anak', 'icon' => '👶', 'color' => '#f472b6'],
             ['type' => 'pengeluaran_langganan', 'name' => 'Langganan', 'slug' => 'langganan', 'icon' => '🔄', 'color' => '#8b5cf6'],
             ['type' => 'pengeluaran_pakaian', 'name' => 'Pakaian & Fashion', 'slug' => 'pakaian-fashion', 'icon' => '👕', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_perawatan_diri', 'name' => 'Perawatan Diri', 'slug' => 'perawatan-diri', 'icon' => '💇', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_gaya_hidup', 'name' => 'Gaya Hidup', 'slug' => 'gaya-hidup', 'icon' => '🌟', 'color' => '#f59e0b'],
             ['type' => 'pengeluaran_acara', 'name' => 'Acara & Hajatan', 'slug' => 'acara-hajatan', 'icon' => '🎊', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_otomotif', 'name' => 'Otomotif', 'slug' => 'otomotif', 'icon' => '🔧', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_sosial', 'name' => 'Sosial & Kondangan', 'slug' => 'sosial-kondangan', 'icon' => '🤝', 'color' => '#ef4444'],
             ['type' => 'pengeluaran_hadiah', 'name' => 'Hadiah & Bingkisan', 'slug' => 'hadiah-bingkisan', 'icon' => '🎁', 'color' => '#ef4444'],
+            ['type' => 'pengeluaran_hewan', 'name' => 'Hewan Peliharaan', 'slug' => 'hewan-peliharaan', 'icon' => '🐾', 'color' => '#a78bfa'],
+            ['type' => 'pengeluaran_gadget', 'name' => 'Gadget & Elektronik', 'slug' => 'gadget-elektronik', 'icon' => '📱', 'color' => '#06b6d4'],
             // UMKM Categories
             ['type' => 'pengeluaran_modal', 'name' => 'Modal & Stok', 'slug' => 'modal-stok', 'icon' => '📦', 'color' => '#f59e0b'],
             ['type' => 'pengeluaran_operasional', 'name' => 'Operasional', 'slug' => 'operasional', 'icon' => '⚙️', 'color' => '#ef4444'],
@@ -87,7 +93,8 @@ class CategoryManagerService
             'pendapatan_hutang' => 'Uang masuk dari pinjaman; kewajiban bayar (hutang) bertambah secara bisnis — tercatat sebagai arus kas masuk.',
             'pendapatan_terima_piutang' => 'Pelunasan piutang dari debitur; arus kas masuk.',
             'pendapatan_lainnya' => 'Pendapatan lainnya',
-            'pengeluaran_makanan' => 'Pengeluaran untuk makanan dan minuman',
+            'pengeluaran_makanan' => 'Pengeluaran untuk makanan dan minuman siap saji',
+            'pengeluaran_bahan_makanan' => 'Pengeluaran untuk bahan makanan mentah, bumbu dapur, mie instan, dan kebutuhan masak',
             'pengeluaran_transport' => 'Pengeluaran untuk transportasi',
             'pengeluaran_hunian' => 'Pengeluaran untuk tempat tinggal',
             'pengeluaran_utilitas' => 'Pengeluaran untuk listrik, air, internet, dll',
@@ -96,7 +103,10 @@ class CategoryManagerService
             'pengeluaran_pendidikan' => 'Pengeluaran untuk pendidikan',
             'pengeluaran_belanja' => 'Pengeluaran untuk belanja kebutuhan',
             'pengeluaran_pakaian' => 'Pengeluaran untuk pakaian, sepatu, dan fashion',
+            'pengeluaran_gaya_hidup' => 'Pengeluaran untuk gaya hidup (rokok, vape, minuman energi, dll)',
             'pengeluaran_acara' => 'Pengeluaran untuk acara, hajatan, catering, dan event',
+            'pengeluaran_hewan' => 'Pengeluaran untuk hewan peliharaan (pakan, grooming, dokter hewan, dll)',
+            'pengeluaran_gadget' => 'Pengeluaran untuk gadget dan elektronik (HP, laptop, charger, dll)',
             'pengeluaran_otomotif' => 'Pengeluaran untuk servis dan perawatan kendaraan',
             'pengeluaran_sosial' => 'Pengeluaran untuk sosial, kondangan, arisan, dan reuni',
             'pengeluaran_hadiah' => 'Pengeluaran untuk hadiah, kado, dan bingkisan',
@@ -112,6 +122,7 @@ class CategoryManagerService
             'pengeluaran_pajak' => 'Pengeluaran untuk pajak',
             'pengeluaran_donasi' => 'Pengeluaran untuk donasi dan sumbangan',
             'pengeluaran_keluarga' => 'Pengeluaran untuk keluarga (orang tua, istri, anak, adik, kakak)',
+            'pengeluaran_baby' => 'Pengeluaran untuk bayi dan anak (popok, susu formula, stroller, mainan, dll)',
             'pengeluaran_langganan' => 'Pengeluaran untuk langganan (Netflix, Spotify, YouTube Premium, dll)',
             'pengeluaran_modal' => 'Pengeluaran untuk modal usaha, pembelian stok, bahan baku, dan kulakan',
             'pengeluaran_operasional' => 'Pengeluaran operasional bisnis seperti packaging, ekspedisi, dan biaya operasional',
@@ -137,5 +148,55 @@ class CategoryManagerService
                 ]
             );
         }
+    }
+
+    /**
+     * Canonical metadata for categories that may get corrupted.
+     * Single source of truth for name/icon overrides.
+     */
+    private const CATEGORY_METADATA = [
+        'pengeluaran_gaji' => ['name' => 'Gaji Karyawan', 'icon' => '👷'],
+        'pendapatan_gaji' => ['name' => 'Gaji', 'icon' => '💰'],
+    ];
+
+    /**
+     * Ensure category has correct metadata (name, icon).
+     * Self-heals corrupted category metadata at runtime.
+     */
+    public function ensureCategoryMetadata(Category $category): Category
+    {
+        $expected = self::CATEGORY_METADATA[$category->type] ?? null;
+
+        if ($expected === null) {
+            return $category;
+        }
+
+        if ($category->name === $expected['name'] && $category->icon === $expected['icon']) {
+            return $category;
+        }
+
+        Log::info('CategoryManagerService: Self-healing category metadata', [
+            'category_id' => $category->id,
+            'type' => $category->type,
+            'old_name' => $category->name,
+            'old_icon' => $category->icon,
+            'new_name' => $expected['name'],
+            'new_icon' => $expected['icon'],
+        ]);
+
+        try {
+            $category->update([
+                'name' => $expected['name'],
+                'icon' => $expected['icon'],
+                'slug' => str($expected['name'])->slug()->append('-', time())->toString(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('CategoryManagerService: Failed to self-heal category', [
+                'category_id' => $category->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $category;
     }
 }

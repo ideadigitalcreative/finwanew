@@ -34,6 +34,8 @@ class WalletCommandService
 
     protected $determineCategoryCallback;
 
+    protected $viewTransactionsCallback;
+
     /**
      * Constructor
      *
@@ -48,13 +50,15 @@ class WalletCommandService
         callable $sendReplyCallback,
         ?callable $extractAmountCallback = null,
         ?callable $createTransactionCallback = null,
-        ?callable $determineCategoryCallback = null
+        ?callable $determineCategoryCallback = null,
+        ?callable $viewTransactionsCallback = null
     ) {
         $this->message = $message;
         $this->sendReplyCallback = $sendReplyCallback;
         $this->extractAmountCallback = $extractAmountCallback;
         $this->createTransactionCallback = $createTransactionCallback;
         $this->determineCategoryCallback = $determineCategoryCallback;
+        $this->viewTransactionsCallback = $viewTransactionsCallback;
     }
 
     /**
@@ -150,6 +154,390 @@ class WalletCommandService
     }
 
     /**
+     * Ops — deteksi kata/frasa generik yang TIDAK mungkin jadi nama dompet.
+     *
+     * "Saldo awal 3215000" → kandidat "awal" bukan nama dompet,
+     * melainkan penunjuk konteks → jangan error, fallback ke dompet utama.
+     */
+    /**
+     * "Tambahan tabungan brimo 1 juta", "isi tabungan BCA 500rb", "setor tabungan ke jago 200rb",
+     * "nabung di BCA 1jt" → nama dompet tujuan (saldo MASUK ke dompet itu).
+     * Null bila bukan pola setor tabungan, atau nama dompetnya kata generik.
+     */
+    public static function matchSavingsDeposit(string $messageText): ?string
+    {
+        $amount = '(?:rp\.?\s*)?[\d\.,]+(?:\s*(?:rb|ribu|rebu|k|jt|juta)\b)?';
+        $patterns = [
+            // tambah(an)/isi/setor(an)/masukin [saldo|uang] tabungan|rekening|celengan [ke|di] <dompet> <nominal>
+            '/^\s*(?:tambah(?:an|in|kan)?|nambah(?:in)?|isi|setor(?:an|kan)?|masukin|masukkan)\s+(?:saldo\s+|uang\s+|duit\s+)?(?:tabungan|celengan|rekening)\s+(?:ke\s+|di\s+)?([a-zA-Z][a-zA-Z0-9\s]*?)\s+'.$amount.'\s*[.!]*\s*$/iu',
+            // nabung/menabung/setor ke|di <dompet> <nominal>
+            '/^\s*(?:nabung|menabung|setor(?:an)?)\s+(?:ke|di)\s+([a-zA-Z][a-zA-Z0-9\s]*?)\s+'.$amount.'\s*[.!]*\s*$/iu',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $messageText, $m)) {
+                $name = trim(preg_replace('/\s+/', ' ', $m[1]) ?? $m[1]);
+
+                return $name !== '' && ! self::isGenericWalletName($name) ? $name : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Apakah $name memang dompet? Dipakai sebelum jalur "ke/di/dari <dompet>"
+     * supaya "dapat uang dari ibu", "terima 2jt di kantor" tidak membuat dompet
+     * "Ibu"/"Kantor". Dompet: sudah ada di akun, nama bank/e-wallet/cash,
+     * atau disebut eksplisit ("dompet X", "rekening X").
+     */
+    public function looksLikeWallet(string $name, string $messageText = ''): bool
+    {
+        $name = trim((string) preg_replace('/\s+[\d\.,]+\s*(?:rb|ribu|rebu|k|jt|juta)?\s*$/iu', '', trim($name)));
+        $name = trim((string) preg_replace('/^(?:dompet|rekening|akun|wallet|e-?wallet|bank)\s+/iu', '', $name));
+        if ($name === '' || self::isGenericWalletName($name)) {
+            return false;
+        }
+
+        if (app(BalanceService::class)->findOrCreateBalance($this->message->tenant_id, $name, null)) {
+            return true;
+        }
+
+        if ($this->determineAccountType($name) !== 'other') {
+            return true;
+        }
+
+        return $messageText !== '' && (bool) preg_match(
+            '/\b(?:dompet|rekening|akun|wallet|e-?wallet|tabungan)\s+'.preg_quote(mb_strtolower($name), '/').'\b/u',
+            mb_strtolower($messageText)
+        );
+    }
+
+    /**
+     * Transfer dengan pihak luar → pemasukan/pengeluaran biasa di dompet yang disebut.
+     */
+    protected function recordExternalTransfer(float $amount, string $from, string $to, bool $incoming): void
+    {
+        $wallet = $incoming ? $to : $from;
+        $party = ucwords(mb_strtolower($incoming ? $from : $to));
+        $transaction = $this->createTransaction([
+            'type' => $incoming ? 'income' : 'expense',
+            'amount' => $amount,
+            'category_type' => $incoming ? 'pendapatan_transfer' : 'pengeluaran_transfer',
+            'description' => $incoming ? "Transfer dari {$party}" : "Transfer ke {$party}",
+            'transaction_date' => now()->toDateString(),
+            'account_name' => $wallet,
+            'confidence_score' => 0.9,
+        ]);
+
+        if (! $transaction) {
+            $this->sendReply("⚠️ *Gagal mencatat transfer*\n\nTerjadi kesalahan. Silakan coba lagi.");
+
+            return;
+        }
+
+        $balance = $transaction->balance_id ? Balance::find($transaction->balance_id) : null;
+        $this->sendReply(
+            ($incoming ? "💰 *Pemasukan Tercatat!* ✅\n\n" : "💸 *Pengeluaran Tercatat!* ✅\n\n").
+            '💵 Nominal: *Rp '.number_format($amount, 0, ',', '.')."*\n".
+            "📝 {$transaction->description}\n".
+            '👛 Dompet: *'.($balance->account_name ?? $wallet)."*\n".
+            '📅 '.now()->translatedFormat('d F Y').
+            ($balance ? "\n\n💳 Saldo {$balance->account_name}: *Rp ".number_format((float) $balance->balance, 0, ',', '.').'*' : '')
+        );
+    }
+
+    /**
+     * Setel saldo dompet lewat TransactionLedger: selisihnya dicatat sebagai baris
+     * "Penyesuaian saldo" (bukan pemasukan/pengeluaran) agar riwayat tetap
+     * menjelaskan saldo dan finwa:reconcile cocok.
+     */
+    protected function setWalletBalance(Balance $wallet, float $target, string $kind = Transaction::KIND_BALANCE_ADJUSTMENT): void
+    {
+        // Kolom lain yang sudah diubah (mis. nama) tetap disimpan; saldo hanya lewat ledger
+        if ($wallet->exists && $wallet->isDirty('balance')) {
+            $wallet->balance = $wallet->getOriginal('balance');
+        }
+        if ($wallet->isDirty()) {
+            $wallet->save();
+        }
+
+        app(\App\Services\Ledger\TransactionLedger::class)->setBalanceTo(
+            $wallet, $target, $kind, ['message_id' => $this->message->id]
+        );
+    }
+
+    public static function isGenericWalletName(string $name): bool
+    {
+        $normalized = mb_strtolower(trim($name));
+
+        if ($normalized === '') {
+            return true;
+        }
+
+        $generic = [
+            // penunjuk waktu/konteks
+            'awal', 'akhir', 'terakhir', 'sekarang', 'saat ini', 'kini',
+            'nanti', 'kemarin', 'besok', 'bulan', 'minggu', 'tahun',
+            'harian', 'mingguan', 'bulanan', 'tahunan',
+            // penunjuk jumlah/rujukan
+            'total', 'keseluruhan', 'seluruh', 'semua', 'lain', 'lainnya',
+            'ini', 'itu', 'tersebut', 'berikut', 'masing-masing',
+            // kata ganti
+            'saya', 'aku', 'gw', 'gue', 'kamu', 'dia', 'kami', 'kita',
+            'ku', 'mu', 'nya', 'sendiri',
+            // objek umum (bukan nama dompet)
+            'dompet', 'rekening', 'akun', 'bank', 'uang', 'duit', 'saldo',
+        ];
+
+        return in_array($normalized, $generic, true);
+    }
+
+    /**
+     * Context service untuk state konfirmasi saldo dompet (scope per pengirim).
+     */
+    protected function walletBalanceContext(): \App\Services\ConversationContextService
+    {
+        return new \App\Services\ConversationContextService(
+            $this->message->tenant_id,
+            $this->getAttributionSenderId()
+        );
+    }
+
+    /**
+     * Minta konfirmasi user sebelum menerapkan nominal ke dompet utama.
+     *
+     * Dipakai ketika nama dompet terdeteksi generik, mis. "Saldo awal 3215000"
+     * → "awal" bukan nama dompet. Daripada error, bot tanya balik dulu.
+     */
+    protected function promptWalletBalanceConfirmation(string $operation, float $amount, string $walletName, string $originalMessage): void
+    {
+        try {
+            $this->walletBalanceContext()->storePendingWalletBalanceConfirmation([
+                'operation' => $operation,
+                'amount' => $amount,
+                'wallet_name' => $walletName,
+                'original_message' => $originalMessage,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('Failed to store pending wallet balance confirmation', ['error' => $e->getMessage()]);
+        }
+
+        $primary = $this->getOrCreatePrimaryWallet();
+        $primaryName = $primary->account_name ?? 'Dompet Utama';
+        $formatted = number_format($amount, 0, ',', '.');
+
+        $confirmLine = match ($operation) {
+            'increase' => "• *Ya* → tambahkan Rp {$formatted} ke *{$primaryName}*",
+            'reduce' => "• *Ya* → kurangi Rp {$formatted} dari *{$primaryName}*",
+            default => "• *Ya* → set saldo *{$primaryName}* jadi Rp {$formatted}",
+        };
+
+        $alternativeLine = $operation === 'set'
+            ? "• *Tambah* → tambahkan Rp {$formatted} ke saldo saat ini"
+            : "• *Set* → set saldo *{$primaryName}* jadi Rp {$formatted}";
+
+        $this->sendReply(
+            "⚠️ *Dompet '{$walletName}' bukan nama dompet*\n\n".
+            "Nominal terdeteksi: *Rp {$formatted}*\n\n".
+            "Maksudnya ke *{$primaryName}*?\n\n".
+            "{$confirmLine}\n".
+            "{$alternativeLine}\n".
+            '• *Batal* → batalkan'
+        );
+    }
+
+    /**
+     * "dompet utama 100 rb" — nama dompet + nominal TANPA keterangan: maksudnya
+     * ambigu (atur saldo? tambah saldo? catat pengeluaran?). Tanya balik dulu.
+     * Dulu pesan ini tercatat sebagai pengeluaran Rp 100 berketerangan "rb".
+     */
+    public function promptWalletAmountClarification(string $walletName, float $amount, string $originalMessage): void
+    {
+        $balance = app(BalanceService::class)->findOrCreateBalance($this->message->tenant_id, $walletName);
+        $displayName = $balance->account_name ?? ucwords($walletName);
+
+        try {
+            $this->walletBalanceContext()->storePendingWalletBalanceConfirmation([
+                'operation' => 'set',
+                'amount' => $amount,
+                'wallet_name' => $displayName,
+                'balance_id' => $balance?->id,
+                'allow_expense' => true,
+                'original_message' => $originalMessage,
+            ]);
+        } catch (\Exception $e) {
+            Log::warning('Failed to store wallet amount clarification', ['error' => $e->getMessage()]);
+        }
+
+        $formatted = number_format($amount, 0, ',', '.');
+        $current = $balance ? "\n💳 Saldo sekarang: Rp ".number_format((float) $balance->balance, 0, ',', '.')."\n" : "\n";
+
+        $this->sendReply(
+            "👛 *Dompet {$displayName}* · Rp {$formatted}\n".
+            $current."\n".
+            "Mau diapakan? Balas salah satu:\n".
+            "• *Set* → saldo {$displayName} jadi Rp {$formatted}\n".
+            "• *Tambah* → tambah Rp {$formatted} ke saldo\n".
+            "• *Keluar* → catat pengeluaran Rp {$formatted} dari {$displayName}\n".
+            "• *Batal* → batalkan\n\n".
+            "💡 Lain kali bisa langsung: _dompet {$displayName} {$formatted} beli bensin_"
+        );
+    }
+
+    /**
+     * Tangani jawaban user atas prompt konfirmasi saldo dompet.
+     *
+     * @param  string  $reply  Pesan balasan user ("Ya" / "Tambah" / "Batal", dll.)
+     * @return bool true jika pesan diproses sebagai jawaban konfirmasi
+     */
+    public function handlePendingWalletBalanceConfirmation(string $reply): bool
+    {
+        try {
+            $contextService = $this->walletBalanceContext();
+            $pending = $contextService->getPendingWalletBalanceConfirmation();
+
+            if (! $pending) {
+                return false;
+            }
+
+            $answer = mb_strtolower(trim($reply));
+            $answer = trim(preg_replace('/[!?.]+$/u', '', $answer) ?? $answer);
+
+            $operation = $pending['operation'] ?? 'set';
+            $amount = (float) ($pending['amount'] ?? 0);
+
+            if (preg_match('/^(batal|batalkan|batalin|tidak|tdk|nggak|enggak|gak|ga|no|n|skip|cancel|stop)$/u', $answer)) {
+                $contextService->clearPendingWalletBalanceConfirmation();
+                $this->sendReply(
+                    "❎ *Dibatalkan.*\n\n".
+                    'Nominal tidak diubah. Contoh perintah yang benar: _saldo Dompet Utama 3.215.000_'
+                );
+
+                return true;
+            }
+
+            if (! empty($pending['allow_expense']) && preg_match('/^(keluar|pengeluaran|catat|bayar|belanja|expense)$/u', $answer)) {
+                $operation = 'expense';
+            } elseif (preg_match('/^(tambah|tambahkan|plus|add|tambahin)$/u', $answer)) {
+                $operation = 'increase';
+            } elseif (preg_match('/^(kurangi|kurang|minus|reduce|potong|kurangin)$/u', $answer)) {
+                $operation = 'reduce';
+            } elseif (preg_match('/^(set|setel|ubah|jadi)$/u', $answer)) {
+                $operation = 'set';
+            } elseif (! preg_match('/^(ya|y|iya|yaa|iyaa|ok|oke|okay|siap|sip|betul|benar|setuju|proceed|lanjut|yes|gas|go)$/u', $answer)) {
+                // Bukan jawaban konfirmasi — biarkan pesan diproses alur normal
+                return false;
+            }
+
+            $contextService->clearPendingWalletBalanceConfirmation();
+
+            if ($amount <= 0) {
+                return true;
+            }
+
+            if ($operation === 'expense') {
+                // Pakai alur pengeluaran dompet yang sudah ada (kategori, saldo, balasan)
+                $wallet = (string) ($pending['wallet_name'] ?? 'Utama');
+                $this->handleExpenseFromWallet("dompet {$wallet} ".(int) $amount.' Pengeluaran');
+
+                return true;
+            }
+
+            $this->applyWalletBalanceToPrimary($operation, $amount, isset($pending['balance_id']) ? (int) $pending['balance_id'] : null);
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Error handling pending wallet balance confirmation', [
+                'message_id' => $this->message->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Eksekusi perubahan saldo pada dompet utama setelah user konfirmasi.
+     */
+    protected function applyWalletBalanceToPrimary(string $operation, float $amount, ?int $balanceId = null): void
+    {
+        // Dompet spesifik (dari klarifikasi "dompet X nominal"), atau dompet utama
+        $balance = $balanceId
+            ? Balance::where('tenant_id', $this->message->tenant_id)->where('is_active', true)->find($balanceId)
+            : null;
+        $balance ??= $this->getOrCreatePrimaryWallet();
+
+        if (! $balance) {
+            $this->sendReply(
+                "⚠️ *Gagal mengubah saldo*\n\n".
+                'Dompet utama tidak ditemukan. Buat dengan: _tambah dompet Utama_'
+            );
+
+            return;
+        }
+
+        $oldAmount = (float) ($balance->balance ?? 0);
+        $newAmount = match ($operation) {
+            'increase' => $oldAmount + $amount,
+            'reduce' => $oldAmount - $amount,
+            default => $amount,
+        };
+
+        $this->setWalletBalance($balance, (float) $newAmount); // lewat TransactionLedger
+
+        try {
+            $this->walletBalanceContext()->storeLastBalanceCorrection($balance->id, $oldAmount, $newAmount);
+        } catch (\Exception $e) {
+            Log::warning('Failed to store balance correction in context', ['error' => $e->getMessage()]);
+        }
+
+        Log::info('Wallet balance updated via confirmation', [
+            'message_id' => $this->message->id,
+            'balance_id' => $balance->id,
+            'wallet_name' => $balance->account_name,
+            'operation' => $operation,
+            'old_amount' => $oldAmount,
+            'adjust_amount' => $amount,
+            'new_amount' => $newAmount,
+        ]);
+
+        $oldFormatted = number_format($oldAmount, 0, ',', '.');
+        $newFormatted = number_format($newAmount, 0, ',', '.');
+        $amountFormatted = number_format($amount, 0, ',', '.');
+
+        if ($operation === 'set') {
+            $diffFormatted = number_format(abs($newAmount - $oldAmount), 0, ',', '.');
+            $diffSign = $newAmount - $oldAmount >= 0 ? '+' : '-';
+
+            $this->sendReply(
+                "✏️ *Saldo Berhasil Diubah!* ✅\n\n".
+                "👛 Dompet: *{$balance->account_name}*\n\n".
+                "📊 Perubahan Saldo:\n".
+                "   Sebelum: Rp {$oldFormatted}\n".
+                "   Sesudah: *Rp {$newFormatted}*\n".
+                "   Selisih: {$diffSign}Rp {$diffFormatted}\n\n".
+                '📅 Diubah: '.now()->translatedFormat('d F Y H:i')
+            );
+
+            return;
+        }
+
+        $operationEmoji = $operation === 'reduce' ? '➖' : '➕';
+        $operationText = $operation === 'reduce' ? 'Dikurangi' : 'Ditambah';
+
+        $this->sendReply(
+            "{$operationEmoji} *Saldo Berhasil {$operationText}!* ✅\n\n".
+            "👛 Dompet: *{$balance->account_name}*\n\n".
+            "📊 Perubahan Saldo:\n".
+            "   Sebelum: Rp {$oldFormatted}\n".
+            "   {$operationText}: Rp {$amountFormatted}\n".
+            "   Sesudah: *Rp {$newFormatted}*\n\n".
+            '📅 Diubah: '.now()->translatedFormat('d F Y H:i')
+        );
+    }
+
+    /**
      * Handle set/edit wallet balance
      * e.g., "set saldo O menjadi 49.000", "ubah saldo BCA jadi 100rb"
      *
@@ -191,8 +579,15 @@ class WalletCommandService
                         // Update the balance
                         $oldAmount = $balance->balance ?? 0;
                         $difference = $newAmount - $oldAmount;
-                        $balance->balance = $newAmount;
-                        $balance->save();
+                        $this->setWalletBalance($balance, (float) $newAmount); // lewat TransactionLedger
+
+                        // Store balance update in context for potential undo
+                        try {
+                            $contextService = new \App\Services\ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
+                            $contextService->storeLastBalanceCorrection($balance->id, $oldAmount, $newAmount);
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to store balance correction in context', ['error' => $e->getMessage()]);
+                        }
 
                         $oldFormatted = number_format($oldAmount, 0, ',', '.');
                         $newFormatted = number_format($newAmount, 0, ',', '.');
@@ -236,8 +631,15 @@ class WalletCommandService
                         // Update the balance
                         $oldAmount = $balance->balance ?? 0;
                         $difference = $newAmount - $oldAmount;
-                        $balance->balance = $newAmount;
-                        $balance->save();
+                        $this->setWalletBalance($balance, (float) $newAmount); // lewat TransactionLedger
+
+                        // Store balance update in context for potential undo
+                        try {
+                            $contextService = new \App\Services\ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
+                            $contextService->storeLastBalanceCorrection($balance->id, $oldAmount, $newAmount);
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to store balance correction in context', ['error' => $e->getMessage()]);
+                        }
 
                         $oldFormatted = number_format($oldAmount, 0, ',', '.');
                         $newFormatted = number_format($newAmount, 0, ',', '.');
@@ -278,15 +680,16 @@ class WalletCommandService
 
             // Patterns to extract wallet name and amount
             $patterns = [
-                '/(?:set|atur|ubah|edit|ganti)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:menjadi|jadi|ke|=)\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+                '/(?:set|atur|ubah|edit|ganti)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:menjadi|jadi|ke|sebesar|=)\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
                 '/saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s*=\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
-                '/(?:update|koreksi)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:menjadi|jadi|ke)?\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
-                '/saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:sekarang|jadi|menjadi)\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+                '/(?:update|koreksi)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:menjadi|jadi|ke|sebesar)?\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+                '/saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:sekarang|jadi|menjadi|sebesar)\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
                 // Simple format: "update saldo BCA 500rb" or "set saldo Dana 1jt"
                 '/(?:update|set|atur|ubah|edit|ganti)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)$/i',
                 // NEW: Direct format: "saldo dompet utama 1 juta", "saldo BCA 500rb"
                 // Pattern: saldo [nama dompet] [nominal] - matches when there's a wallet name followed by amount
-                '/^saldo\s+(?:dompet\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta|m|million)?)/i',
+                // "saldo keluar/masuk 500k ..." = transaksi, bukan dompet bernama "keluar"
+                '/^saldo\s+(?!(?:keluar|masuk|berkurang|bertambah|kepake|kepakai|terpakai)\b)(?:dompet\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta|m|million)?)/i',
             ];
 
             $walletName = null;
@@ -335,6 +738,14 @@ class WalletCommandService
                 ->whereRaw('LOWER(account_name) = ?', [strtolower($walletName)])
                 ->first();
 
+            // Nama dompet generik ("Saldo awal 3215000" → "awal") bukan nama dompet.
+            // Jangan lanjut ke partial match (rawan salah sasaran) — tanyakan balik dulu.
+            if (! $balance && self::isGenericWalletName($walletName)) {
+                $this->promptWalletBalanceConfirmation('set', (float) $newAmount, $walletName, $messageText);
+
+                return;
+            }
+
             // If no exact match, try partial match but prefer shortest name
             if (! $balance) {
                 $balance = Balance::where('tenant_id', $this->message->tenant_id)
@@ -369,8 +780,15 @@ class WalletCommandService
 
             // Update the balance directly (no transaction created)
             // This is a manual balance correction, not a transaction
-            $balance->balance = $newAmount;
-            $balance->save();
+            $this->setWalletBalance($balance, (float) $newAmount); // lewat TransactionLedger
+
+            // Store balance update in context for potential undo
+            try {
+                $contextService = new \App\Services\ConversationContextService($this->message->tenant_id, $this->getAttributionSenderId());
+                $contextService->storeLastBalanceCorrection($balance->id, $oldAmount, $newAmount);
+            } catch (\Exception $e) {
+                Log::warning('Failed to store balance correction in context', ['error' => $e->getMessage()]);
+            }
 
             // Format for display
             $oldFormatted = number_format($oldAmount, 0, ',', '.');
@@ -430,10 +848,10 @@ class WalletCommandService
 
             // Patterns to extract wallet name and amount
             $patterns = [
-                '/(?:set|atur|ubah|edit|ganti)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:menjadi|jadi|ke|=)\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+                '/(?:set|atur|ubah|edit|ganti)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:menjadi|jadi|ke|sebesar|=)\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
                 '/saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s*=\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
-                '/(?:update|koreksi)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:menjadi|jadi|ke)?\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
-                '/saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:sekarang|jadi|menjadi)\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+                '/(?:update|koreksi)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:menjadi|jadi|ke|sebesar)?\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+                '/saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+(?:sekarang|jadi|menjadi|sebesar)\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
                 // Simple format: "update saldo BCA 500rb" or "set saldo Dana 1jt"
                 '/(?:update|set|atur|ubah|edit|ganti)\s+saldo\s+(?:dompet\s+|akun\s+|bank\s+|rekening\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)$/i',
                 // NEW: Direct format: "saldo dompet utama 1 juta", "saldo BCA 500rb"
@@ -442,6 +860,7 @@ class WalletCommandService
 
             $updates = [];
             $errors = [];
+            $genericLines = [];
 
             foreach ($lines as $line) {
                 $line = trim($line);
@@ -479,6 +898,20 @@ class WalletCommandService
                     ->whereRaw('LOWER(account_name) = ?', [strtolower($walletName)])
                     ->first();
 
+                // Nama dompet generik (mis. "Saldo awal 3215000") — kumpulkan
+                // untuk ditawarkan ke dompet utama, jangan dianggap error.
+                // Cek SEBELUM partial match supaya kata generik tidak salah
+                // menangkap substring nama dompet lain.
+                if (! $balance && self::isGenericWalletName($walletName)) {
+                    $genericLines[] = [
+                        'name' => $walletName,
+                        'amount' => $newAmount,
+                        'line' => $line,
+                    ];
+
+                    continue;
+                }
+
                 // If no exact match, try partial match but prefer shortest name
                 if (! $balance) {
                     $balance = Balance::where('tenant_id', $this->message->tenant_id)
@@ -499,8 +932,7 @@ class WalletCommandService
                 $difference = $newAmount - $oldAmount;
 
                 // Update the balance
-                $balance->balance = $newAmount;
-                $balance->save();
+                $this->setWalletBalance($balance, (float) $newAmount); // lewat TransactionLedger
 
                 // Format for display
                 $oldFormatted = number_format($oldAmount, 0, ',', '.');
@@ -527,6 +959,23 @@ class WalletCommandService
                     'new_amount' => $newAmount,
                     'difference' => $difference,
                 ]);
+            }
+
+            // Baris dengan nama dompet generik: bila hanya satu, tanyakan konfirmasi
+            // agar nominal diterapkan ke dompet utama (alih-alih error).
+            if (! empty($genericLines)) {
+                if (count($genericLines) === 1) {
+                    $generic = $genericLines[0];
+                    $this->promptWalletBalanceConfirmation('set', $generic['amount'], $generic['name'], $generic['line']);
+
+                    if (empty($updates) && empty($errors)) {
+                        return; // prompt konfirmasi sudah dikirim sendiri
+                    }
+                } else {
+                    foreach ($genericLines as $generic) {
+                        $errors[] = "⚠️ {$generic['name']}: bukan nama dompet (pakai nama dompet, mis. Dompet Utama)";
+                    }
+                }
             }
 
             // Build response
@@ -609,8 +1058,7 @@ class WalletCommandService
                             ? $oldAmount - $adjustAmount
                             : $oldAmount + $adjustAmount;
 
-                        $balance->balance = $newAmount;
-                        $balance->save();
+                        $this->setWalletBalance($balance, (float) $newAmount); // lewat TransactionLedger
 
                         $oldFormatted = number_format($oldAmount, 0, ',', '.');
                         $newFormatted = number_format($newAmount, 0, ',', '.');
@@ -648,8 +1096,7 @@ class WalletCommandService
                             ? $oldAmount - $amountFromSimplePattern
                             : $oldAmount + $amountFromSimplePattern;
 
-                        $walletForSimplePattern->balance = $newAmount;
-                        $walletForSimplePattern->save();
+                        $this->setWalletBalance($walletForSimplePattern, (float) $newAmount); // lewat TransactionLedger
 
                         $oldFormatted = number_format($oldAmount, 0, ',', '.');
                         $newFormatted = number_format($newAmount, 0, ',', '.');
@@ -725,6 +1172,14 @@ class WalletCommandService
                 return;
             }
 
+            // Nama dompet generik (mis. "tambah saldo awal 500rb") bukan nama dompet —
+            // tanyakan balik sebelum menerapkan nominal.
+            if (self::isGenericWalletName($walletName)) {
+                $this->promptWalletBalanceConfirmation($operation, (float) $adjustAmount, $walletName, $messageText);
+
+                return;
+            }
+
             // Find the wallet - PRIORITY: Exact match first, then partial match
             $balance = Balance::where('tenant_id', $this->message->tenant_id)
                 ->where('is_active', true)
@@ -772,8 +1227,7 @@ class WalletCommandService
             $difference = $newAmount - $oldAmount;
 
             // Update the balance
-            $balance->balance = $newAmount;
-            $balance->save();
+            $this->setWalletBalance($balance, (float) $newAmount); // lewat TransactionLedger
 
             // Format for display
             $oldFormatted = number_format($oldAmount, 0, ',', '.');
@@ -855,12 +1309,21 @@ class WalletCommandService
 
             // Extract wallet name
             $walletName = null;
+            $savingsWallet = self::matchSavingsDeposit($messageText);
+            // Pattern 0: Setor / tambah tabungan ke dompet ("Tambahan tabungan brimo 1 juta")
+            if ($savingsWallet !== null) {
+                $walletName = $savingsWallet;
+            }
             // Pattern 1: Top Up (saldo [Wallet] [Amount])
-            if (preg_match('/(?:isi|tambah|top\s*up)\s+saldo\s+(?:ke\s+|di\s+)?([a-zA-Z0-9\s]+?)\s+[\d\.,]/i', $messageText, $matches)) {
+            elseif (preg_match('/(?:isi|tambah|top\s*up)\s+saldo\s+(?:ke\s+|di\s+)?([a-zA-Z0-9\s]+?)\s+[\d\.,]/i', $messageText, $matches)) {
                 $walletName = trim($matches[1]);
             }
             // Pattern 2: "uang masuk BCA 300rb" atau "masuk ke/di Dana 100rb" — bukan "Masuk gaji 5jt" (pemasukan biasa)
             elseif (preg_match('/(?:uang\s+masuk|masuk\s+(?:ke|di))\s+([a-z0-9\s]+?)\s+[\d\.,]/i', $messageText, $matches)) {
+                $walletName = trim($matches[1]);
+            }
+            // Pattern 2b: "masuk uang ke bank jago 3.430.000"
+            elseif (preg_match('/masuk\s+uang\s+(?:ke\s+|di\s+)?([a-zA-Z0-9\s]+?)\s+[\d\.,]/i', $messageText, $matches)) {
                 $walletName = trim($matches[1]);
             }
             // Pattern 3: "tambah uang ke Jago Hadi 600rb" / "isi uang Dana 50rb"
@@ -870,6 +1333,14 @@ class WalletCommandService
             // Pattern 4: "tambah uang 600rb ke Jago Hadi"
             elseif (preg_match('/(?:isi|tambah|top\s*up)\s+uang\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta|m|million)?\s+(?:ke|di)\s+([a-zA-Z0-9\s]+)$/i', $messageText, $matches)) {
                 $walletName = trim($matches[1]);
+            }
+            // Pattern 4.5: "tambah uang masuk dari bos 700.000"
+            elseif (preg_match('/(?:isi|tambah|top\s*up)\s+uang\s+masuk\s+(?:dari\s+)?([a-zA-Z0-9\s]+?)\s+[\d\.,]/i', $messageText, $matches)) {
+                $walletName = trim($matches[1]);
+            }
+            // Pattern 4.6: "tambah transfer masuk 1.400.000" - No specific wallet, default to "Tunai"
+            elseif (preg_match('/(?:isi|tambah|top\s*up)\s+transfer\s+masuk\s+[\d\.,]/i', $messageText, $matches)) {
+                $walletName = 'Tunai';
             }
             // Pattern 5: Standard transfer (di/ke [Wallet] at end) — safe guard: strip trailing amount first
             elseif (preg_match('/(?:ke|di)\s+([a-zA-Z0-9\s]+)$/i', $messageWithoutTrailingAmount, $matches)) {
@@ -915,8 +1386,18 @@ class WalletCommandService
             $description = 'Transfer masuk';
             if (preg_match('/(?:dari|from)\s+([a-zA-Z\s]+)/i', $messageText, $fromMatch)) {
                 $description = 'Transfer dari '.trim($fromMatch[1]);
+                // If it has amount, remove it from description
+                $description = trim(preg_replace('/\s+[\d\.,]+\s*(?:rb|ribu|k|jt|juta|m|million)?\s*$/iu', '', $description));
             } elseif (str_contains($textLower, 'tambah saldo') || str_contains($textLower, 'isi saldo') || str_contains($textLower, 'top up') || str_contains($textLower, 'tambah uang') || str_contains($textLower, 'isi uang')) {
-                $description = 'Top Up Saldo';
+                // For cases like "tambah transfer masuk" or general top up
+                if (preg_match('/tambah\s+transfer\s+masuk/i', $textLower)) {
+                    $description = 'Transfer masuk';
+                } else {
+                    $description = 'Top Up Saldo';
+                }
+            }
+            if ($savingsWallet !== null) {
+                $description = 'Setor tabungan';
             }
 
             // Create the income transaction
@@ -999,15 +1480,15 @@ class WalletCommandService
 
             $patterns = [
                 // Pattern 1: "Pengeluaran dompet [nama] [nominal] [deskripsi]"
-                '/(?:pengeluaran|keluar(?:an)?)\s+(?:dari\s+)?dompet\s+([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(.+)/i',
+                '/(?:pengeluaran|keluar(?:an)?)\s+(?:dari\s+)?dompet\s+([a-zA-Z0-9\s]+?)\s+([\d\.,]+(?:\s*(?:rb|ribu|rebu|k|jt|juta)\b)?)\s+(?!(?:rb|ribu|rebu|k|jt|juta)\b)(.+)/i',
                 // Pattern 2: "keluar dari dompet [nama] [nominal] [deskripsi]"
-                '/keluar\s+dari\s+(?:dompet\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(.+)/i',
+                '/keluar\s+dari\s+(?:dompet\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+(?:\s*(?:rb|ribu|rebu|k|jt|juta)\b)?)\s+(?!(?:rb|ribu|rebu|k|jt|juta)\b)(.+)/i',
                 // Pattern 3: "bayar dari [nama] [nominal] [deskripsi]"
-                '/bayar\s+dari\s+(?:dompet\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(.+)/i',
+                '/bayar\s+dari\s+(?:dompet\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+(?:\s*(?:rb|ribu|rebu|k|jt|juta)\b)?)\s+(?!(?:rb|ribu|rebu|k|jt|juta)\b)(.+)/i',
                 // Pattern 4: "dompet [nama] [nominal] [deskripsi]"
-                '/^dompet\s+([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(.+)/i',
+                '/^dompet\s+([a-zA-Z0-9\s]+?)\s+([\d\.,]+(?:\s*(?:rb|ribu|rebu|k|jt|juta)\b)?)\s+(?!(?:rb|ribu|rebu|k|jt|juta)\b)(.+)/i',
                 // Pattern 5: "dari [nama] [nominal] untuk [deskripsi]"
-                '/dari\s+(?:dompet\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(?:untuk|buat|beli)\s+(.+)/i',
+                '/dari\s+(?:dompet\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+(?:\s*(?:rb|ribu|rebu|k|jt|juta)\b)?)\s+(?!(?:rb|ribu|rebu|k|jt|juta)\b)(?:untuk|buat|beli)\s+(.+)/i',
                 // Pattern 6: "Pengeluaran dompet [nama] . harga [nominal] . Keterangan [deskripsi]"
                 '/(?:pengeluaran|keluar(?:an)?)\s+(?:dari\s+)?dompet\s+([a-zA-Z0-9\s]+?)\s*\.\s*(?:harga|nominal)?\s*([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s*\.\s*(?:keterangan|ket|desc)?\s*(.+)/i',
                 // Pattern 7: "Pengeluaran dompet [nama] . [nominal] . [deskripsi]" (without keywords)
@@ -1202,7 +1683,7 @@ class WalletCommandService
                 'account_number' => null,
                 'account_type' => $accountType,
                 'currency' => 'IDR',
-                'balance' => $initialBalance,
+                'balance' => 0,
                 'balance_date' => now(),
                 'is_active' => true,
                 'is_default' => false,
@@ -1211,6 +1692,10 @@ class WalletCommandService
                     'created_at' => now()->toIso8601String(),
                 ],
             ]);
+            // Saldo awal dicatat sebagai baris "Saldo awal" (bukan pemasukan)
+            if ((float) $initialBalance != 0.0) {
+                $this->setWalletBalance($wallet, (float) $initialBalance, Transaction::KIND_OPENING_BALANCE);
+            }
 
             // Set as default if this is the first wallet
             $walletCount = Balance::where('tenant_id', $this->message->tenant_id)->count();
@@ -1382,10 +1867,36 @@ class WalletCommandService
                 return;
             }
 
-            // Find the wallet
+            // Find the wallet - try exact match first, then partial match
             $wallet = Balance::where('tenant_id', $this->message->tenant_id)
                 ->whereRaw('LOWER(account_name) = ?', [strtolower($walletName)])
                 ->first();
+
+            // Fallback: try partial match (e.g. "BCA" matches "Dompet BCA")
+            if (! $wallet) {
+                $matches = Balance::where('tenant_id', $this->message->tenant_id)
+                    ->where('is_active', true)
+                    ->whereRaw('LOWER(account_name) LIKE ?', ['%'.strtolower($walletName).'%'])
+                    ->get();
+
+                if ($matches->count() === 1) {
+                    $wallet = $matches->first();
+                } elseif ($matches->count() > 1) {
+                    // Ambiguous - show all matches and ask user to be more specific
+                    $reply = "⚠️ *Dompet Ambigu*\n\n";
+                    $reply .= "Ditemukan *{$matches->count()} dompet* dengan nama mengandung \"{$walletName}\":\n\n";
+                    foreach ($matches as $m) {
+                        $saldo = number_format($m->balance ?? 0, 0, ',', '.');
+                        $reply .= "• _{$m->account_name}_ (Rp {$saldo})\n";
+                    }
+                    $reply .= "\nKetik nama lengkap dompet yang ingin dihapus, contoh:\n";
+                    foreach ($matches as $m) {
+                        $reply .= "• _hapus dompet {$m->account_name}_\n";
+                    }
+                    $this->sendReply($reply);
+                    return;
+                }
+            }
 
             if (! $wallet) {
                 $this->sendReply(
@@ -1500,17 +2011,32 @@ class WalletCommandService
         $nonWalletKeywords = [
             'dompet', 'wallet',
             'cashflow', 'cash flow', 'arus kas', 'ringkasan', 'summary', 'statistik', 'kondisi', 'status',
+            // Kata query umum — bukan nama dompet
+            'total', 'pengeluaran', 'pemasukan', 'pendapatan', 'penghasilan',
+            'omset', 'omzet', 'spending', 'income', 'expense',
+            'berapa', 'brp', 'sisa', 'semua', 'seluruh', 'rekening', 'akun',
         ];
         if (empty($cleanText) || in_array(strtolower($cleanText), $nonWalletKeywords)) {
             return null;
         }
 
-        // Common wallet/bank names mapping (normalize names)
+        // Kalimat query ringkasan (mis. "ringkasan bulanan ini", "rekap bulan lalu")
+        // mengandung kata query di tengah frasa — sebelumnya hanya dicek persis,
+        // sehingga dianggap nama dompet dan memunculkan "Dompet tidak ditemukan".
+        if (preg_match('/\b(ringkasan|rekap|rekapan|rangkuman|laporan|summary|statistik|cashflow|arus\s+kas)\b/u', $cleanText)) {
+            return null;
+        }
+
+        // Common wallet/bank names mapping (normalize names, match BalanceService)
         $nameMapping = [
-            'bca' => 'BCA',
-            'mandiri' => 'Mandiri',
-            'bri' => 'BRI',
-            'bni' => 'BNI',
+            'bca' => 'Bank BCA',
+            'bank bca' => 'Bank BCA',
+            'mandiri' => 'Bank Mandiri',
+            'bank mandiri' => 'Bank Mandiri',
+            'bri' => 'Bank BRI',
+            'bank bri' => 'Bank BRI',
+            'bni' => 'Bank BNI',
+            'bank bni' => 'Bank BNI',
             'bjb' => 'BJB',
             'bank bjb' => 'BJB',
             'cimb' => 'CIMB Niaga',
@@ -1523,7 +2049,7 @@ class WalletCommandService
             'gopay' => 'GoPay',
             'go pay' => 'GoPay',
             'ovo' => 'OVO',
-            'dana' => 'DANA',
+            'dana' => 'Dana',
             'shopeepay' => 'ShopeePay',
             'shopee pay' => 'ShopeePay',
             'linkaja' => 'LinkAja',
@@ -1618,6 +2144,14 @@ class WalletCommandService
     public function handleCheckBalance(?string $messageText = null): void
     {
         try {
+            $isPeriodSummary = $messageText
+                && preg_match('/\b(ringkasan|rekap|rekapan|rangkuman|laporan)\b/u', $messageText)
+                && preg_match('/\b(hari ini|minggu ini|bulan ini|tahun ini|kemarin|bulan lalu|minggu lalu)\b/u', $messageText);
+            if ($isPeriodSummary && $this->viewTransactionsCallback) {
+                call_user_func($this->viewTransactionsCallback);
+                return;
+            }
+
             // Check if specific wallet is mentioned
             $specificWallet = null;
             if ($messageText && strtolower(trim($messageText)) !== 'saldo') {
@@ -1633,37 +2167,31 @@ class WalletCommandService
             $balanceQuery = Balance::where('tenant_id', $this->message->tenant_id)
                 ->where('is_active', true);
 
+            $foundBalance = null;
+
             // 1. FOR SPECIFIC WALLET QUERY
             if ($specificWallet) {
-                // Try exact match first
-                $foundBalance = (clone $balanceQuery)
-                    ->whereRaw('LOWER(account_name) = ?', [strtolower($specificWallet)])
-                    ->first();
+            // Use BalanceService to find wallet (with fuzzy matching and normalization)
+            $balanceService = app(\App\Services\BalanceService::class);
+            $foundBalance = $balanceService->findOrCreateBalance($this->message->tenant_id, $specificWallet);
 
-                // Then try partial match
-                if (! $foundBalance) {
-                    $foundBalance = (clone $balanceQuery)
-                        ->whereRaw('LOWER(account_name) LIKE ?', ['%'.strtolower($specificWallet).'%'])
-                        ->first();
-                }
+            if ($foundBalance) {
+                $amount = $foundBalance->balance ?? 0;
+                $amountFormatted = number_format($amount, 0, ',', '.');
+                $accountName = $foundBalance->account_name ?: ($foundBalance->name ?? 'Akun');
 
-                if ($foundBalance) {
-                    $amount = $foundBalance->balance ?? 0;
-                    $amountFormatted = number_format($amount, 0, ',', '.');
-                    $accountName = $foundBalance->account_name ?: ($foundBalance->name ?? 'Akun');
+                $this->sendReply(
+                    "🏦 *Saldo Rekening*\n\n".
+                    "👛 Dompet: *{$accountName}*\n".
+                    "💰 Saldo: *Rp {$amountFormatted}*\n\n".
+                    '📅 Per: '.now()->translatedFormat('d F Y H:i')
+                );
 
-                    $this->sendReply(
-                        "🏦 *Saldo Rekening*\n\n".
-                        "👛 Dompet: *{$accountName}*\n".
-                        "💰 Saldo: *Rp {$amountFormatted}*\n\n".
-                        '📅 Per: '.now()->translatedFormat('d F Y H:i')
-                    );
-
-                    return;
-                } else {
-                    // Wallet mentioned but not found, keep going but maybe add a note later
-                }
+                return;
+            } else {
+                // Wallet mentioned but not found, keep going but maybe add a note later
             }
+        }
 
             // 2. GET DATA FOR LIST/SUMMARY
             $balances = $balanceQuery->get();
@@ -1798,11 +2326,17 @@ class WalletCommandService
 
         $patterns = [
             // 0: transfer 100rb dari BCA ke Mandiri
-            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(?:dari\s+)?([a-zA-Z0-9\s]+?)\s+(?:ke\s+)([a-zA-Z0-9\s]+)/i',
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?)\s+(?:dana|saldo|uang\s+)?([\d\.,]+(?:\s*(?:rb|ribu|rebu|k|jt|juta)\b)?)\s+(?!(?:rb|ribu|rebu|k|jt|juta)\b)(?:dari\s+)?([a-zA-Z0-9\s]+?)\s+(?:ke\s+)([a-zA-Z0-9\s]+)/i',
+            // 0b: kirim 100rb dari BCA ke Mandiri (kirim requires "dari")
+            '/kirim\s+(?:dana|saldo|uang\s+)?([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+dari\s+([a-zA-Z0-9\s]+?)\s+(?:ke\s+)([a-zA-Z0-9\s]+)/i',
             // 1: transfer dari BCA ke Mandiri 100rb
-            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?(?:dari\s+)?([a-zA-Z0-9\s]+?)\s+(?:ke\s+)([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?)\s+(?:dana|saldo|uang\s+)?(?:dari\s+)?([a-zA-Z0-9\s]+?)\s+(?:ke\s+)([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
+            // 1b: kirim dari BCA ke Mandiri 100rb (kirim requires "dari")
+            '/kirim\s+(?:dana|saldo|uang\s+)?dari\s+([a-zA-Z0-9\s]+?)\s+(?:ke\s+)([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)/i',
             // 2: Pindahkan saldo bank BRI ke bank jago 300 rb (sumber + nominal + ke tujuan)
-            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?(?:dari\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+(?:ke\s+)([a-zA-Z0-9\s]+)/i',
+            '/(?:trans[pf]er|tf|trf|pindah(?:kan)?)\s+(?:dana|saldo|uang\s+)?(?:dari\s+)?([a-zA-Z0-9\s]+?)\s+([\d\.,]+(?:\s*(?:rb|ribu|rebu|k|jt|juta)\b)?)\s+(?!(?:rb|ribu|rebu|k|jt|juta)\b)(?:ke\s+)([a-zA-Z0-9\s]+)/i',
+            // 2b: kirim BCA 100rb ke Mandiri (kirim requires "dari")
+            '/kirim\s+(?:dana|saldo|uang\s+)?dari\s+([a-zA-Z0-9\s]+?)\s+([\d\.,]+(?:\s*(?:rb|ribu|rebu|k|jt|juta)\b)?)\s+(?!(?:rb|ribu|rebu|k|jt|juta)\b)(?:ke\s+)([a-zA-Z0-9\s]+)/i',
             // 3: transfer ke Jago 200rb dari BCA Hadi
             '/(?:trans[pf]er|tf|trf|pindah(?:kan)?|kirim)\s+(?:dana|saldo|uang\s+)?ke\s+([a-zA-Z0-9\s]+?)\s+([\d\.,]+\s*(?:rb|ribu|k|jt|juta)?)\s+dari\s+([a-zA-Z0-9\s]+)/i',
             // 4: transfer ke Jago dari BCA Hadi 200rb
@@ -1847,6 +2381,17 @@ class WalletCommandService
                 "• _transfer 100rb dari BCA ke Mandiri_\n".
                 '• _pindah saldo 50rb dari Cash ke Gopay_'
             );
+
+            return;
+        }
+
+        // Salah satu sisi orang/pihak luar, bukan dompet:
+        //   "transfer 1jt dari klien ke BCA"   → PEMASUKAN ke BCA
+        //   "transfer 500rb dari BCA ke ibu"   → PENGELUARAN dari BCA
+        $fromIsWallet = $this->looksLikeWallet($fromWalletName, $messageText);
+        $toIsWallet = $this->looksLikeWallet($toWalletName, $messageText);
+        if ($fromIsWallet !== $toIsWallet) {
+            $this->recordExternalTransfer((float) $amount, $fromWalletName, $toWalletName, $toIsWallet);
 
             return;
         }
@@ -1897,45 +2442,22 @@ class WalletCommandService
             // Generate a unique reference for this transfer to link the two transactions
             $transferRef = 'TRF-'.strtoupper(substr(md5(uniqid()), 0, 8));
 
-            // 3. Create Expense Transaction (from Source)
-            $expenseTxData = [
-                'type' => 'debit_internal', // Changed from expense
-                'amount' => $amount,
-                'category' => 'Debit Antar Dompet',
-                'category_type' => 'debit_internal',
-                'description' => "Transfer ke {$toWallet->account_name} ({$transferRef})",
-                'account_name' => $fromWallet->account_name,
-                'transaction_date' => now()->toDateString(),
-                'confidence_score' => 1.0,
-                'source' => 'wallet_command',
-                'metadata' => [
-                    'transfer_ref' => $transferRef,
-                    'destination_wallet_id' => $toWallet->id,
-                    'is_transfer' => true,
-                ],
-            ];
-
-            $expenseTx = $this->createTransaction($expenseTxData);
-
-            // 4. Create Income Transaction (to Destination)
-            $incomeTxData = [
-                'type' => 'kredit_internal', // Changed from income
-                'amount' => $amount,
-                'category' => 'Kredit Antar Dompet',
-                'category_type' => 'kredit_internal',
-                'description' => "Transfer dari {$fromWallet->account_name} ({$transferRef})",
-                'account_name' => $toWallet->account_name,
-                'transaction_date' => now()->toDateString(),
-                'confidence_score' => 1.0,
-                'source' => 'wallet_command',
-                'metadata' => [
-                    'transfer_ref' => $transferRef,
-                    'source_wallet_id' => $fromWallet->id,
-                    'is_transfer' => true,
-                ],
-            ];
-
-            $incomeTx = $this->createTransaction($incomeTxData);
+            // 3. Dua sisi transfer dicatat ATOMIK & saling terkunci (linked_transaction_id):
+            //    hapus/ubah/pulihkan salah satu sisi selalu mengenai pasangannya.
+            [$expenseTx, $incomeTx] = app(\App\Services\Ledger\TransactionLedger::class)->transfer(
+                $fromWallet,
+                $toWallet,
+                (float) $amount,
+                [
+                    'message_id' => $this->message->id,
+                    'source' => 'wallet_command',
+                    'user_whatsapp_number_id' => app(\App\Services\WhatsAppUserMappingService::class)
+                        ->resolveUserWhatsAppNumberId($this->getAttributionSenderId(), $this->message->tenant_id),
+                    'debit_description' => "Transfer ke {$toWallet->account_name} ({$transferRef})",
+                    'credit_description' => "Transfer dari {$fromWallet->account_name} ({$transferRef})",
+                    'metadata' => ['transfer_ref' => $transferRef],
+                ]
+            );
 
             if ($expenseTx && $incomeTx) {
                 $this->sendReply(
@@ -2042,6 +2564,21 @@ class WalletCommandService
     public function handleViewSpecificWallet(string $walletName): void
     {
         try {
+            // Guard: jangan perlakukan kata query umum sebagai nama dompet.
+            // Jika nama yang datang ternyata adalah kata query (mis. "total",
+            // "pengeluaran"), arahkan ke jalur cek saldo umum agar user tetap
+            // mendapat informasi, bukan error "dompet tidak ditemukan".
+            $nonWalletNames = [
+                'total', 'pengeluaran', 'pemasukan', 'pendapatan', 'penghasilan',
+                'omset', 'omzet', 'spending', 'income', 'expense',
+                'berapa', 'brp', 'sisa', 'semua', 'seluruh', 'rekening', 'akun',
+                'dompet', 'wallet', 'saldo',
+            ];
+            if (in_array(strtolower($walletName), $nonWalletNames, true)) {
+                $this->handleCheckBalance();
+                return;
+            }
+
             $wallet = Balance::where('tenant_id', $this->message->tenant_id)
                 ->where('is_active', true)
                 ->whereRaw('LOWER(account_name) LIKE ?', ['%'.strtolower($walletName).'%'])
@@ -2077,5 +2614,18 @@ class WalletCommandService
                 'Terjadi kesalahan. Silakan coba lagi.'
             );
         }
+    }
+
+    /**
+     * Get the actual sender ID (participant if in group)
+     */
+    protected function getAttributionSenderId(): string
+    {
+        $metadata = is_array($this->message->metadata) ? $this->message->metadata : json_decode($this->message->metadata ?? '{}', true);
+        if (($metadata['is_group'] ?? false) && ! empty($metadata['author'])) {
+            return $metadata['author'];
+        }
+
+        return $this->message->sender_id;
     }
 }

@@ -54,7 +54,7 @@ const organizationSchema = {
   "logo": "https://finwa.web.id/finwalogo.png",
   "description": "FinWa adalah aplikasi keuangan WhatsApp Indonesia. Pencatatan keuangan dari WA menjadi mudah dan otomatis untuk UMKM dan freelancer.",
   "sameAs": [
-    "https://wa.me/6285762000079"
+    "https://wa.me/6285159205506"
   ]
 };
 
@@ -156,7 +156,7 @@ const faqSchema = {
         
         <!-- Floating WhatsApp Button -->
         <Suspense>
-            <FloatingWhatsApp phone-number="6285762000079" message="Halo kak, saya mau daftar FinWa. Ketik *Daftar* untuk mulai ya!" />
+            <FloatingWhatsApp phone-number="6285159205506" message="Halo kak, saya mau daftar FinWa. Ketik *Daftar* untuk mulai ya!" />
         </Suspense>
 
     </div>

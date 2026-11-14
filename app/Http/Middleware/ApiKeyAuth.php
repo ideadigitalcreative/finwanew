@@ -18,6 +18,7 @@ class ApiKeyAuth
         $expectedKey = match ($keyType) {
             'webhook' => config('services.webhook.api_key'),
             'ocr' => config('services.ocr_worker.api_key'),
+            'stt' => config('services.stt_worker.api_key'),
             'internal' => config('services.internal.api_key'),
             default => config('services.webhook.api_key'),
         };

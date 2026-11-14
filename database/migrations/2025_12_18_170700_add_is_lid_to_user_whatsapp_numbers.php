@@ -11,6 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Idempoten: kolom sudah ada bila migrasi pernah dijalankan sebagian.
+        if (Schema::hasColumn('user_whatsapp_numbers', 'is_lid')) {
+            return;
+        }
+
         Schema::table('user_whatsapp_numbers', function (Blueprint $table) {
             $table->boolean('is_lid')->default(false)->after('is_primary');
         });

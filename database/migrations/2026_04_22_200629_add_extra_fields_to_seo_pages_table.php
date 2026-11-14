@@ -12,9 +12,16 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('seo_pages', function (Blueprint $table) {
-            $table->string('thumbnail')->nullable()->after('h1');
-            $table->string('category')->nullable()->after('thumbnail');
-            $table->json('tags')->nullable()->after('category');
+            // Idempoten: kolom bisa sudah ada bila tabel dibuat di luar migrasi.
+            if (! Schema::hasColumn('seo_pages', 'thumbnail')) {
+                $table->string('thumbnail')->nullable()->after('h1');
+            }
+            if (! Schema::hasColumn('seo_pages', 'category')) {
+                $table->string('category')->nullable()->after('thumbnail');
+            }
+            if (! Schema::hasColumn('seo_pages', 'tags')) {
+                $table->json('tags')->nullable()->after('category');
+            }
         });
     }
 

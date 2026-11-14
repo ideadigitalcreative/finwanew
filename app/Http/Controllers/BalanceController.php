@@ -73,10 +73,14 @@ class BalanceController extends Controller
             'account_number' => $request->input('account_number'),
             'account_type' => $request->input('account_type'),
             'currency' => $request->input('currency', 'IDR'),
-            'balance' => $request->input('balance'),
+            'balance' => 0,
             'balance_date' => $request->input('balance_date'),
             'is_active' => true,
         ]);
+        // Saldo awal dicatat sebagai baris "Saldo awal" (bukan pemasukan) lewat TransactionLedger
+        if ((float) $request->input('balance', 0) != 0.0) {
+            app(\App\Services\Ledger\TransactionLedger::class)->setBalanceTo($balance, (float) $request->input('balance'), \App\Models\Transaction::KIND_OPENING_BALANCE, [], ['via' => 'dashboard', 'user_id' => $request->user()?->id]);
+        }
 
         return redirect()->back()->with('success', 'Saldo akun berhasil ditambahkan');
     }
@@ -116,12 +120,16 @@ class BalanceController extends Controller
                 ->update(['is_default' => false]);
         }
 
+        // Ubah saldo = baris "Penyesuaian saldo" lewat TransactionLedger (riwayat tetap menjelaskan saldo)
+        if ($request->has('balance') && $request->input('balance') !== null) {
+            app(\App\Services\Ledger\TransactionLedger::class)->setBalanceTo($balance, (float) $request->input('balance'), \App\Models\Transaction::KIND_BALANCE_ADJUSTMENT, [], ['via' => 'dashboard', 'user_id' => $request->user()?->id]);
+        }
+
         $balance->update($request->only([
             'account_name',
             'account_number',
             'account_type',
             'currency',
-            'balance',
             'balance_date',
             'is_active',
             'is_default',
