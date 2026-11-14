@@ -223,6 +223,15 @@ class TransactionConfirmationService
                 }
             }
 
+            // Dompet yang disebut user belum terdaftar → beri tahu, jangan diam-diam
+            // memakai dompet utama.
+            $missingWallet = $transaction->wallet_not_found_warning ?? null;
+            if (is_string($missingWallet) && $missingWallet !== '') {
+                $usedWallet = $transaction->balance->account_name ?? 'dompet utama';
+                $reply .= "⚠️ _Dompet *{$missingWallet}* belum terdaftar — dicatat di *{$usedWallet}*._\n";
+                $reply .= "_Buat dulu dengan: *tambah dompet {$missingWallet}*_\n";
+            }
+
             if ($index < $count - 1) {
                 $reply .= "\n";
             }

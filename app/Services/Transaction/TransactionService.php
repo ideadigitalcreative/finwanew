@@ -1166,6 +1166,15 @@ class TransactionService
                 null  // Don't auto-create, let fallback handle it
             );
 
+            // Kandidat dari regex sering membawa kata tambahan ("masuk bca", "qris bca",
+            // "ovo ya") atau salah tebak ("makan siang"). Cocokkan ke dompet milik user:
+            // dulu di dalam kandidat, lalu di teks pesan.
+            $walletResolver = app(\App\Services\Wallet\WalletResolver::class);
+            if (! $balance) {
+                $balance = $walletResolver->match($this->message->tenant_id, $accountName, true)
+                    ?? $this->matchWalletInMessage($txData);
+            }
+
             if ($balance) {
                 Log::info('Balance found/created for transaction', [
                     'tenant_id' => $this->message->tenant_id,
@@ -1182,8 +1191,11 @@ class TransactionService
 
                 $balance = $balanceService->getDefaultBalance($this->message->tenant_id);
 
-                // Store warning message for display
-                $txData['wallet_not_found_warning'] = $accountName;
+                // Peringatan hanya bila kandidat memang nama rekening/e-wallet — bukan kata
+                // biasa yang salah ditebak sebagai dompet.
+                if ($walletResolver->looksLikeWalletName($accountName, (string) ($txData['description'] ?? ''))) {
+                    $txData['wallet_not_found_warning'] = ucwords(mb_strtolower($accountName));
+                }
 
                 if ($balance) {
                     Log::info('Using default balance as fallback', [
@@ -1194,8 +1206,10 @@ class TransactionService
                 }
             }
         } else {
-            // Use default balance (kantong utama) if no account specified
-            $balance = $balanceService->getDefaultBalance($this->message->tenant_id);
+            // Tidak ada kandidat dari regex: dompet user mungkin tetap disebut di pesan
+            // ("makan 15rb lewat rek mandiri"). Tidak ada → dompet utama.
+            $balance = $this->matchWalletInMessage($txData)
+                ?? $balanceService->getDefaultBalance($this->message->tenant_id);
 
             if ($balance) {
                 Log::info('Using default balance (dompet utama) for transaction', [
@@ -1329,6 +1343,36 @@ class TransactionService
         }
 
         return $transaction;
+    }
+
+    /**
+     * Dompet milik user yang disebut di pesan teks/suara (dengan penanda cara bayar,
+     * atau tepat setelah nominal di akhir pesan). Foto struk punya jalurnya sendiri
+     * (keterangan foto), jadi dilewati di sini.
+     */
+    protected function matchWalletInMessage(array $txData): ?Balance
+    {
+        if (! in_array($this->message->type, ['text', 'audio'], true)) {
+            return null;
+        }
+
+        $resolver = app(\App\Services\Wallet\WalletResolver::class);
+        $tenantId = (int) $this->message->tenant_id;
+
+        // Teks pesan asli hanya bila satu baris (pesan batch berisi banyak transaksi)
+        $content = $this->message->type === 'text' ? trim((string) ($this->message->content ?? '')) : '';
+        $texts = [(string) ($txData['description'] ?? '')];
+        if ($content !== '' && ! str_contains($content, "\n")) {
+            $texts[] = $content;
+        }
+
+        foreach ($texts as $text) {
+            if ($balance = $resolver->match($tenantId, $text)) {
+                return $balance;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -2067,6 +2111,18 @@ class TransactionService
             $multiplier = $multipliers[$suffix] ?? 1;
             $newAmount = (int) ($numValue * $multiplier);
 
+            // Pembaca nominal bersama: "2jt 500rb", "25 rebu", "lima puluh ribu",
+            // dan "30" tanpa satuan = 30 ribu (sama seperti jalur pencatatan).
+            $line = trim($firstLine);
+            $keywordPos = mb_stripos($line, $keyword);
+            if ($keywordPos !== false) {
+                $tail = trim(mb_substr($line, $keywordPos + mb_strlen($keyword)));
+                $shared = \App\Support\AmountParser::composite($tail) ?? \App\Support\AmountParser::parseAnswer($tail);
+                if ($shared) {
+                    $newAmount = (int) $shared;
+                }
+            }
+
             if ($newAmount <= 0) {
                 $this->sendReply('⚠️ Nominal tidak valid. Silakan coba lagi.');
 
@@ -2088,10 +2144,20 @@ class TransactionService
                     ->first();
             }
 
+            // Tidak ada hari ini → transaksi terbaru berkata kunci itu dalam 30 hari terakhir
+            // (dulu hanya hari ini: salah nominal kemarin tidak bisa dikoreksi lewat chat).
+            if (! $transaction) {
+                $transaction = $this->scopeToSender(Transaction::where('tenant_id', $this->message->tenant_id))
+                    ->whereRaw('LOWER(description) LIKE ?', ['%'.strtolower($keyword).'%'])
+                    ->where('created_at', '>=', now()->subDays(30))
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+            }
+
             if (! $transaction) {
                 $this->sendReply(
                     "⚠️ *Transaksi tidak ditemukan*\n\n".
-                    "Tidak ada transaksi dengan keyword \"*{$keyword}*\" hari ini.\n\n".
+                    "Tidak ada transaksi dengan keyword \"*{$keyword}*\" dalam 30 hari terakhir.\n\n".
                     '💡 Ketik _lihat transaksi_ untuk melihat daftar transaksi Anda.'
                 );
 
@@ -2125,7 +2191,8 @@ class TransactionService
                 "✏️ *Transaksi Diubah!*\n\n".
                 "{$typeEmoji} *{$typeLabel}*\n".
                 "📝 {$desc}\n".
-                "📁 {$category}\n\n".
+                "📁 {$category}\n".
+                '📅 '.$transaction->transaction_date->format('d M Y')."\n\n".
                 "💵 Nominal:\n".
                 "   Rp {$oldFormatted} → *Rp {$newFormatted}*\n\n".
                 '✅ Perubahan berhasil disimpan.'
@@ -2632,6 +2699,155 @@ class TransactionService
         }
 
         return $transaction;
+    }
+
+    /**
+     * Perintah pindah dompet sebuah transaksi (tanpa nominal):
+     *   "ubah dompet jadi mandiri"            → transaksi terakhir
+     *   "ganti dompet kopi ke gopay"          → transaksi berkata kunci "kopi"
+     *   "pindahkan ke dompet bca"             → transaksi terakhir
+     *   "salah dompet, harusnya pakai gopay"  → transaksi terakhir (explicit = false)
+     *
+     * @return array{keyword: ?string, wallet: string, explicit: bool}|null
+     *                                                                      explicit: kata "dompet/rekening" disebut, jadi pasti perintah pindah dompet
+     */
+    public static function parseWalletChange(string $text): ?array
+    {
+        $t = trim((string) preg_replace('/\s+/u', ' ', mb_strtolower($text)));
+        $t = rtrim($t, " .!");
+        if ($t === '' || \App\Services\WhatsApp\MessageSignals::hasMoneyAmount($t)) {
+            return null;
+        }
+
+        $verb = '(?:ubah|ganti|edit|koreksi|pindah(?:kan|in)?)';
+        $noun = '(?:dompet|rekening|rek|sumber\s+dana|pembayaran)(?:nya)?';
+        $keyword = null;
+        $wallet = null;
+        $explicit = true;
+
+        if (preg_match('/^'.$verb.'\s+'.$noun.'\s+(?:transaksi\s+)?(?:(.+?)\s+)?(?:jadi|ke|menjadi|pakai|pake)\s+(.+)$/u', $t, $m)) {
+            [$keyword, $wallet] = [$m[1] ?? '', $m[2]];
+        } elseif (preg_match('/^'.$verb.'\s+(?:transaksi\s+)?(?:(.+?)\s+)?(?:ke|jadi|pakai|pake)\s+(?:dompet|rekening|rek)\s+(.+)$/u', $t, $m)) {
+            [$keyword, $wallet] = [$m[1] ?? '', $m[2]];
+        } elseif (preg_match('/^(?:salah\s+(?:dompet|rekening|rek)[,.]?\s*)?(?:harusnya|seharusnya|mestinya)\s+(?:pakai|pake|dari|lewat|via|di|ke)\s+(?:dompet\s+|rekening\s+|rek\s+)?(.+)$/u', $t, $m)) {
+            $wallet = $m[1];
+            $explicit = str_contains($t, 'dompet') || (bool) preg_match('/\b(?:rekening|rek)\b/u', $t);
+        }
+
+        $wallet = trim((string) preg_replace('/^(?:dompet|rekening|rek)\s+/u', '', trim((string) $wallet)));
+        if ($wallet === '') {
+            return null;
+        }
+
+        $keyword = trim((string) $keyword);
+        if (preg_match('/^(?:nya|terakhir|tadi|itu|ini|yang\s+tadi|yg\s+tadi|barusan)$/u', $keyword)) {
+            $keyword = '';
+        }
+
+        return ['keyword' => $keyword !== '' ? $keyword : null, 'wallet' => $wallet, 'explicit' => $explicit];
+    }
+
+    /**
+     * Pindahkan transaksi ke dompet lain. Saldo kedua dompet dikoreksi lewat ledger.
+     * $target diisi bila transaksinya sudah diketahui (mis. dari balasan pesan).
+     *
+     * @return bool false bila ini ternyata bukan perintah pindah dompet (lanjut jalur lain)
+     */
+    public function handleWalletChange(array $command, ?Transaction $target = null): bool
+    {
+        $tenantId = (int) $this->message->tenant_id;
+        $wallet = app(\App\Services\Wallet\WalletResolver::class)->match($tenantId, $command['wallet'], true)
+            ?? app(BalanceService::class)->findOrCreateBalance($tenantId, $command['wallet'], null);
+
+        if (! $wallet) {
+            if (! $command['explicit']) {
+                return false; // "harusnya pakai sendok" — bukan soal dompet
+            }
+            $names = Balance::where('tenant_id', $tenantId)->where('is_active', true)->pluck('account_name')
+                ->map(fn ($n) => "• {$n}")->implode("\n");
+            $this->sendReply(
+                '⚠️ *Dompet "'.ucwords($command['wallet'])."\" belum terdaftar*\n\n".
+                "Dompet Anda:\n{$names}\n\n".
+                '💡 Buat dulu dengan: _tambah dompet '.ucwords($command['wallet']).'_'
+            );
+
+            return true;
+        }
+
+        if ($target === null) {
+            if ($command['keyword'] !== null) {
+                $target = $this->scopeToSender(Transaction::where('tenant_id', $tenantId))
+                    ->whereRaw('LOWER(description) LIKE ?', ['%'.mb_strtolower($command['keyword']).'%'])
+                    ->where('created_at', '>=', now()->subDays(30))
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+                if (! $target) {
+                    $this->sendReply(
+                        "⚠️ *Transaksi tidak ditemukan*\n\n".
+                        "Tidak ada transaksi \"*{$command['keyword']}*\" dalam 30 hari terakhir.\n\n".
+                        '💡 Ketik _lihat transaksi_ untuk melihat daftar.'
+                    );
+
+                    return true;
+                }
+            } else {
+                $target = $this->resolveLastTransaction();
+            }
+        }
+
+        if (! $target) {
+            $this->sendReply("⚠️ *Tidak ada transaksi untuk diubah*\n\nAnda belum memiliki transaksi yang tercatat.");
+
+            return true;
+        }
+
+        $target->loadMissing(['category', 'balance']);
+        $desc = KeywordNormalizer::stripAmountFromDescription($target->description) ?: '-';
+        $rp = 'Rp '.number_format((float) $target->amount, 0, ',', '.');
+
+        // Hanya pemasukan/pengeluaran yang memang terikat ke satu dompet. Pindah saldo
+        // antar dompet, hutang yang hanya dicatat, dan belanja paylater tidak punya
+        // "dompet" untuk diganti.
+        if (! in_array($target->type, ['income', 'expense'], true) || ! $target->balance_id) {
+            $this->sendReply(
+                "⚠️ *Dompet transaksi ini tidak bisa diubah*\n\n".
+                "📝 {$desc} · {$rp}\n\n".
+                'Transaksi ini tidak terikat ke satu dompet (pindah saldo, hutang yang hanya dicatat, atau belanja paylater).'
+            );
+
+            return true;
+        }
+
+        if ((int) $target->balance_id === (int) $wallet->id) {
+            $this->sendReply("ℹ️ Transaksi _{$desc}_ ({$rp}) memang sudah di dompet *{$wallet->account_name}*.");
+
+            return true;
+        }
+
+        $old = $target->balance;
+        app(TransactionLedger::class)->update($target, ['balance_id' => $wallet->id]);
+
+        Log::info('Transaction wallet changed via chat', [
+            'message_id' => $this->message->id,
+            'transaction_id' => $target->id,
+            'from_balance_id' => $old?->id,
+            'to_balance_id' => $wallet->id,
+        ]);
+
+        [$emoji, $label] = $this->transactionTypeLabel($target);
+        $reply = "✏️ *Dompet Transaksi Diubah!*\n\n".
+            "{$emoji} *{$label}* · {$rp}\n".
+            "📝 {$desc}\n".
+            '📅 '.$target->transaction_date->format('d M Y')."\n\n".
+            '👛 '.($old->account_name ?? '-')." → *{$wallet->account_name}*\n\n";
+        if ($old) {
+            $reply .= "Saldo {$old->account_name}: Rp ".number_format((float) $old->fresh()->balance, 0, ',', '.')."\n";
+        }
+        $reply .= "Saldo {$wallet->account_name}: Rp ".number_format((float) $wallet->fresh()->balance, 0, ',', '.');
+
+        $this->sendReply($reply);
+
+        return true;
     }
 
     /**

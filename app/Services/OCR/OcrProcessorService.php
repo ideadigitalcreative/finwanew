@@ -627,6 +627,10 @@ class OcrProcessorService
                     'tapi jumlah item *Rp '.number_format($mismatch, 0, ',', '.')."*.\n\n".
                     "Kalau totalnya salah, balas: _ubah jadi [nominal yang benar]_"
                 );
+            } elseif ($hints['category_type'] === null) {
+                // Belanja campuran → tawarkan pecah per kategori (user tidak memberi
+                // kategori sendiri lewat keterangan foto)
+                $this->offerReceiptSplit($transaction, $items, $total);
             }
 
         } catch (\Throwable $e) {
@@ -636,6 +640,166 @@ class OcrProcessorService
             ]);
             $this->handleOcrFailure($ocrJob, $e->getMessage());
         }
+    }
+
+    /** @var callable|null fn(string $kind, string $title, array $options, array $aliases, string $footer): void */
+    protected $clarifyCallback = null;
+
+    /** Pertanyaan bernomor dikirim lewat job (yang tahu identitas pengirim). */
+    public function setClarifyCallback(callable $callback): static
+    {
+        $this->clarifyCallback = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Struk belanja campuran (mis. makanan + perlengkapan rumah) dicatat sebagai SATU
+     * transaksi satu kategori. Bila item-itemnya jatuh ke ≥ 2 kategori, tawarkan
+     * memecahnya per kategori. Total tetap sama: selisih pajak/diskon/pembulatan
+     * dimasukkan ke kelompok terbesar.
+     */
+    protected function offerReceiptSplit(Transaction $transaction, array $items, int $total): void
+    {
+        if ($this->clarifyCallback === null || count($items) < 2 || $total <= 0) {
+            return;
+        }
+
+        $transaction->loadMissing('category');
+        $mainType = (string) ($transaction->category->type ?? 'pengeluaran_belanja');
+        $tenantId = (int) $this->message->tenant_id;
+        $inference = new \App\Services\Transaction\CategoryInferenceService;
+
+        $groups = [];
+        foreach ($items as $item) {
+            $name = trim((string) ($item['name'] ?? ''));
+            $value = (int) ($item['qty'] ?? 1) * (int) ($item['price'] ?? 0);
+            if ($name === '' || $value <= 0) {
+                continue;
+            }
+            try {
+                $type = (string) ($inference->infer($name, false, $tenantId)['category_type'] ?? '');
+            } catch (\Throwable $e) {
+                $type = '';
+            }
+            // Item yang tidak dikenali ikut kategori utama struk
+            if (! str_starts_with($type, 'pengeluaran_') || str_ends_with($type, '_lainnya')) {
+                $type = $mainType;
+            }
+            $groups[$type]['amount'] = ($groups[$type]['amount'] ?? 0) + $value;
+            $groups[$type]['items'][] = $name;
+        }
+
+        if (count($groups) < 2 || count($groups) > 5) {
+            return;
+        }
+
+        // Jumlah item harus dekat dengan total; kalau jauh, pembacaan item tidak bisa dipercaya
+        $sum = array_sum(array_column($groups, 'amount'));
+        $diff = $total - $sum;
+        if (abs($diff) > max(5000, (int) round($total * 0.15))) {
+            return;
+        }
+        uasort($groups, fn ($a, $b) => $b['amount'] <=> $a['amount']);
+        $largest = array_key_first($groups);
+        $groups[$largest]['amount'] += $diff;
+        if (min(array_column($groups, 'amount')) <= 0) {
+            return;
+        }
+
+        $categories = \App\Models\Category::where('tenant_id', $tenantId)->whereIn('type', array_keys($groups))->get()->keyBy('type');
+        $lines = [];
+        $payload = [];
+        foreach ($groups as $type => $group) {
+            $cat = $categories->get($type);
+            $label = trim(($cat->icon ?? '📁').' '.($cat->name ?? ucwords(str_replace(['pengeluaran_', '_'], ['', ' '], $type))));
+            $lines[] = "• {$label} — Rp ".number_format($group['amount'], 0, ',', '.').' _('.count($group['items']).' item)_';
+            $payload[] = ['category_type' => $type, 'amount' => $group['amount'], 'items' => array_slice($group['items'], 0, 8)];
+        }
+
+        ($this->clarifyCallback)(
+            'receipt_split',
+            "✂️ *Struk ini berisi ".count($groups)." jenis belanja:*\n".implode("\n", $lines)."\n\nMau dipecah per kategori?",
+            [
+                '1' => ['label' => 'Ya, pecah jadi '.count($groups).' transaksi', 'action' => [
+                    'type' => 'receipt_split', 'transaction_id' => $transaction->id, 'groups' => $payload,
+                ]],
+                '2' => ['label' => 'Tidak, biarkan satu transaksi', 'action' => ['type' => 'cancel', 'message' => '👍 Oke, tetap satu transaksi.']],
+            ],
+            ['ya' => '1', 'iya' => '1', 'pecah' => '1', 'pisah' => '1', 'ok' => '1', 'oke' => '1', 'tidak' => '2', 'gak' => '2', 'ga' => '2', 'jangan' => '2', 'biarkan' => '2'],
+            '_Balas *1* / *pecah*, atau *2*. Diabaikan juga tidak apa-apa._'
+        );
+    }
+
+    /**
+     * Pecah satu transaksi struk menjadi satu transaksi per kategori (jawaban "1" atas
+     * offerReceiptSplit). Dompet, tanggal, dan total tidak berubah.
+     */
+    public function splitReceipt(array $action): void
+    {
+        $tenantId = (int) $this->message->tenant_id;
+        $original = Transaction::with(['balance'])->where('tenant_id', $tenantId)->find((int) ($action['transaction_id'] ?? 0));
+        $groups = is_array($action['groups'] ?? null) ? $action['groups'] : [];
+
+        if (! $original || count($groups) < 2) {
+            ($this->sendReplyCallback)('⚠️ Transaksi struk tidak ditemukan (mungkin sudah dihapus). Tidak ada yang dipecah.');
+
+            return;
+        }
+        // Nominal sudah diubah setelah struk dicatat → pembagian lama tidak berlaku lagi
+        if ((int) $original->amount !== (int) array_sum(array_column($groups, 'amount'))) {
+            ($this->sendReplyCallback)('⚠️ Nominal transaksi struk sudah berubah, jadi tidak bisa dipecah otomatis. Transaksi dibiarkan apa adanya.');
+
+            return;
+        }
+
+        $ledger = app(\App\Services\Ledger\TransactionLedger::class);
+        $merchant = trim((string) preg_replace('/^Belanja di\s+/u', '', (string) $original->description));
+        $created = [];
+
+        foreach ($groups as $group) {
+            $names = implode(', ', array_slice((array) ($group['items'] ?? []), 0, 4));
+            $tx = $this->transactionService->createTransaction([
+                'type' => 'expense',
+                'amount' => (int) $group['amount'],
+                'category_type' => (string) $group['category_type'],
+                'transaction_date' => $original->transaction_date->toDateString(),
+                'description' => mb_substr(trim($original->description.($names !== '' ? " — {$names}" : '')), 0, 255),
+                'source' => 'receipt_ai',
+                'confidence_score' => 0.95,
+                'account_name' => $original->balance?->account_name,
+                'metadata' => ['split_from' => $original->id],
+            ], false);
+
+            if (! $tx) {
+                // Gagal di tengah (mis. batas transaksi bulanan) → batalkan yang sudah dibuat
+                foreach ($created as $done) {
+                    $ledger->delete($done);
+                }
+                ($this->sendReplyCallback)('⚠️ Struk tidak jadi dipecah — transaksi asli tetap tercatat utuh.');
+
+                return;
+            }
+            $created[] = $tx;
+        }
+
+        $ledger->delete($original);
+
+        $reply = '✂️ *Struk dipecah jadi '.count($created)." transaksi* ✅\n";
+        if ($merchant !== '') {
+            $reply .= "🏪 {$merchant}\n";
+        }
+        $reply .= "\n";
+        foreach ($created as $tx) {
+            $tx->load('category');
+            $reply .= ($tx->category->icon ?? '📁').' '.($tx->category->name ?? 'Lainnya').' — Rp '.number_format((float) $tx->amount, 0, ',', '.')."\n";
+        }
+        $reply .= "\n💵 Total tetap: Rp ".number_format((float) $original->amount, 0, ',', '.');
+        if ($original->balance) {
+            $reply .= "\n👛 Sisa saldo {$original->balance->account_name}: Rp ".number_format((float) $original->balance->fresh()->balance, 0, ',', '.');
+        }
+
+        ($this->sendReplyCallback)($reply);
     }
 
     /**
@@ -726,25 +890,7 @@ class OcrProcessorService
         }
 
         // Nama dompet (tanpa awalan "Bank"/"Dompet"/"Rekening") muncul sebagai kata utuh
-        $captionLower = mb_strtolower($caption);
-        $best = null;
-        $bestLen = 0;
-        $wallets = \App\Models\Balance::where('tenant_id', $tenantId)->where('is_active', true)->pluck('account_name');
-        foreach ($wallets as $name) {
-            $full = mb_strtolower(trim((string) $name));
-            $short = trim((string) preg_replace('/^(bank|dompet|rekening|rek|e-?wallet|wallet)\s+/u', '', $full));
-            foreach (array_unique([$full, $short]) as $needle) {
-                if (mb_strlen($needle) < 3 || in_array($needle, ['utama', 'pribadi', 'saya'], true)) {
-                    continue;
-                }
-                if (mb_strlen($needle) > $bestLen && preg_match('/(?<![\p{L}\p{N}])'.preg_quote($needle, '/').'(?![\p{L}\p{N}])/u', $captionLower)) {
-                    $best = (string) $name;
-                    $bestLen = mb_strlen($needle);
-                }
-            }
-        }
-
-        return $best;
+        return app(\App\Services\Wallet\WalletResolver::class)->match($tenantId, $caption, true)?->account_name;
     }
 
     /**

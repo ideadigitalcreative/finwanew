@@ -313,8 +313,7 @@ it('keterangan foto menentukan kategori, dompet, dan deskripsi bukti QRIS', func
         'date' => now()->subDay()->toDateString(), 'total_amount' => 7200, 'reference_number' => 'REF-CAP-1', 'items' => [],
     ]))]);
 
-    $replies = implode("
-", scanSend($this->world, null, 'Beli minum kemarin lewat rek mandiri'));
+    $replies = implode("\n", scanSend($this->world, null, 'Beli minum kemarin lewat rek mandiri'));
 
     $tx = Transaction::with(['category', 'balance'])->where('tenant_id', $tenant->id)->latest('id')->first();
     expect($tx->type)->toBe('expense')

@@ -208,9 +208,22 @@ class TransactionExtractorService
         }
 
         // Last resort: check if known bank name appears with transaction keywords anywhere
+        // Nama bank harus kata utuh DAN menempel pada nominal atau di akhir pesan
+        // ("beli pulsa 50rb bca", "bayar listrik mandiri 200rb"). Dulu cukup muncul sebagai
+        // potongan kata di mana pun: "beli lampu neon 20rb" → dompet "neo",
+        // "beli buku mandiri belajar 50rb" → dompet "mandiri".
+        $amountToken = '(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|rebu|k|jt|juta)?';
+        $hasTxVerb = (bool) preg_match('/\b(beli|bayar|gaji|bonus|transfer|pakai|dari|via)\b/i', $messageText);
         foreach ($knownAccounts as $acc) {
-            if (stripos($messageText, $acc) !== false &&
-                preg_match('/\b(beli|bayar|gaji|bonus|transfer|pakai|dari|via)\b/i', $messageText)) {
+            if ($acc === 'rekening') {
+                continue; // kata umum, bukan nama dompet
+            }
+            $name = '(?<![\p{L}\p{N}])'.$acc.'(?![\p{L}\p{N}])';
+            if ($hasTxVerb && (
+                preg_match('/'.$name.'\s+'.$amountToken.'(?![\p{L}\p{N}])/iu', $messageText)
+                || preg_match('/(?<![\p{L}\p{N}])'.$amountToken.'\s+'.$name.'/iu', $messageText)
+                || preg_match('/'.$name.'\s*[.!]*$/iu', $messageText)
+            )) {
                 Log::info('Account name extracted from message using fallback pattern (Laravel fallback)', [
                     'message_text' => mb_substr($messageText, 0, 100),
                     'account_name' => $acc,
@@ -256,6 +269,57 @@ class TransactionExtractorService
             }
         }
 
+        // Tanggal ISO di mana pun: "2026-11-10" (tidak ambigu)
+        if (preg_match('/(?<![\d\/-])(20\d{2})-(\d{1,2})-(\d{1,2})(?![\d\/-])/', $textLower, $m)
+            && ($date = $this->plausiblePastDate((int) $m[3], (int) $m[2], (int) $m[1])) !== null) {
+            return $date;
+        }
+
+        // Tanggal angka TANPA kata "tgl" hanya di awal/akhir pesan: "12/11 makan 15rb",
+        // "makan 15rb 5/11", "makan 15rb 05-11-2026". Di tengah kalimat tidak dibaca
+        // (tanggal penerbangan, nomor pesanan). Bentuk "5-11" tanpa tahun tidak dibaca
+        // karena mirip rentang ("3-5 orang").
+        $numericDate = '(\d{1,2})(?:\/(\d{1,2})(?:\/(\d{2,4}))?|-(\d{1,2})-(\d{2,4}))';
+        if (preg_match('/^\s*'.$numericDate.'(?=\s|$)/', $textLower, $m) || preg_match('/(?<=\s)'.$numericDate.'\s*$/', $textLower, $m)) {
+            $month = (int) (($m[2] ?? '') !== '' ? $m[2] : ($m[4] ?? 0));
+            $yearRaw = ($m[3] ?? '') !== '' ? $m[3] : ($m[5] ?? '');
+            $year = $yearRaw !== '' ? (int) $yearRaw : null;
+            if ($year !== null && $year < 100) {
+                $year += 2000;
+            }
+            if (($date = $this->plausiblePastDate((int) $m[1], $month, $year)) !== null) {
+                return $date;
+            }
+        }
+
+        // "awal bulan" = tgl 1; "awal/akhir bulan lalu" (sebelum pola "bulan lalu" umum)
+        if (preg_match('/\b(awal|akhir)\s+bulan(?:\s+(lalu|kemarin|kmrn|ini))?\b/u', $textLower, $m)) {
+            $previous = in_array($m[2] ?? '', ['lalu', 'kemarin', 'kmrn'], true);
+            if ($m[1] === 'awal') {
+                return ($previous ? now()->subMonthNoOverflow() : now())->startOfMonth()->toDateString();
+            }
+            if ($previous) {
+                return now()->subMonthNoOverflow()->endOfMonth()->toDateString();
+            }
+            // "akhir bulan" saja: belum terjadi / tidak jelas → biarkan aturan lain
+        }
+
+        // Nama hari: "senin", "hari minggu", "jumat kemarin", "rabu lalu" → hari itu yang
+        // terakhir lewat. Bukan: "tiap senin", "senin depan", "Pasar Minggu/Senin".
+        if (preg_match(
+            '/(?<!tiap\s)(?<!setiap\s)(?<!pasar\s)(?<!besok\s)(?<!sampai\s)(?<!hingga\s)\b(?:hari\s+(minggu)|(?:hari\s+)?(senin|selasa|rabu|kamis|jum\'?at|sabtu|ahad))\b(?:\s+(lalu|kemarin|kmrn|kemaren|depan|besok|nanti))?/u',
+            $textLower, $m
+        ) && ! in_array($m[3] ?? '', ['depan', 'besok', 'nanti'], true)) {
+            $name = ($m[1] ?? '') !== '' ? 'minggu' : str_replace("'", '', $m[2]);
+            $dow = ['minggu' => 0, 'ahad' => 0, 'senin' => 1, 'selasa' => 2, 'rabu' => 3, 'kamis' => 4, 'jumat' => 5, 'sabtu' => 6][$name];
+            $back = (now()->dayOfWeek - $dow + 7) % 7;
+            if ($back === 0 && ($m[3] ?? '') !== '') {
+                $back = 7; // "senin lalu" diucapkan hari Senin = Senin pekan lalu
+            }
+
+            return now()->subDays($back)->toDateString();
+        }
+
         // Malam: "tadi malam" dikirim pagi/siang = semalam (kemarin); dikirim malam = hari ini
         if (preg_match('/\btadi\s+malam\b/u', $textLower)) {
             return now()->hour >= 18 ? now()->toDateString() : now()->subDay()->toDateString();
@@ -284,7 +348,12 @@ class TransactionExtractorService
         }
 
         // "3 hari lalu", "2 minggu yang lalu", "1 bulan lalu"
-        if (preg_match('/(\d+)\s*(hari|minggu|pekan|bulan)\s*(?:yang\s*|yg\s*)?lalu/u', $textLower, $m)) {
+        // Juga "dua hari lalu", "sehari/seminggu/sebulan lalu", "3 hr lalu", "2 mgg lalu"
+        $words = ['satu' => 1, 'dua' => 2, 'tiga' => 3, 'empat' => 4, 'lima' => 5, 'enam' => 6, 'tujuh' => 7, 'delapan' => 8, 'sembilan' => 9, 'sepuluh' => 10];
+        $ago = (string) preg_replace('/\bse(hari|minggu|pekan|bulan)\b/u', '1 $1', $textLower);
+        $ago = (string) preg_replace_callback('/\b('.implode('|', array_keys($words)).')\s+(?=hari|hr|minggu|mgg|pekan|bulan|bln)/u', fn ($w) => $words[$w[1]].' ', $ago);
+        $ago = (string) preg_replace(['/(\d)\s*hr\b/u', '/(\d)\s*mgg\b/u', '/(\d)\s*bln\b/u'], ['$1 hari', '$1 minggu', '$1 bulan'], $ago);
+        if (preg_match('/(\d+)\s*(hari|minggu|pekan|bulan)\s*(?:yang\s*|yg\s*)?lalu/u', $ago, $m)) {
             $n = (int) $m[1];
 
             $date = match ($m[2]) {
@@ -310,8 +379,14 @@ class TransactionExtractorService
             $day = (int) $matches[1];
             $now = now();
             // Validate day is within the valid range for the current month
-            if ($day < 1 || $day > $now->daysInMonth) {
+            if ($day < 1) {
                 return null;
+            }
+            if ($day > $now->daysInMonth) {
+                // "tgl 31" di bulan 30 hari → tanggal 31 bulan lalu (bila ada)
+                $prev = now()->subMonthNoOverflow();
+
+                return $day <= $prev->daysInMonth ? $prev->setDay($day)->toDateString() : null;
             }
             $date = $now->setDay($day);
             // If the day is in the future, assume last month
@@ -341,6 +416,28 @@ class TransactionExtractorService
         }
 
         return null; // Return null; caller applies current date as fallback
+    }
+
+    /**
+     * Tanggal angka yang masuk akal untuk transaksi: valid, tidak di masa depan, dan
+     * paling lama setahun lalu. Tanpa tahun → tahun ini, atau tahun lalu bila
+     * hasilnya di masa depan ("28/12" dikirim Januari).
+     */
+    protected function plausiblePastDate(int $day, int $month, ?int $year): ?string
+    {
+        $y = $year ?? now()->year;
+        if ($month < 1 || $month > 12 || $day < 1 || ! checkdate($month, $day, $y)) {
+            return null;
+        }
+        $date = \Carbon\Carbon::create($y, $month, $day)->startOfDay();
+        if ($year === null && $date->isAfter(now()->endOfDay())) {
+            $date = $date->subYear();
+        }
+        if ($date->isAfter(now()->endOfDay()) || $date->isBefore(now()->subYear()->startOfDay())) {
+            return null;
+        }
+
+        return $date->toDateString();
     }
 
     /**

@@ -29,6 +29,10 @@ final class AmountParser
     /** Teks siap-baca: angka dalam kata → digit, nomor HP dibuang. */
     public static function normalize(string $text): string
     {
+        // Tanggal angka ("05-11-2026", "5/11/2026", "2026-11-10") bukan nominal — dulu
+        // "makan 15000 05-11-2026" terbaca Rp 2.026.
+        $text = (string) preg_replace('/(?<![\d.,\/-])(?:\d{1,2}[\/-]\d{1,2}[\/-](?:19|20)?\d{2}|20\d{2}-\d{1,2}-\d{1,2})(?![\d.,\/-])/', ' ', $text);
+
         return BatchTransactionHelper::stripPhoneNumbers(self::wordsToDigits($text));
     }
 
@@ -131,7 +135,17 @@ final class AmountParser
     /** "seratus ribu" → "100000", "satu setengah juta" → "1500000". */
     public static function wordsToDigits(string $text): string
     {
-        $word = '(?:nol|satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|se?belas|puluh|ratus|seratus|ribu|seribu|juta|sejuta|miliar|milyar|setengah|stengah)';
+        $word = '(?:nol|satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|se?belas|belas|puluh|ratus|seratus|ribu|seribu|juta|sejuta|miliar|milyar|setengah|stengah)';
+
+        // "15ribuan" / "2 jutaan" → "15 ribu" / "2 juta" (kisaran dibaca sebagai nominalnya)
+        $text = (string) preg_replace('/(\d)\s*(ribu|juta)an\b/iu', '$1 $2', $text);
+
+        // "1,2 miliar" / "2 milyar" → digit (pembaca nominal hanya mengenal ribu & juta)
+        $text = (string) preg_replace_callback(
+            '/(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:miliar|milyar)\b/iu',
+            fn ($m) => (string) (int) round((float) str_replace(',', '.', $m[1]) * 1_000_000_000),
+            $text
+        );
 
         return (string) preg_replace_callback(
             // Tidak didahului angka: "1 juta", "2 ratus ribu" sudah ditangani pembaca angka

@@ -1060,6 +1060,19 @@ class WhatsAppWebhookService
                 ]);
             }
 
+            // Video: gateway tidak mengunduh medianya, `body` berisi keterangan video saja.
+            // Jangan sampai pencarian media cadangan menempelkan foto lain ke pesan ini —
+            // tandai sebagai video supaya job membalas dengan jelas (atau memproses
+            // keterangannya sebagai teks).
+            $isVideo = $waType === 'video';
+            if ($isVideo) {
+                $type = 'image';
+                $videoCaption = is_string($waMessageData['body'] ?? null) ? trim($this->sanitizeIncomingTextValue((string) $waMessageData['body'])) : '';
+                $content = $this->isUsableMediaReference($videoCaption) ? '' : $videoCaption;
+                $caption = mb_substr($content, 0, 500);
+                $mediaUrl = $mediaPath = $mediaFilename = null;
+            }
+
             // Check if we have original LID (for reply fallback)
             $originalFrom = $waMessageData['originalFrom'] ?? null;
 
@@ -1094,6 +1107,7 @@ class WhatsAppWebhookService
                     'media_path' => $mediaPath,
                     'filename' => $mediaFilename,
                     'caption' => $caption !== '' ? $caption : null,
+                    'wa_type' => $waType,
                     'location' => $waMessageData['location'] ?? null,
                     'contact' => $waMessageData['contact'] ?? null,
                     'mentions' => $waMessageData['mentionedIds'] ?? [],
@@ -1159,6 +1173,9 @@ class WhatsAppWebhookService
             }
             if (! empty($payload['raw_data']['caption'])) {
                 $metadata['caption'] = $payload['raw_data']['caption'];
+            }
+            if (($payload['raw_data']['wa_type'] ?? null) === 'video') {
+                $metadata['wa_type'] = 'video';
             }
 
             try {

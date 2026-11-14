@@ -151,7 +151,13 @@ class ProcessIncomingMessage implements ShouldQueue
             $sendReply,
             $mapCat
         );
-        
+        $this->ocrProcessor->setClarifyCallback(
+            // Di grup tidak ditanyakan (sama seperti pertanyaan bernomor lain)
+            fn (string $kind, string $title, array $options, array $aliases = [], string $footer = '') => $this->isGroupMessage()
+                ? null
+                : $this->clarify($kind, $title, $options, $aliases, $footer)
+        );
+
         $this->walletCommand = new WalletCommandService(
             $this->message, 
             $sendReply,
@@ -246,6 +252,9 @@ class ProcessIncomingMessage implements ShouldQueue
                     fn($data, $rev) => $this->transactionService->createTransaction($data, $rev),
                     fn($catCandidate, $tx) => $this->transactionService->applyCategoryCorrection($tx, $catCandidate)
                 );
+                $replyEdit->setWalletChangeCallback(
+                    fn (array $cmd, \App\Models\Transaction $tx) => $this->transactionService->handleWalletChange($cmd, $tx)
+                );
                 if ($replyEdit->handle()) {
                     return;
                 }
@@ -257,6 +266,24 @@ class ProcessIncomingMessage implements ShouldQueue
                     break;
                 
                 case 'image':
+                    // Video belum bisa dibaca. Ada keterangan → proses keterangannya sebagai
+                    // teks ("beli bensin 50rb"); tanpa keterangan → beri tahu, jangan diam
+                    // atau membalas "gagal memproses gambar".
+                    $msgMeta = is_array($this->message->metadata) ? $this->message->metadata : [];
+                    if (($msgMeta['wa_type'] ?? null) === 'video') {
+                        $videoCaption = trim((string) ($msgMeta['caption'] ?? ''));
+                        if ($videoCaption !== '') {
+                            $this->processTextMessage($videoCaption);
+                        } else {
+                            $this->replyService->sendReply(
+                                "🎥 *Video belum bisa dibaca*\n\n".
+                                "Kirim *foto* struk atau bukti transfernya, atau ketik transaksinya langsung.\n".
+                                'Contoh: _beli bensin 50rb_'
+                            );
+                        }
+                        break;
+                    }
+
                     $limitService = app(\App\Services\SubscriptionLimitService::class);
                     if (! $limitService->canTenantUseOcr($this->message->tenant_id)) {
                         $this->replyService->sendReply(
@@ -309,7 +336,16 @@ class ProcessIncomingMessage implements ShouldQueue
                 
                 case 'doc':
                 case 'csv':
-                    // TODO: Process document
+                    // Dokumen (PDF, Excel, CSV) belum bisa dibaca otomatis — dulu pesan ini
+                    // tidak dibalas sama sekali.
+                    $this->replyService->sendReply(
+                        "📄 *Dokumen belum bisa dibaca otomatis*\n\n".
+                        "Saat ini FinWa membaca *foto* (JPG/PNG), bukan PDF, Excel, atau CSV.\n\n".
+                        "Yang bisa dilakukan:\n".
+                        "• Kirim *screenshot/foto* struk atau bukti transfernya\n".
+                        "• Atau ketik transaksinya, contoh: _bayar listrik 250rb_\n".
+                        '• Beberapa transaksi sekaligus: satu transaksi per baris'
+                    );
 
                     break;
             }
@@ -1017,6 +1053,14 @@ class ProcessIncomingMessage implements ShouldQueue
                 $this->handleDebtQuery($messageText);
                 return;
             }
+        }
+
+        // FAST PATH 1.24: pindah dompet sebuah transaksi — "ubah dompet jadi mandiri",
+        // "ganti dompet kopi ke gopay", "salah dompet, harusnya pakai gopay".
+        // Dulu tidak ada: salah dompet berarti hapus lalu catat ulang.
+        if (($walletChange = TransactionService::parseWalletChange($messageText)) !== null
+            && $this->transactionService->handleWalletChange($walletChange)) {
+            return;
         }
 
         // FAST PATH 1.25: kalimat yang ARAH-nya tidak bisa ditebak dengan aman → tanya bernomor
@@ -2832,6 +2876,10 @@ class ProcessIncomingMessage implements ShouldQueue
                 }
                 break;
 
+            case 'receipt_split':
+                $this->ocrProcessor->splitReceipt($action);
+                break;
+
             case 'cancel':
                 $this->replyService->sendReply($action['message'] ?? '👍 Oke, tidak dicatat.');
                 break;
@@ -2953,6 +3001,28 @@ class ProcessIncomingMessage implements ShouldQueue
         // 2b) Hutang/piutang baru tanpa petunjuk uangnya bergerak atau tidak: "hutang budi 2jt"
         //     → uang baru diterima (masuk dompet) atau hutang lama (hanya dicatat)?
         if ($this->askDebtCashMode($messageText, $textLower)) {
+            return true;
+        }
+
+        // 2c) "budi transfer 100rb": nama orang di depan kata transfer — Budi yang mengirim
+        //     (pemasukan) atau saya transfer ke Budi (pengeluaran)? Dulu selalu pengeluaran.
+        if (preg_match('/^([a-z][a-z\'\.]*(?:\s+[a-z][a-z\'\.]*)?)\s+(?:transfer|tf|trf)\s+(?:rp\.?\s*)?\d/iu', trim($messageText), $tm)
+            && ! preg_match('/^(?:saya|aku|gue|gua|gw|ku|sy|kita|kami|udah|sudah|baru|habis|abis|mau|tadi|kemarin|kmrn|barusan|bayar|beli|biaya|admin|fee|ongkos|terima|dapat|dapet|uang|duit|bukti|struk|via|pakai|pake|lewat|catat|sudah\s+\w+|uang\s+\w+)\b/iu', trim($tm[1]))
+            && ! app(\App\Services\Wallet\WalletResolver::class)->match($this->message->tenant_id, $tm[1], true)
+            && ($amount = \App\Support\AmountParser::extract($messageText))) {
+            $name = ucwords(mb_strtolower(trim($tm[1])));
+            $rp = 'Rp '.number_format($amount, 0, ',', '.');
+            $this->clarify('transfer_direction', "🤔 *Transfer {$rp} — {$name}*: uang masuk atau keluar?", [
+                '1' => ['label' => "💰 {$name} transfer ke saya _(pemasukan)_", 'action' => [
+                    'type' => 'transaction', 'text' => "terima transfer dari {$name} {$amount}", 'force_type' => 'income', 'force_category_type' => 'pendapatan_transfer',
+                ]],
+                '2' => ['label' => "💸 Saya transfer ke {$name} _(pengeluaran)_", 'action' => [
+                    'type' => 'transaction', 'text' => "transfer ke {$name} {$amount}", 'force_type' => 'expense', 'force_category_type' => 'pengeluaran_transfer',
+                ]],
+                '3' => ['label' => 'Bukan transaksi, abaikan', 'action' => ['type' => 'cancel', 'message' => '👍 Oke, tidak dicatat.']],
+            ], ['masuk' => '1', 'terima' => '1', 'pemasukan' => '1', 'keluar' => '2', 'kirim' => '2', 'pengeluaran' => '2', 'batal' => '3', 'bukan' => '3'],
+                '_Balas *1*, *2*, atau *3*._');
+
             return true;
         }
 

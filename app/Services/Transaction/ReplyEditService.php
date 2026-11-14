@@ -59,6 +59,16 @@ class ReplyEditService
         $this->llmClient = $llmClient ?? new OpenAIChatClient;
     }
 
+    /** @var callable|null fn(array $command, Transaction $target): bool — pindah dompet transaksi yang dibalas */
+    protected $walletChangeCallback = null;
+
+    public function setWalletChangeCallback(callable $callback): static
+    {
+        $this->walletChangeCallback = $callback;
+
+        return $this;
+    }
+
     protected function sendReply(string $text): void
     {
         call_user_func($this->sendReplyCallback, $text);
@@ -995,6 +1005,22 @@ class ReplyEditService
     protected function startEditFlow(Transaction $transaction, array $replyContext, string $resolveMethod = 'mapping'): void
     {
         $transaction->load('category');
+
+        // Balasan berisi perintah pindah dompet ("ubah dompet jadi mandiri", "pakai gopay",
+        // "dompet bca") → dompet transaksi yang dibalas diganti. Bukan nama dompet user
+        // ("pakai sendok") → lanjut alur biasa.
+        if ($this->walletChangeCallback !== null) {
+            $content = trim((string) ($this->message->content ?? ''));
+            $walletCommand = TransactionService::parseWalletChange($content);
+            if ($walletCommand === null
+                && ! \App\Services\WhatsApp\MessageSignals::hasMoneyAmount(mb_strtolower($content))
+                && preg_match('/^(?:pakai|pake|lewat|via|dari|dompet|rekening|rek|pindah(?:kan|in)?\s+ke)\s+(.+)$/iu', $content, $w)) {
+                $walletCommand = ['keyword' => null, 'wallet' => trim($w[1]), 'explicit' => false];
+            }
+            if ($walletCommand !== null && call_user_func($this->walletChangeCallback, $walletCommand, $transaction)) {
+                return;
+            }
+        }
 
         // Ops — balasan berisi perintah koreksi kategori ("Ubah kategorinya jadi
         // bahan makanan", "taruh di bumbu dapur"): alur reply-edit hanya paham
