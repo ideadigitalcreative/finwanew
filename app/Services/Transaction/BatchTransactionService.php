@@ -303,7 +303,19 @@ class BatchTransactionService
         // 4. COMBINED: total transaction-like lines (itemCount + simpleFormatCount) >= 2
         $totalTransactionLines = $itemCount + $simpleFormatCount;
 
-        return ($hasHeaderPattern && $totalTransactionLines >= 2) || $totalTransactionLines >= 2 || $simpleFormatCount >= 2;
+        // Baris PERTAMA berpola "nama nominal" ("makan 15rb") dilewati di atas karena bisa
+        // saja judul ("Biaya tanggal 5"). Akibatnya daftar DUA baris "makan 15rb / bensin 50rb"
+        // hanya terhitung 1 baris → dijumlah jadi satu transaksi Rp 65.000. Hitung baris
+        // pertama bila jelas berakhiran nominal uang dan bukan judul.
+        $first = trim($lines[0]);
+        if ($totalTransactionLines === 1 && $simpleFormatCount === 0 && ! $hasHeaderPattern
+            && self::lineHasTrailingAmount($first)
+            && preg_match('/^\p{L}[\p{L}\s\'.&\/-]*\s+(?:rp\.?\s*)?\d[\d.,]*\s*(?:rb|ribu|rebu|k|jt|juta)?\s*$/iu', $first)
+            && ! preg_match('/^(?:tgl|tanggal|total|jumlah|subtotal|saldo|sisa)\b/iu', $first)) {
+            $totalTransactionLines++;
+        }
+
+        return($hasHeaderPattern && $totalTransactionLines >= 2) || $totalTransactionLines >= 2 || $simpleFormatCount >= 2;
     }
 
     /**

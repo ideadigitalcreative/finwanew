@@ -42,25 +42,43 @@ class GroupMessageGate
             || ! empty($wa['group']['jid']);
     }
 
+    /** Kunci penanda "bot baru saja menulis di grup ini" (lihat MessageReplyService). */
+    public static function awaitingKey(string $groupJid): string
+    {
+        return 'group_awaiting:'.md5($groupJid);
+    }
+
     /**
      * @param  callable(array): array  $forward  meneruskan payload pesan ke pipeline (buat Message + job)
+     * @param  (callable(array): ?string)|null  $resolveMedia  referensi media yang sah dari payload foto, atau null
      * @return array hasil untuk respons webhook
      */
-    public function handle(array $wa, string $sessionId, Channel $channel, ?string $messageId, callable $forward): array
+    public function handle(array $wa, string $sessionId, Channel $channel, ?string $messageId, callable $forward, ?callable $resolveMedia = null): array
     {
         $group = (array) ($wa['group'] ?? []);
         $groupJid = $this->groupJid($wa, $group);
         $body = trim((string) ($wa['body'] ?? ''));
+        $type = (string) ($wa['type'] ?? 'chat');
+        $isImage = $type === 'image';
 
-        // v1: hanya pesan teks (struk/foto di grup belum didukung)
-        if (! in_array($wa['type'] ?? 'chat', ['chat', 'text'], true) || $body === '' || $groupJid === null) {
+        // Teks, atau FOTO yang keterangannya ber-pemicu ("#belanja bulanan"). Voice note,
+        // dokumen, dan foto tanpa pemicu tetap diabaikan tanpa balasan (anti-spam).
+        if (! in_array($type, ['chat', 'text', 'image'], true) || $groupJid === null || (! $isImage && $body === '')) {
             return ['success' => true, 'skipped' => true, 'reason' => 'group_non_text'];
         }
 
-        $text = $this->stripTrigger($body, (bool) ($group['mentionsBot'] ?? false));
+        $triggerSource = $isImage ? trim((string) ($wa['caption'] ?? '')) : $body;
+        $text = $triggerSource === '' ? null : $this->stripTrigger($triggerSource, (bool) ($group['mentionsBot'] ?? false));
+        $answerOnly = false;
         if ($text === null) {
-            // Tidak ada pemicu → obrolan biasa, abaikan tanpa balasan
-            return ['success' => true, 'skipped' => true, 'reason' => 'group_no_trigger'];
+            // Tanpa pemicu. Satu pengecualian: bot baru saja menulis di grup ini (mungkin
+            // bertanya) dan pesannya pendek ("ya", "1", "50rb") → teruskan sebagai CALON
+            // jawaban; job hanya memprosesnya bila memang ada pertanyaan untuk anggota itu.
+            if ($isImage || mb_strlen($body) > 30 || str_contains($body, "\n") || ! Cache::has(self::awaitingKey($groupJid))) {
+                return ['success' => true, 'skipped' => true, 'reason' => $isImage ? 'group_non_text' : 'group_no_trigger'];
+            }
+            $text = $body;
+            $answerOnly = true;
         }
 
         $authorPhone = $this->cleanPhone($group['authorPhone'] ?? null);
@@ -74,13 +92,15 @@ class GroupMessageGate
         $lower = mb_strtolower($text);
 
         // ── Perintah grup ───────────────────────────────────────────────
-        if (preg_match('/^(?:aktifkan|aktif|hubungkan|daftarkan)(?:\s+(?:finwa|grup|group|bot))?$/u', $lower)) {
+        if ($answerOnly || $isImage) {
+            // calon jawaban / foto: bukan perintah grup
+        } elseif (preg_match('/^(?:aktifkan|aktif|hubungkan|daftarkan)(?:\s+(?:finwa|grup|group|bot))?$/u', $lower)) {
             return $this->activate($sessionId, $groupJid, $authorPhone, $authorLid, $wa);
         }
-        if (preg_match('/^(?:nonaktifkan|matikan|putuskan|stop)(?:\s+(?:finwa|grup|group|bot))?$/u', $lower)) {
+        if (! $answerOnly && ! $isImage && preg_match('/^(?:nonaktifkan|matikan|putuskan|stop)(?:\s+(?:finwa|grup|group|bot))?$/u', $lower)) {
             return $this->deactivate($sessionId, $groupJid, $authorPhone, $authorLid);
         }
-        if ($text === '' || preg_match('/^(?:help|bantuan|panduan|menu|cara)$/u', $lower)) {
+        if (! $answerOnly && ! $isImage && ($text === '' || preg_match('/^(?:help|bantuan|panduan|menu|cara)$/u', $lower))) {
             $this->reply($sessionId, $groupJid, self::helpText());
 
             return ['success' => true, 'handled' => 'group_help'];
@@ -89,6 +109,9 @@ class GroupMessageGate
         // ── Grup harus aktif ────────────────────────────────────────────
         $binding = WhatsappGroup::where('group_jid', $groupJid)->where('is_active', true)->first();
         if (! $binding) {
+            if ($answerOnly) {
+                return ['success' => true, 'skipped' => true, 'reason' => 'group_no_trigger'];
+            }
             $this->replyOnce($sessionId, $groupJid, "inactive:{$groupJid}",
                 "ℹ️ *FinWa belum aktif di grup ini.*\n\n".
                 "Pemilik akun FinWa *Paket Pro* bisa mengaktifkan dengan mengetik:\n".
@@ -100,6 +123,9 @@ class GroupMessageGate
 
         // ── Premium ─────────────────────────────────────────────────────
         if (! $this->isPremium((int) $binding->tenant_id)) {
+            if ($answerOnly) {
+                return ['success' => true, 'skipped' => true, 'reason' => 'group_no_trigger'];
+            }
             $this->replyOnce($sessionId, $groupJid, "notpremium:{$groupJid}",
                 "⚠️ *Fitur grup khusus Paket Pro.*\n\n".
                 'Langganan akun pemilik grup bukan Paket Pro. Perpanjang di: '.config('app.url').'/subscriptions'
@@ -111,6 +137,9 @@ class GroupMessageGate
         // ── Anggota terdaftar di akun ini ───────────────────────────────
         $member = $this->findMember((int) $binding->tenant_id, $authorPhone, $authorLid);
         if (! $member) {
+            if ($answerOnly) {
+                return ['success' => true, 'skipped' => true, 'reason' => 'group_no_trigger'];
+            }
             $who = $authorName ?: 'Nomor Anda';
             $this->replyOnce($sessionId, $groupJid, 'notmember:'.$groupJid.':'.($authorPhone ?? $authorLid),
                 "🔒 *{$who} belum terdaftar di akun FinWa grup ini.*\n\n".
@@ -124,6 +153,20 @@ class GroupMessageGate
 
         $memberNumber = (string) $member->whatsapp_number;
 
+        // ── Foto struk berketerangan "#…" ───────────────────────────────
+        $media = null;
+        $caption = null;
+        if ($isImage) {
+            $media = $resolveMedia !== null ? $resolveMedia($wa) : null;
+            if (! is_string($media) || $media === '') {
+                $this->reply($sessionId, $groupJid, "⚠️ Foto tidak bisa dibaca. Kirim ulang fotonya dengan keterangan diawali *#*.");
+
+                return ['success' => true, 'handled' => 'group_image_unreadable'];
+            }
+            // Keterangan yang hanya pemicu ("#", "#struk") bukan keterangan transaksi
+            $caption = preg_match('/^(?:struk|nota|bon|scan|foto|catat|finwa)?$/iu', $text) ? null : mb_substr($text, 0, 500);
+        }
+
         return $forward([
             'tenant_id' => (int) $binding->tenant_id,
             'channel_id' => $channel->id,
@@ -132,11 +175,15 @@ class GroupMessageGate
             // Identitas ANGGOTA → atribusi, konfirmasi & konteks per anggota
             'sender_id' => $memberNumber,
             'message_id' => $messageId,
-            'type' => 'text',
-            'content' => $text,
+            'type' => $isImage ? 'image' : 'text',
+            'content' => $isImage ? $media : $text,
             'timestamp' => $wa['timestamp'] ?? time(),
             'original_sender_id' => $authorLid,
             'raw_data' => [
+                'media_url' => $media,
+                'mimetype' => $isImage ? (string) ($wa['mimetype'] ?? 'image/jpeg') : null,
+                'caption' => $caption,
+                'group_answer_only' => $answerOnly,
                 'from' => $memberNumber,
                 'originalFrom' => $wa['originalFrom'] ?? null,
                 'isGroup' => true,

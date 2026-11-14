@@ -43,6 +43,9 @@ class MessageReplyService
                 return;
             }
             $text = $this->sanitizeForGroup($text, $meta['author_name'] ?? null);
+            // Bot baru saja menulis di grup ini → selama 5 menit, jawaban pendek anggota
+            // tanpa "#" ("ya", "1", "50rb") diteruskan gerbang untuk dicek (GroupMessageGate).
+            Cache::put(\App\Services\WhatsApp\GroupMessageGate::awaitingKey((string) $meta['group_jid']), true, now()->addMinutes(5));
         }
 
         try {

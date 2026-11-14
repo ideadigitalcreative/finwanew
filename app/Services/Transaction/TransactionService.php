@@ -1688,6 +1688,18 @@ class TransactionService
         );
     }
 
+    /** Ada konfirmasi hapus yang sedang menunggu jawaban pengirim ini? */
+    public function hasPendingDelete(): bool
+    {
+        foreach ($this->pendingDeleteKeys() as $key) {
+            if (Cache::get($key) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function forgetPendingDelete(): void
     {
         foreach ($this->pendingDeleteKeys() as $key) {

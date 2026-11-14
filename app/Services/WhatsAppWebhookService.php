@@ -113,7 +113,16 @@ class WhatsAppWebhookService
                     $sessionId,
                     $channel,
                     $messageId,
-                    fn (array $payload) => $this->forwardToCoreApi($payload)
+                    fn (array $payload) => $this->forwardToCoreApi($payload),
+                    // Foto di grup: hanya referensi media yang dikirim gateway di pesan ini
+                    // (tanpa pencarian "unggahan terbaru", yang bisa menempelkan foto lain)
+                    function (array $wa): ?string {
+                        $ref = $this->sanitizeIncomingTextValue((string) ($wa['body'] ?? ''));
+
+                        return $ref !== '' && $this->isUsableMediaReference($ref)
+                            ? $this->normalizeIncomingMediaReference($ref)
+                            : null;
+                    }
                 );
             }
 
@@ -1176,6 +1185,9 @@ class WhatsAppWebhookService
             }
             if (($payload['raw_data']['wa_type'] ?? null) === 'video') {
                 $metadata['wa_type'] = 'video';
+            }
+            if (! empty($payload['raw_data']['group_answer_only'])) {
+                $metadata['group_answer_only'] = true;
             }
 
             try {

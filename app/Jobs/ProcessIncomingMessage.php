@@ -239,6 +239,15 @@ class ProcessIncomingMessage implements ShouldQueue
                 return;
             }
 
+            // Pesan grup TANPA pemicu "#" hanya diteruskan gerbang sebagai calon jawaban
+            // ("ya", "1", "50rb"). Bukan jawaban atas pertanyaan yang sedang menunggu
+            // anggota ini → abaikan tanpa balasan (obrolan biasa).
+            $incomingMeta = is_array($this->message->metadata) ? $this->message->metadata : [];
+            if (($incomingMeta['group_answer_only'] ?? false)
+                && ! $this->isAnswerToPendingQuestion(trim((string) $this->message->content))) {
+                return;
+            }
+
             // Fase 1 reply-edit (docs/RENCANA-IMPLEMENTASI-REPLY-EDIT.md):
             // tangani reply pesan transaksi & konfirmasi Ya/Batal sebelum flow lama.
             // Ops — tambah callback ekstraksi & pembuatan (create via reply).
@@ -1067,7 +1076,10 @@ class ProcessIncomingMessage implements ShouldQueue
         //   "pinjam budi 100rb"  → saya pinjam dari Budi, atau Budi pinjam dari saya?
         //   "tarik tunai 500rb"  → pindah antar dompet sendiri (bukan pemasukan)
         //   "bensin 50"          → maksudnya Rp 50.000?
-        if (! $this->isGroupMessage() && $this->askIfAmbiguous($messageText, $textLower, $hasTransactionKeyword || $hasDebtKeyword)) {
+        // Berlaku juga di grup: dulu dilewati, sehingga "#tarik tunai 500rb" tercatat
+        // pengeluaran, "#pinjam budi 100rb" jadi "Pengeluaran Lainnya", dst. Pertanyaan
+        // disimpan per anggota, dan jawabannya boleh tanpa "#" (GroupMessageGate).
+        if ($this->askIfAmbiguous($messageText, $textLower, $hasTransactionKeyword || $hasDebtKeyword)) {
             return;
         }
 
@@ -2784,6 +2796,49 @@ class ProcessIncomingMessage implements ShouldQueue
         return \App\Support\SenderIdentity::keys($this->message, $this->getAttributionSenderId());
     }
 
+    /**
+     * Apakah $text jawaban atas pertanyaan yang sedang menunggu pengirim ini?
+     * Dipakai untuk pesan grup tanpa "#": hanya jawaban yang cocok yang diproses.
+     */
+    protected function isAnswerToPendingQuestion(string $text): bool
+    {
+        if ($text === '' || mb_strlen($text) > 30) {
+            return false;
+        }
+        $tenantId = $this->message->tenant_id;
+        $lower = mb_strtolower($text);
+        $isAmount = (bool) preg_match('/^(?:rp\.?\s*)?[\d.,]+\s*(?:rb|ribu|rebu|k|jt|juta)?$/iu', $text);
+        $isYesNo = (bool) preg_match('/^(?:ya|iya|yaa|y|ok|oke|yes|betul|benar|lanjut|catat|tidak|tdk|ga|gak|nggak|enggak|no|batal|bukan|jangan)$/u', $lower);
+
+        // Pertanyaan bernomor
+        $pending = \App\Services\WhatsApp\Clarification::pending($tenantId, $this->senderKeys());
+        if ($pending !== null) {
+            return \App\Services\WhatsApp\Clarification::resolve($text, $pending) !== null
+                || (isset($pending['extra']['amount_base']) && $isAmount);
+        }
+
+        // Konfirmasi hapus (Ya/Tidak)
+        if ($this->transactionService->hasPendingDelete()) {
+            return $isYesNo;
+        }
+
+        // Konfirmasi ubah lewat balasan pesan (reply-edit)
+        if (config('finwa_reply_edit.enabled', false)
+            && (new \App\Services\Transaction\ReplyEditService($this->message, fn () => null))->pendingConfirmation() !== null) {
+            return $isYesNo || (bool) preg_match('/^\d{1,2}$/', $text) || $isAmount;
+        }
+
+        $context = new \App\Services\ConversationContextService($tenantId, $this->getAttributionSenderId());
+
+        // "Ketik 1 untuk Pemasukan / 2 untuk Pengeluaran", atau "Catat …? (ya)"
+        if ($context->getPendingConfirmation() !== null) {
+            return $isYesNo || (bool) preg_match('/^(?:1|2|pemasukan|pendapatan|pengeluaran|masuk|keluar)$/u', $lower);
+        }
+
+        // "Berapa biayanya?" → hanya nominal
+        return $context->getPendingTransaction() !== null && $isAmount;
+    }
+
     protected function clarify(string $kind, string $title, array $options, array $aliases = [], string $footer = '', array $extra = []): void
     {
         $this->replyService->sendReply(\App\Services\WhatsApp\Clarification::ask(
@@ -3139,8 +3194,9 @@ class ProcessIncomingMessage implements ShouldQueue
         $no = 1;
         foreach ($candidates->take(5) as $w) {
             $options[(string) $no++] = [
+                // Di grup saldo tidak ditampilkan (dibaca semua anggota)
                 'label' => ($askSource ? "Dari *{$w->account_name}*" : "Ke *{$w->account_name}*").
-                    ' _(saldo Rp '.number_format((float) $w->balance, 0, ',', '.').')_',
+                    ($this->isGroupMessage() ? '' : ' _(saldo Rp '.number_format((float) $w->balance, 0, ',', '.').')_'),
                 'action' => [
                     'type' => 'wallet_move',
                     'from_id' => $askSource ? $w->id : $known->id,
