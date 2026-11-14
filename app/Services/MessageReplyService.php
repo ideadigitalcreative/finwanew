@@ -121,7 +121,27 @@ class MessageReplyService
     public function sanitizeForGroup(string $text, ?string $authorName): string
     {
         $lines = preg_split('/\R/u', $text) ?: [$text];
-        $kept = array_values(array_filter($lines, fn ($l) => ! preg_match('/\bsaldo\b/iu', $l)));
+        // Selain saldo, dibuang juga yang hanya relevan bagi pemilik akun / bikin ramai:
+        // total pengeluaran bulanan seluruh akun, pencapaian (achievement), dan kalimat penyemangat.
+        $inAchievement = false;
+        $kept = array_values(array_filter($lines, function ($l) use (&$inAchievement) {
+            if (preg_match('/Achievement Unlocked/u', $l)) {
+                $inAchievement = true;
+
+                return false;
+            }
+            if ($inAchievement) {
+                if (preg_match('/^⭐\s*\+\d+\s*poin/u', trim($l))) {
+                    $inAchievement = false;
+                }
+
+                return false;
+            }
+
+            return ! preg_match('/\bsaldo\b/iu', $l)
+                && ! preg_match('/^📊\s*_?(?:Total pengeluaran|Belanja|Pengeluaran)\s+\p{L}+:\s*Rp/iu', trim($l))
+                && ! preg_match('/^(?:💪 Mantap!|🌟 Keren!|🎯 Bagus!)/u', trim($l));
+        }));
         // Buang garis pemisah / baris kosong yang tertinggal di akhir
         while ($kept !== [] && preg_match('/^[\s━─\-=_]*$/u', end($kept))) {
             array_pop($kept);

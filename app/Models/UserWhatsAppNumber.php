@@ -17,6 +17,7 @@ class UserWhatsAppNumber extends Model
         'is_primary',
         'is_active',
         'is_lid',
+        'default_balance_id',
     ];
 
     protected $casts = [

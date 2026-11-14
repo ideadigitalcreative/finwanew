@@ -117,8 +117,8 @@ beforeEach(function () {
     ]);
     foreach ([GF_SUAMI => 'Suami', GF_ISTRI => 'Istri'] as $phone => $label) {
         UserWhatsAppNumber::create([
-            'user_id' => $owner->id, 'tenant_id' => $this->tenant->id, 'whatsapp_number' => $phone,
-            'name' => $label, 'is_primary' => $phone === GF_SUAMI, 'is_active' => true,
+            'user_id' => $owner->id, 'tenant_id' => $this->tenant->id, 'whatsapp_number' => (string) $phone,
+            'name' => $label, 'is_primary' => (string) $phone === GF_SUAMI, 'is_active' => true,
         ]);
     }
     WhatsappGroup::create(['group_jid' => GF_JID, 'tenant_id' => $this->tenant->id, 'is_active' => true]);
@@ -295,4 +295,103 @@ it('pesan dua baris yang bukan daftar tidak dipecah', function () {
 
     expect(gfTxs())->toHaveCount(1)
         ->and((int) gfTxs()->first()->amount)->toBe(15000);
+});
+
+// ── 5. Perintah tidak dialihkan ke chat pribadi ──
+
+function gfToPrivate(): array
+{
+    return array_values(array_filter($GLOBALS['gf_sent'], fn ($s) => ! str_ends_with((string) $s['to'], '@g.us')));
+}
+
+it('perintah hapus/ubah dompet dijawab di grup, tanpa saldo', function () {
+    gfSend('#makan siang 15rb');
+
+    gfSend('#ubah dompet jadi mandiri');
+    expect(gfToPrivate())->toBe([])
+        ->and(gfReplies())->toContain('Dompet Transaksi Diubah')
+        ->and(gfReplies())->not->toContain('Saldo')
+        ->and(gfTxs()->first()->balance->account_name)->toBe('Bank Mandiri');
+
+    gfSend('#hapus transaksi makan siang');
+    expect(gfToPrivate())->toBe([])
+        ->and(gfReplies())->toContain('Hapus transaksi ini?');
+});
+
+it('"#bayar hutang budi" tidak dibalas daftar hutang lewat chat pribadi', function () {
+    gfSend('#bayar hutang budi');
+
+    expect(gfToPrivate())->toBe([])
+        ->and(gfReplies())->not->toContain('chat pribadi');
+});
+
+it('permintaan info tetap dialihkan ke chat pribadi', function () {
+    gfSend('#cek saldo');
+
+    expect(gfToPrivate())->not->toBe([])
+        ->and(collect($GLOBALS['gf_sent'])->firstWhere('to', GF_JID)['text'])->toContain('chat pribadi');
+});
+
+// ── 6. Transaksi anggota lain ──
+
+it('anggota biasa diberi tahu bahwa transaksi itu milik anggota lain', function () {
+    gfSend('#makan siang 15rb', GF_SUAMI);
+
+    gfSend('#ubah makan siang jadi 20rb', GF_ISTRI);
+    expect(gfReplies())->toContain('Itu transaksi Suami')
+        ->and((int) gfTxs()->first()->amount)->toBe(15000);
+
+    gfSend('#hapus makan siang', GF_ISTRI);
+    expect(gfReplies())->toContain('Itu transaksi Suami')
+        ->and(gfTxs())->toHaveCount(1);
+});
+
+it('pemilik akun boleh mengoreksi transaksi anggota lain', function () {
+    gfSend('#beli sayur 20rb', GF_ISTRI);
+
+    gfSend('#ubah beli sayur jadi 25rb', GF_SUAMI);
+    expect((int) gfTxs()->first()->amount)->toBe(25000)
+        ->and(gfBalance('Cash'))->toBe(975000);
+});
+
+// ── 7. Dompet bawaan per anggota ──
+
+it('transaksi tanpa dompet memakai dompet bawaan anggota', function () {
+    $gopay = Balance::where('tenant_id', $this->tenant->id)->where('account_name', 'Gopay')->first();
+    UserWhatsAppNumber::where('whatsapp_number', GF_ISTRI)->update(['default_balance_id' => $gopay->id]);
+
+    gfSend('#beli sayur 20rb', GF_ISTRI);
+    gfSend('#makan siang 15rb', GF_SUAMI);
+    gfSend('#beli buah 10rb lewat rek mandiri', GF_ISTRI);
+
+    expect(gfTxs()->pluck('balance.account_name')->all())->toBe(['Gopay', 'Cash', 'Bank Mandiri']);
+});
+
+it('dompet bawaan yang sudah nonaktif diabaikan', function () {
+    $gopay = Balance::where('tenant_id', $this->tenant->id)->where('account_name', 'Gopay')->first();
+    UserWhatsAppNumber::where('whatsapp_number', GF_ISTRI)->update(['default_balance_id' => $gopay->id]);
+    $gopay->update(['is_active' => false]);
+
+    gfSend('#beli sayur 20rb', GF_ISTRI);
+    expect(gfTxs()->first()->balance->account_name)->toBe('Cash');
+});
+
+// ── 8. Balasan grup tidak ramai ──
+
+it('balasan grup tanpa achievement, total bulanan, dan sapaan panjang', function () {
+    gfSend('#makan siang 15rb'); // transaksi pertama → dulu memunculkan achievement
+    expect(gfReplies())->toContain('Rp 15.000')
+        ->and(gfReplies())->not->toContain('Achievement')
+        ->and(gfReplies())->not->toContain('poin')
+        ->and(gfReplies())->not->toContain('Total pengeluaran');
+
+    gfSend('#gaji 5jt');
+    expect(gfReplies())->toContain('Pemasukan')
+        ->and(gfReplies())->not->toContain('Mantap')
+        ->and(gfReplies())->not->toContain('Keren')
+        ->and(gfReplies())->not->toContain('berkah');
+
+    gfSend('#halo');
+    expect(mb_strlen(gfReplies()))->toBeLessThan(160)
+        ->and(gfReplies())->not->toContain('asisten keuangan pribadi');
 });

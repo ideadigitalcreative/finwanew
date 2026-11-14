@@ -2697,7 +2697,12 @@ class ProcessIncomingMessage implements ShouldQueue
 
         // Info keuangan (tanpa nominal = bukan pencatatan) → jawab di chat pribadi
         $isInfoRequest = preg_match('/\b(?:saldo|dompet|rekening|cashflow|cash\s+flow|arus\s+kas|ringkasan|rekap|laporan|statistik|analisis|export|pdf|riwayat|transaksi|pengeluaran|pemasukan|budget|anggaran|target|tabungan|hutang|utang|piutang|total|berapa)\b/u', $lower)
-            && ! \App\Services\WhatsApp\MessageSignals::hasMoneyAmount($lower);
+            && ! \App\Services\WhatsApp\MessageSignals::hasMoneyAmount($lower)
+            // Perintah (ubah/hapus/catat/bayar …) bukan permintaan info walau memuat kata
+            // "transaksi"/"dompet"/"hutang": "#hapus transaksi makan siang",
+            // "#ubah dompet jadi mandiri", "#bayar hutang budi" dijawab di grup.
+            // (Baris saldo tetap dibuang dari balasan grup oleh sanitizeForGroup.)
+            && ! preg_match('/^(?:ubah|edit|ganti|koreksi|ralat|hapus|delete|batal|batalkan|batalin|kembalikan|pindah(?:kan|in)?|salah|harusnya|seharusnya|catat|bayar|beli|terima|dapat|dapet|kasih|transfer|tf|ingatkan|ingetin)\b/u', $lower);
         if ($isInfoRequest) {
             $name = $metadata['author_name'] ?? null;
             $this->replyService->sendReply('📩 '.($name ? "{$name}, " : '').'infonya saya kirim lewat *chat pribadi* ya.');

@@ -49,7 +49,14 @@ interface UserWhatsAppNumber {
     whatsapp_number: string;
     name: string | null;
     is_primary: boolean;
+    default_balance_id?: number | null;
     created_at: string;
+}
+
+interface WalletOption {
+    id: number;
+    name: string;
+    is_default: boolean;
 }
 
 interface LimitInfo {
@@ -68,6 +75,7 @@ interface Props {
     tenantIsActive: boolean;
     hasActiveSubscription: boolean;
     userWhatsAppNumbers?: UserWhatsAppNumber[];
+    wallets?: WalletOption[];
     limitInfo?: LimitInfo;
     tenant_id?: number;
 }
@@ -143,7 +151,10 @@ const numberForm = useForm({
     whatsapp_number: '',
     name: '',
     is_primary: false,
+    default_balance_id: null as number | null,
 });
+
+const walletName = (id?: number | null) => props.wallets?.find((w) => w.id === id)?.name ?? null;
 
 // Preset nama alias untuk memudahkan pengguna menamai nomor (Suami, Istri, dll.)
 const namePresets = ['Suami', 'Istri', 'Anak', 'Orang Tua', 'Usaha', 'Pribadi'];
@@ -677,6 +688,7 @@ const editNumber = (number: UserWhatsAppNumber) => {
     numberForm.whatsapp_number = number.whatsapp_number;
     numberForm.name = number.name || '';
     numberForm.is_primary = number.is_primary;
+    numberForm.default_balance_id = number.default_balance_id ?? null;
     showAddNumberDialog.value = true;
 };
 
@@ -867,6 +879,10 @@ onUnmounted(() => {
                                 </span>
                             </div>
                             <p v-if="number.name" class="text-xs sm:text-sm text-[#4d4634]/60 dark:text-white/50 mt-1 truncate">{{ number.name }}</p>
+                            <p v-if="walletName(number.default_balance_id)" class="text-xs text-[#4d4634]/60 dark:text-white/50 mt-0.5 truncate inline-flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">account_balance_wallet</span>
+                                Dompet bawaan: {{ walletName(number.default_balance_id) }}
+                            </p>
                         </div>
                         <div class="flex items-center gap-1 shrink-0 self-end sm:self-center border-t sm:border-t-0 pt-2 sm:pt-0 border-[#eae8e2] dark:border-white/10 w-full sm:w-auto justify-end">
                             <button
@@ -965,6 +981,22 @@ onUnmounted(() => {
                                         </div>
                                         <p class="mt-1 text-xs text-[#4d4634]/50 dark:text-white/50">
                                             Pilih preset atau ketik nama sendiri. Nama ini dipakai untuk filter "Oleh" di transaksi.
+                                        </p>
+                                    </div>
+                                    <div v-if="props.wallets && props.wallets.length > 1">
+                                        <Label for="default_balance_id" class="text-sm font-medium text-[#4d4634] dark:text-white/70">Dompet bawaan (Opsional)</Label>
+                                        <select
+                                            id="default_balance_id"
+                                            v-model="numberForm.default_balance_id"
+                                            class="mt-1.5 w-full rounded-xl border border-[#eae8e2] dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2 text-sm focus:border-[#ffd23f] focus:ring-[#ffd23f] text-[#1b1c19] dark:text-white"
+                                        >
+                                            <option :value="null">Ikut dompet utama akun</option>
+                                            <option v-for="wallet in props.wallets" :key="wallet.id" :value="wallet.id">
+                                                {{ wallet.name }}{{ wallet.is_default ? ' (utama)' : '' }}
+                                            </option>
+                                        </select>
+                                        <p class="mt-1 text-xs text-[#4d4634]/50 dark:text-white/50">
+                                            Transaksi dari nomor ini yang tidak menyebut dompet akan dicatat di dompet ini.
                                         </p>
                                     </div>
                                     <div class="flex items-center space-x-2 pt-2">

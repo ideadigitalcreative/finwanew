@@ -61,6 +61,14 @@ class GreetingService
             // Ignore if can't get name
         }
 
+        // Di grup: sapaan singkat (tanpa nama pemilik akun & daftar panjang)
+        $meta = is_array($this->message->metadata) ? $this->message->metadata : [];
+        if (! empty($meta['group_jid'])) {
+            $this->sendReply("{$greeting}! 👋 Catat dengan awalan *#*, mis. _#beli kopi 25rb_. Panduan: _#bantuan_");
+
+            return;
+        }
+
         $this->sendReply(
             "{$greeting}{$userName}! 👋\n\n" .
             "Saya *FinWa*, asisten keuangan pribadi Anda. Siap membantu mencatat dan menganalisis keuangan Anda dengan mudah! 💰\n\n" .

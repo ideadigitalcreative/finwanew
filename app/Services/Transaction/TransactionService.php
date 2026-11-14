@@ -1189,7 +1189,8 @@ class TransactionService
                     'requested_wallet' => $accountName,
                 ]);
 
-                $balance = $balanceService->getDefaultBalance($this->message->tenant_id);
+                $balance = $this->memberDefaultBalance()
+                    ?? $balanceService->getDefaultBalance($this->message->tenant_id);
 
                 // Peringatan hanya bila kandidat memang nama rekening/e-wallet — bukan kata
                 // biasa yang salah ditebak sebagai dompet.
@@ -1208,7 +1209,9 @@ class TransactionService
         } else {
             // Tidak ada kandidat dari regex: dompet user mungkin tetap disebut di pesan
             // ("makan 15rb lewat rek mandiri"). Tidak ada → dompet utama.
+            // Lalu dompet bawaan anggota pengirim (diatur di dashboard), baru dompet utama akun.
             $balance = $this->matchWalletInMessage($txData)
+                ?? $this->memberDefaultBalance()
                 ?? $balanceService->getDefaultBalance($this->message->tenant_id);
 
             if ($balance) {
@@ -1343,6 +1346,85 @@ class TransactionService
         }
 
         return $transaction;
+    }
+
+    /**
+     * Baris nomor WhatsApp "asli" pengirim (alias LID dipetakan ke nomor induknya).
+     */
+    protected function senderNumber(): ?\App\Models\UserWhatsAppNumber
+    {
+        $numberId = $this->resolveSenderWhatsAppNumberId();
+        if (! $numberId) {
+            return null;
+        }
+        try {
+            $map = \App\Models\UserWhatsAppNumber::canonicalIdMap((int) $this->message->tenant_id);
+            $numberId = $map[$numberId] ?? $numberId;
+        } catch (\Throwable $e) {
+            // pakai id apa adanya
+        }
+
+        return \App\Models\UserWhatsAppNumber::where('tenant_id', $this->message->tenant_id)->find($numberId);
+    }
+
+    /** Dompet bawaan anggota pengirim (kolom default_balance_id), bila diatur & masih aktif. */
+    protected function memberDefaultBalance(): ?Balance
+    {
+        try {
+            $balanceId = $this->senderNumber()?->default_balance_id;
+
+            return $balanceId
+                ? Balance::where('tenant_id', $this->message->tenant_id)->where('is_active', true)->find($balanceId)
+                : null;
+        } catch (\Throwable $e) {
+            // Kolom belum ada (migrasi belum jalan) → perilaku lama
+            return null;
+        }
+    }
+
+    /**
+     * Transaksi berkata kunci $keyword tidak ditemukan di antara milik pengirim:
+     * mungkin milik anggota lain di akun yang sama.
+     *  - Pengirim pemilik akun (nomor utama) → transaksinya dikembalikan (boleh dikoreksi).
+     *  - Anggota biasa → dibalas jujur "itu transaksi <nama>", dikembalikan false.
+     *  - Memang tidak ada → null.
+     *
+     * @return Transaction|false|null
+     */
+    protected function findOtherMembersTransaction(string $keyword, int $days = 30)
+    {
+        $keyword = mb_strtolower(trim($keyword));
+        if ($keyword === '') {
+            return null;
+        }
+
+        $transaction = Transaction::where('tenant_id', $this->message->tenant_id)
+            ->where(fn ($q) => $q->whereNull('source')->orWhere('source', '!=', Transaction::KIND_RECONCILE_BASELINE))
+            ->whereRaw('LOWER(description) LIKE ?', ['%'.$keyword.'%'])
+            ->where('created_at', '>=', now()->subDays($days))
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->first();
+        if (! $transaction) {
+            return null;
+        }
+
+        if ($this->senderNumber()?->is_primary) {
+            return $transaction;
+        }
+
+        $owner = $transaction->user_whatsapp_number_id
+            ? \App\Models\UserWhatsAppNumber::find($transaction->user_whatsapp_number_id)
+            : null;
+        $who = $owner?->name ?: 'anggota lain';
+        $desc = KeywordNormalizer::stripAmountFromDescription($transaction->description) ?: $keyword;
+        $this->sendReply(
+            "🔒 *Itu transaksi {$who}*\n\n".
+            "📝 {$desc} · Rp ".number_format((float) $transaction->amount, 0, ',', '.')."\n\n".
+            "Hanya *{$who}* atau pemilik akun yang bisa mengubah atau menghapusnya."
+        );
+
+        return false;
     }
 
     /**
@@ -2052,6 +2134,15 @@ class TransactionService
                     ->first();
             }
 
+            // Bukan milik pengirim → mungkin milik anggota lain (pemilik akun boleh menghapus)
+            if (! $transaction) {
+                $other = $this->findOtherMembersTransaction($keyword, 1);
+                if ($other === false) {
+                    return;
+                }
+                $transaction = $other;
+            }
+
             if (! $transaction) {
                 $this->sendReply(
                     "⚠️ *Transaksi tidak ditemukan*\n\n".
@@ -2164,6 +2255,15 @@ class TransactionService
                     ->where('created_at', '>=', now()->subDays(30))
                     ->orderBy('created_at', 'desc')
                     ->first();
+            }
+
+            // Bukan milik pengirim → mungkin milik anggota lain (pemilik akun boleh mengoreksi)
+            if (! $transaction) {
+                $other = $this->findOtherMembersTransaction($keyword);
+                if ($other === false) {
+                    return;
+                }
+                $transaction = $other;
             }
 
             if (! $transaction) {
@@ -2793,6 +2893,13 @@ class TransactionService
                     ->where('created_at', '>=', now()->subDays(30))
                     ->orderBy('created_at', 'desc')
                     ->first();
+                if (! $target) {
+                    $other = $this->findOtherMembersTransaction($command['keyword']);
+                    if ($other === false) {
+                        return true;
+                    }
+                    $target = $other;
+                }
                 if (! $target) {
                     $this->sendReply(
                         "⚠️ *Transaksi tidak ditemukan*\n\n".

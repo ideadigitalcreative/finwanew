@@ -257,9 +257,17 @@ class WhatsAppChannelController extends Controller
                     'whatsapp_number' => $number->whatsapp_number,
                     'name' => $number->name,
                     'is_primary' => $number->is_primary,
+                    'default_balance_id' => $number->default_balance_id,
                     'created_at' => $number->created_at->format('Y-m-d H:i:s'),
                 ];
             });
+
+        // Dompet aktif akun — pilihan "dompet bawaan" per nomor
+        $wallets = \App\Models\Balance::where('tenant_id', $tenant->id)->where('is_active', true)
+            ->orderByDesc('is_default')->orderBy('account_name')
+            ->get(['id', 'account_name', 'is_default'])
+            ->map(fn ($b) => ['id' => $b->id, 'name' => $b->account_name, 'is_default' => (bool) $b->is_default])
+            ->values();
 
         // Get limit info
         $limitService = new SubscriptionLimitService;
@@ -271,6 +279,7 @@ class WhatsAppChannelController extends Controller
             'tenantIsActive' => $tenantIsActive,
             'hasActiveSubscription' => $hasActiveSubscription,
             'userWhatsAppNumbers' => $userWhatsAppNumbers,
+            'wallets' => $wallets,
             'limitInfo' => $limitInfo,
             'tenant_id' => $tenant->id,
         ]);
@@ -780,10 +789,12 @@ class WhatsAppChannelController extends Controller
             'whatsapp_number' => 'required|string|regex:/^[0-9+\-\s()]+$/|max:20',
             'name' => 'nullable|string|max:255',
             'is_primary' => 'nullable|boolean',
+            'default_balance_id' => 'nullable|integer',
         ]);
 
         $tenant = Tenant::findOrFail($request->tenant_id);
         $user = $request->user();
+        $defaultBalanceId = $this->resolveDefaultBalanceId($request, $tenant->id);
 
         // Clean phone number
         $phoneNumber = preg_replace('/[^0-9]/', '', $request->whatsapp_number);
@@ -855,6 +866,7 @@ class WhatsAppChannelController extends Controller
             'is_primary' => $isPrimary,
             'is_active' => true,
             'is_lid' => $isLid,
+            'default_balance_id' => $defaultBalanceId,
         ]);
 
         // Sync users.whatsapp_number if:
@@ -1008,16 +1020,32 @@ class WhatsAppChannelController extends Controller
     /**
      * Update user WhatsApp number
      */
+    /**
+     * Dompet bawaan yang dipilih untuk sebuah nomor: harus dompet aktif milik tenant ini.
+     * Kosong / tidak sah → null (ikut dompet utama akun).
+     */
+    protected function resolveDefaultBalanceId(Request $request, int $tenantId): ?int
+    {
+        $id = (int) $request->input('default_balance_id', 0);
+        if ($id <= 0) {
+            return null;
+        }
+
+        return \App\Models\Balance::where('tenant_id', $tenantId)->where('is_active', true)->whereKey($id)->value('id');
+    }
+
     public function updateNumber(Request $request, UserWhatsAppNumber $userWhatsAppNumber)
     {
         $request->validate([
             'whatsapp_number' => 'required|string|regex:/^[0-9+\-\s()]+$/|max:20',
             'name' => 'nullable|string|max:255',
             'is_primary' => 'nullable|boolean',
+            'default_balance_id' => 'nullable|integer',
         ]);
 
         $tenant = Tenant::findOrFail($request->tenant_id);
         $user = $request->user();
+        $defaultBalanceId = $this->resolveDefaultBalanceId($request, $tenant->id);
 
         // Verify ownership
         if ($userWhatsAppNumber->user_id !== $user->id || $userWhatsAppNumber->tenant_id !== $tenant->id) {
@@ -1065,6 +1093,7 @@ class WhatsAppChannelController extends Controller
             'whatsapp_number' => $phoneNumber,
             'name' => $request->name,
             'is_primary' => $isPrimary,
+            'default_balance_id' => $defaultBalanceId,
         ]);
 
         // Sync users.whatsapp_number if this is the primary number
