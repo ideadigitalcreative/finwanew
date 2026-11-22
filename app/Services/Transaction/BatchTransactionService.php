@@ -21,6 +21,14 @@ use Illuminate\Support\Facades\Log;
  */
 class BatchTransactionService
 {
+    /**
+     * Baris hasil penjualan = pemasukan: "hasil jual 2500 robux 388.000",
+     * "jual 2 baju 150rb", "penjualan kue", "terjual 3", "uang hasil jualan",
+     * "untung jualan". Hanya di AWAL baris supaya "ongkir penjualan" /
+     * "beli bahan jualan" tetap pengeluaran.
+     */
+    public const SALE_INCOME_PATTERN = '/^(?:(?:uang|duit)\s+)?(?:hasil\s+)?(?:jual|jualan|penjualan|terjual|laku|omset|omzet|untung|keuntungan|laba|profit|cuan)\b/iu';
+
     protected Message $message;
 
     protected $sendReplyCallback;
@@ -242,8 +250,8 @@ class BatchTransactionService
             // This must be checked FIRST because it's more specific (requires action keyword)
             if (preg_match($actionAmountPattern, $line, $matches)) {
                 $firstWord = strtolower($matches[1]);
-                // Verify first word is an action keyword
-                if (in_array($firstWord, $actionKeywords)) {
+                // Verify first word is an action keyword (atau baris hasil penjualan)
+                if (in_array($firstWord, $actionKeywords) || preg_match(self::SALE_INCOME_PATTERN, $lineLower)) {
                     $simpleFormatCount++;
 
                     continue; // This line is counted, move to next
@@ -514,7 +522,8 @@ class BatchTransactionService
                         || preg_match('/^(pengeluaran|belanja|bayar|beli)/i', $descLower);
 
                     $isExplicitIncome = in_array($firstWord, $incomeActionKeywords) ||
-                        preg_match('/^(pemasukan|pendapatan|dari|terima|dapat|dapet|gaji|bonus|honor|masuk|uang\\s+masuk|dikasih|dikasi|hadiah|kado|angpao)/i', $descLower);
+                        preg_match('/^(pemasukan|pendapatan|dari|terima|dapat|dapet|gaji|bonus|honor|masuk|uang\\s+masuk|dikasih|dikasi|hadiah|kado|angpao)/i', $descLower) ||
+                        preg_match(self::SALE_INCOME_PATTERN, $descLower);
 
                     if ($isSingleLineSplit && ! $isExplicitExpense && ! $isExplicitIncome && $singleLineIsIncome !== null) {
                         // ", 5 Oktober 500rb" tidak punya kata jenis → ikut kalimat pembuka

@@ -148,6 +148,42 @@ it('judul "Pengeluaran <tanggal>" tanpa kata tanggal → pakai tanggal judul', f
     ['Pemasukan 22/09/2026', '2026-09-22'],
 ]);
 
+it('baris "hasil jual ..." di daftar campuran dicatat sebagai pemasukan', function () {
+    // Bug produksi 20/11/2026 (pesan asli): baris ketiga tercatat sebagai
+    // pengeluaran "Pengeluaran Lainnya" karena "hasil jual" tidak dikenali.
+    $reply = batchSend(implode("\n", [
+        'beli robux 500 robux 67.500',
+        'beli 1000 robux 140.000',
+        'hasil jual 2500 robux 388.000',
+    ]), $this->world);
+
+    $txs = Transaction::with('category')->where('tenant_id', $this->world[0]->id)->get()->keyBy('description');
+
+    expect($txs)->toHaveCount(3)
+        ->and($txs['beli robux 500 robux']->type)->toBe('expense')
+        ->and($txs['beli 1000 robux']->type)->toBe('expense')
+        ->and($txs['hasil jual 2500 robux']->type)->toBe('income')
+        ->and($txs['hasil jual 2500 robux']->category->type)->toBe('pendapatan_usaha')
+        ->and($reply)->toContain('Rp 207.500')
+        ->and($reply)->toContain('Rp 388.000');
+});
+
+it('kata penjualan di awal baris → pemasukan, kata beli tetap pengeluaran', function (string $line, string $type) {
+    batchSend("beli bensin 20rb\n".$line, $this->world);
+
+    $tx = Transaction::where('tenant_id', $this->world[0]->id)->where('description', '!=', 'beli bensin')->first();
+    expect($tx->type)->toBe($type);
+})->with([
+    ['jual 2500 robux 388.000', 'income'],
+    ['penjualan kue 150rb', 'income'],
+    ['terjual 3 baju 210rb', 'income'],
+    ['uang hasil jualan 500rb', 'income'],
+    ['laku 2 sepatu 300rb', 'income'],
+    ['untung jualan 75rb', 'income'],
+    ['ongkir penjualan 15rb', 'expense'],
+    ['beli bahan jualan 90rb', 'expense'],
+]);
+
 // ── Unit helper ──
 
 it('mengenali baris yang diakhiri nominal', function (string $line, bool $expected) {
