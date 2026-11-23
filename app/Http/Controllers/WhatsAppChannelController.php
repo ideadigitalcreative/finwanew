@@ -1167,6 +1167,13 @@ class WhatsAppChannelController extends Controller
 
             if ($otherNumber) {
                 $otherNumber->update(['is_primary' => true]);
+
+                // Data akun (users.whatsapp_number) ikut pindah ke nomor utama yang baru.
+                // Dulu tidak: setelah nomor utama dihapus, akun tetap menunjuk nomor lama.
+                if (preg_match('/^628[0-9]{8,13}$/', (string) $otherNumber->whatsapp_number)) {
+                    $user->whatsapp_number = $otherNumber->whatsapp_number;
+                    $user->save();
+                }
             }
         }
 
