@@ -243,12 +243,13 @@ class WhatsAppChannelController extends Controller
             ->orderBy('created_at', 'desc')
             ->get()
             ->filter(function ($number) {
-                // Hide LID numbers from user view
+                // ID perangkat (LID) disembunyikan, kecuali masih menjadi nomor utama
+                // (akun yang mendaftar lewat WhatsApp dan belum menambah nomor HP).
                 if ($number->is_primary) {
                     return true; // Always show primary number
                 }
 
-                return !$number->is_lid;
+                return ! $number->isDeviceId();
             })
             ->values() // Re-index array after filter
             ->map(function ($number) {
@@ -257,6 +258,8 @@ class WhatsAppChannelController extends Controller
                     'whatsapp_number' => $number->whatsapp_number,
                     'name' => $number->name,
                     'is_primary' => $number->is_primary,
+                    // Dikunci di tampilan & server: tidak bisa diubah atau dihapus
+                    'is_device_id' => $number->isDeviceId(),
                     'default_balance_id' => $number->default_balance_id,
                     'created_at' => $number->created_at->format('Y-m-d H:i:s'),
                 ];
@@ -1055,8 +1058,25 @@ class WhatsAppChannelController extends Controller
         // Clean phone number
         $phoneNumber = preg_replace('/[^0-9]/', '', $request->whatsapp_number);
 
+        // ID perangkat WhatsApp (LID) dikunci: nomornya tidak boleh diubah, karena
+        // pesan dari HP itu dikenali lewat ID ini. Nama & dompet bawaan tetap boleh.
+        if ($userWhatsAppNumber->isDeviceId()) {
+            $storedDigits = preg_replace('/[^0-9]/', '', (string) $userWhatsAppNumber->whatsapp_number);
+            if ($phoneNumber !== $storedDigits) {
+                $message = 'ID perangkat WhatsApp tidak bisa diubah. Tambahkan nomor HP sebagai nomor baru.';
+                if ($request->header('X-Inertia')) {
+                    return back()->withErrors(['whatsapp_number' => $message])->with('error', $message);
+                }
+
+                return redirect()->back()->with('error', $message);
+            }
+            $phoneNumber = $userWhatsAppNumber->whatsapp_number;
+        }
+
         // Normalize: add 62 if doesn't start with it
-        if (substr($phoneNumber, 0, 1) === '0') {
+        if ($userWhatsAppNumber->isDeviceId()) {
+            // ID perangkat disimpan apa adanya (tanpa awalan 62)
+        } elseif (substr($phoneNumber, 0, 1) === '0') {
             $phoneNumber = '62'.substr($phoneNumber, 1);
         } elseif (substr($phoneNumber, 0, 2) !== '62') {
             $phoneNumber = '62'.$phoneNumber;
@@ -1130,15 +1150,15 @@ class WhatsAppChannelController extends Controller
             abort(403, 'Unauthorized');
         }
 
-        // Don't allow deleting LID (Linked Device ID)
-        if ($userWhatsAppNumber->is_lid) {
+        // ID perangkat WhatsApp (LID) tidak boleh dihapus — termasuk baris lama yang
+        // tersimpan is_lid=false. Menghapusnya memutus pengenalan HP pengirim.
+        if ($userWhatsAppNumber->isDeviceId()) {
+            $message = 'ID perangkat WhatsApp tidak bisa dihapus. ID ini dikelola otomatis oleh sistem.';
             if ($request->header('X-Inertia')) {
-                return back()->withErrors([
-                    'whatsapp_number' => 'Tidak dapat menghapus Linked Device ID. Nomor ini dikelola otomatis oleh sistem.',
-                ])->with('error', 'Tidak dapat menghapus Linked Device ID.');
+                return back()->withErrors(['whatsapp_number' => $message])->with('error', $message);
             }
 
-            return redirect()->back()->with('error', 'Tidak dapat menghapus Linked Device ID.');
+            return redirect()->back()->with('error', $message);
         }
 
         // Don't allow deleting if it's the only number
@@ -1159,10 +1179,14 @@ class WhatsAppChannelController extends Controller
 
         // If deleting primary, set another as primary
         if ($userWhatsAppNumber->is_primary) {
+            // Utamakan nomor HP sungguhan; ID perangkat hanya bila tidak ada pilihan lain
             $otherNumber = UserWhatsAppNumber::where('user_id', $user->id)
                 ->where('tenant_id', $tenant->id)
                 ->where('id', '!=', $userWhatsAppNumber->id)
                 ->where('is_active', true)
+                ->orderBy('id')
+                ->get()
+                ->sortBy(fn (UserWhatsAppNumber $n) => $n->isDeviceId() ? 1 : 0)
                 ->first();
 
             if ($otherNumber) {

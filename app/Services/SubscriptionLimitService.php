@@ -329,10 +329,14 @@ class SubscriptionLimitService
      */
     public function getCurrentWhatsAppNumberCount(int $userId, int $tenantId): int
     {
+        // ID perangkat WhatsApp (LID) tidak dihitung — termasuk baris lama yang tersimpan
+        // is_lid=false. Dulu ikut terhitung, sehingga user menghapus ID perangkatnya agar
+        // bisa menambah nomor, dan pencatatan per nomor jadi kacau.
         return UserWhatsAppNumber::where('user_id', $userId)
             ->where('tenant_id', $tenantId)
             ->where('is_active', true)
-            ->where('is_lid', false) // Don't count technical LIDs towards the subscription limit
+            ->get(['id', 'whatsapp_number', 'is_lid'])
+            ->reject(fn (UserWhatsAppNumber $n) => $n->isDeviceId())
             ->count();
     }
 

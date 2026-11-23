@@ -37,6 +37,24 @@ class UserWhatsAppNumber extends Model
     }
 
     /**
+     * ID perangkat WhatsApp (LID), bukan nomor HP Indonesia (628…). Aturan yang sama
+     * dengan storeNumber. Dipakai juga untuk baris lama yang tersimpan is_lid=false:
+     * pendaftaran lewat WhatsApp menyimpan LID sebagai "Primary Number" tanpa tanda.
+     */
+    public static function looksLikeDeviceId(?string $number): bool
+    {
+        $digits = preg_replace('/\D/', '', (string) $number);
+
+        return $digits !== '' && ! preg_match('/^628\d{8,12}$/', $digits);
+    }
+
+    /** Baris ini ID perangkat WhatsApp → dikelola sistem, tidak boleh diubah/dihapus user. */
+    public function isDeviceId(): bool
+    {
+        return (bool) $this->is_lid || self::looksLikeDeviceId($this->whatsapp_number);
+    }
+
+    /**
      * Peta id nomor → id nomor "asli" dalam satu tenant. Baris LID adalah alias
      * WhatsApp untuk nomor yang sama (disembunyikan di halaman WhatsApp), jadi
      * transaksinya dihitung milik nomor aslinya. Induk dicari lewat

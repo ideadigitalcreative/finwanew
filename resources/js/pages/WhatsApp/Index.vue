@@ -49,6 +49,8 @@ interface UserWhatsAppNumber {
     whatsapp_number: string;
     name: string | null;
     is_primary: boolean;
+    // ID perangkat WhatsApp (LID), bukan nomor HP — dikunci, tidak bisa diubah/dihapus
+    is_device_id?: boolean;
     default_balance_id?: number | null;
     created_at: string;
 }
@@ -877,8 +879,20 @@ onUnmounted(() => {
                                     <span class="material-symbols-outlined text-[13px]">star</span>
                                     Utama
                                 </span>
+                                <span
+                                    v-if="number.is_device_id"
+                                    class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#eae8e2] text-[#4d4634] dark:bg-white/10 dark:text-white/70 shrink-0 whitespace-nowrap"
+                                    title="ID perangkat WhatsApp, bukan nomor HP. Dikelola otomatis dan tidak bisa diubah atau dihapus."
+                                >
+                                    <span class="material-symbols-outlined text-[13px]">lock</span>
+                                    ID Perangkat
+                                </span>
                             </div>
                             <p v-if="number.name" class="text-xs sm:text-sm text-[#4d4634]/60 dark:text-white/50 mt-1 truncate">{{ number.name }}</p>
+                            <p v-if="number.is_device_id" class="text-xs text-[#4d4634]/70 dark:text-white/60 mt-1.5 leading-relaxed">
+                                Ini ID perangkat WhatsApp, bukan nomor HP. Dibuat otomatis saat mendaftar lewat WhatsApp dan dipakai untuk mengenali HP Anda,
+                                jadi tidak bisa diubah atau dihapus. Tambahkan nomor HP Anda lalu jadikan nomor utama.
+                            </p>
                             <p v-if="walletName(number.default_balance_id)" class="text-xs text-[#4d4634]/60 dark:text-white/50 mt-0.5 truncate inline-flex items-center gap-1">
                                 <span class="material-symbols-outlined text-[14px]">account_balance_wallet</span>
                                 Dompet bawaan: {{ walletName(number.default_balance_id) }}
@@ -893,7 +907,16 @@ onUnmounted(() => {
                             >
                                 <span class="material-symbols-outlined text-lg">star</span>
                             </button>
+                            <span
+                                v-if="number.is_device_id"
+                                class="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-[#4d4634]/60 dark:text-white/50"
+                                title="ID perangkat dikunci: tidak bisa diubah atau dihapus"
+                            >
+                                <span class="material-symbols-outlined text-lg">lock</span>
+                                Terkunci
+                            </span>
                             <button
+                                v-if="!number.is_device_id"
                                 @click="editNumber(number)"
                                 class="p-2 rounded-lg text-[#4d4634]/50 dark:text-white/50 hover:text-[#725a00] hover:bg-[#f5f3ee] dark:hover:bg-white/10 transition-colors"
                                 title="Edit"
@@ -901,6 +924,7 @@ onUnmounted(() => {
                                 <span class="material-symbols-outlined text-lg">edit</span>
                             </button>
                             <button
+                                v-if="!number.is_device_id"
                                 @click="deleteNumber(number.id)"
                                 :disabled="props.userWhatsAppNumbers.length <= 1"
                                 class="p-2 rounded-lg text-[#4d4634]/50 dark:text-white/50 hover:text-[#ad2c4f] hover:bg-[#ffc9d0]/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
