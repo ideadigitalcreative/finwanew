@@ -70,6 +70,13 @@ class FAQService
             return false;
         }
 
+        // GUARD: pesan bernominal tanpa bentuk pertanyaan = catatan transaksi, bukan FAQ.
+        // "CO skintint FFY - free facemist 63k" dulu tertangkap pola 'free' dan dibalas
+        // daftar harga paket, sehingga transaksinya tidak pernah tercatat.
+        if (self::looksLikeTransactionEntry($messageText)) {
+            return false;
+        }
+
         // Define FAQ patterns and their answers
         $faqPatterns = [
             // ========== CARA PAKAI / PENGGUNAAN ==========
@@ -510,6 +517,34 @@ class FAQService
         }
 
         return false;
+    }
+
+    /**
+     * Pesan yang menyebut nominal uang ("63k", "25rb", "1,5jt", "Rp 20.000", "63000")
+     * dan tidak berbentuk pertanyaan dianggap catatan transaksi.
+     *
+     * Angka polos pendek ("50 kali/bulan", "2 nomor") sengaja tidak dihitung nominal,
+     * supaya pertanyaan soal batasan tetap dijawab FAQ.
+     */
+    public static function looksLikeTransactionEntry(string $messageText): bool
+    {
+        $text = mb_strtolower($messageText);
+
+        if (str_contains($text, '?')) {
+            return false;
+        }
+
+        if (preg_match('/\b(berapa|berapakah|apakah|gimana|bagaimana|kenapa|mengapa|cara|caranya)\b/u', $text)) {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '/(?<![\w.,])(?:rp\.?\s*)?\d+(?:[.,]\d+)?\s*(?:k|rb|ribu|jt|juta|m|miliar|milyar)\b'
+            .'|\brp\.?\s*\d'
+            .'|(?<![\w.,])\d{1,3}(?:\.\d{3})+(?![\w.,]*\d)'
+            .'|(?<![\w.,\/])\d{4,}(?![\w\/])/u',
+            $text
+        );
     }
 
     /**
