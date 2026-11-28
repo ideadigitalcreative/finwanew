@@ -2357,7 +2357,7 @@ class TransactionService
 
                     return true;
                 }
-                $this->handleViewTransactions($shown, array_values($payload['ids']));
+                $this->handleViewTransactions($shown, array_values($payload['ids']), $payload['filter'] ?? null);
 
                 return true;
             }
@@ -2367,13 +2367,54 @@ class TransactionService
     }
 
     /**
+     * Permintaan DAFTAR pengeluaran/pemasukan: "rekap detail pengeluaran",
+     * "rincian pemasukan minggu ini", "daftar pengeluaran bulan ini".
+     * Dulu jatuh ke "Format Tidak Dikenali".
+     *
+     * Tanpa periode → 7 hari terakhir. Periode lain (nama bulan, "bulan lalu", …)
+     * dan pesan bernominal → null, biar ditangani jalur lama.
+     *
+     * @return array{type: 'expense'|'income', period: 'today'|'week'|'month'}|null
+     */
+    public static function parseTypedListRequest(string $text): ?array
+    {
+        $t = mb_strtolower(trim((string) preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text)));
+        $t = (string) preg_replace('/\s+/u', ' ', $t);
+
+        if (! preg_match(
+            '/^(?:(?:tolong|minta|mau|coba|pengen|ingin)\s+)*(?:(?:lihat|liat|cek|tampilkan|tampilin|tunjukkan)\s+)?(?:(?:rekap|rekapan|laporan)\s+)?(?:detail|rincian|daftar|list|riwayat|history)\s+(?:(?:rekap|rekapan|transaksi|semua)\s+)*(pengeluaran|pemasukan|pendapatan|penghasilan)(?:\s+(?:saya|aku|ku|gue|gw|nya|dong|ya|kak|min))*(?:\s+(.+))?$/u',
+            $t,
+            $m
+        )) {
+            return null;
+        }
+
+        $rest = trim($m[2] ?? '');
+        $period = match (true) {
+            $rest === '' => 'week',
+            (bool) preg_match('/^hari ini$/u', $rest) => 'today',
+            (bool) preg_match('/^(?:(?:dalam\s+)?(?:1|se|satu)\s?minggu(?:\s+(?:ini|terakhir))?|minggu ini|7 hari(?:\s+terakhir)?)$/u', $rest) => 'week',
+            (bool) preg_match('/^bulan ini$/u', $rest) => 'month',
+            default => null,
+        };
+
+        if ($period === null) {
+            return null;
+        }
+
+        return ['type' => $m[1] === 'pengeluaran' ? 'expense' : 'income', 'period' => $period];
+    }
+
+    /**
      * @param  int  $offset  jumlah baris yang sudah ditampilkan (halaman lanjutan)
      * @param  list<int>  $previousIds  ID yang sudah ditampilkan → nomor urut berlanjut
+     * @param  array{type: string, period: string}|null  $filter  hasil parseTypedListRequest()
      */
-    public function handleViewTransactions(int $offset = 0, array $previousIds = []): void
+    public function handleViewTransactions(int $offset = 0, array $previousIds = [], ?array $filter = null): void
     {
         try {
             $today = now()->toDateString();
+            $filterType = in_array($filter['type'] ?? null, ['expense', 'income'], true) ? $filter['type'] : null;
 
             // Try today first, then last 7 days
             // Hanya transaksi terkonfirmasi (selaras dengan FinancialQueryService),
@@ -2382,12 +2423,30 @@ class TransactionService
             $notBaseline = fn ($q) => $q->whereNull('source')->orWhere('source', '!=', Transaction::KIND_RECONCILE_BASELINE);
             $base = fn () => Transaction::where('tenant_id', $this->message->tenant_id)
                 ->where('status', 'confirmed')
-                ->where($notBaseline);
+                ->where($notBaseline)
+                ->when($filterType !== null, fn ($q) => $q->where('type', $filterType));
 
             $scope = fn ($q) => $q->whereDate('transaction_date', $today);
             $title = '📋 *Transaksi Hari Ini*';
-            if (! $base()->where($scope)->exists()) {
-                $weekAgo = now()->subDays(7)->toDateString();
+            $weekAgo = now()->subDays(7)->toDateString();
+
+            if ($filterType !== null) {
+                // Daftar per jenis: periode ditentukan permintaan, bukan "hari ini dulu"
+                $noun = $filterType === 'expense' ? 'Pengeluaran' : 'Pemasukan';
+                $monthStart = now()->startOfMonth()->toDateString();
+                [$scope, $label] = match ($filter['period'] ?? 'week') {
+                    'today' => [$scope, 'Hari Ini'],
+                    'month' => [fn ($q) => $q->whereDate('transaction_date', '>=', $monthStart), 'Bulan Ini'],
+                    default => [fn ($q) => $q->whereDate('transaction_date', '>=', $weekAgo), '7 Hari Terakhir'],
+                };
+                $title = "📋 *{$noun} {$label}*";
+
+                if (! $base()->where($scope)->exists()) {
+                    $this->sendReply('📋 Belum ada '.mb_strtolower($noun).' '.mb_strtolower($label).".\n\n💡 Ketik _lihat transaksi_ untuk semua transaksi terbaru.");
+
+                    return;
+                }
+            } elseif (! $base()->where($scope)->exists()) {
                 $scope = fn ($q) => $q->whereDate('transaction_date', '>=', $weekAgo);
                 $title = '📋 *Transaksi 7 Hari*';
             }
@@ -2435,10 +2494,17 @@ class TransactionService
             }
 
             $reply .= "\n";
-            if ($totalIncome > 0) $reply .= '💰 Masuk: Rp '.number_format($totalIncome, 0, ',', '.')."\n";
-            if ($totalExpense > 0) $reply .= '💸 Keluar: Rp '.number_format($totalExpense, 0, ',', '.')."\n";
-            $net = $totalIncome - $totalExpense;
-            $reply .= "📊 Net: Rp ".number_format($net, 0, ',', '.');
+            if ($filterType !== null) {
+                // Daftar satu jenis: cukup totalnya, "Net" tidak bermakna
+                $reply .= $filterType === 'expense'
+                    ? '💸 Total pengeluaran: Rp '.number_format($totalExpense, 0, ',', '.')
+                    : '💰 Total pemasukan: Rp '.number_format($totalIncome, 0, ',', '.');
+            } else {
+                if ($totalIncome > 0) $reply .= '💰 Masuk: Rp '.number_format($totalIncome, 0, ',', '.')."\n";
+                if ($totalExpense > 0) $reply .= '💸 Keluar: Rp '.number_format($totalExpense, 0, ',', '.')."\n";
+                $net = $totalIncome - $totalExpense;
+                $reply .= "📊 Net: Rp ".number_format($net, 0, ',', '.');
+            }
             if ($last < $total) {
                 $reply .= "\n\n➡️ Masih ada *".($total - $last).'* transaksi lagi — ketik *sebelumnya* untuk melihatnya.';
             }
@@ -2453,7 +2519,7 @@ class TransactionService
             if ($orderedIds !== []) {
                 // Di semua kunci identitas (LID ↔ nomor HP orang yang sama)
                 foreach ($this->listIndexKeys() as $listKey) {
-                    Cache::put($listKey, ['ids' => $orderedIds, 'total' => $total], now()->addSeconds((int) config('finwa_reply_edit.list_ttl', 3600)));
+                    Cache::put($listKey, ['ids' => $orderedIds, 'total' => $total, 'filter' => $filterType !== null ? $filter : null], now()->addSeconds((int) config('finwa_reply_edit.list_ttl', 3600)));
                 }
 
                 $waOut = Cache::get('wa_out_msgid:'.$this->message->message_id);

@@ -245,3 +245,45 @@ it('daftar panjang: menyebut jumlah, total seharian, dan "yg sebelum nya" membuk
 it('"sebelumnya" tanpa daftar aktif tidak dianggap perintah daftar', function () {
     expect(lstSend('sebelumnya'))->not->toContain('Transaksi Hari Ini')->not->toContain('sudah semua');
 });
+
+// ── Daftar per jenis: "rekap detail pengeluaran" (Danu, 28/11/2026) ──────────
+
+it('mengenali permintaan daftar pengeluaran/pemasukan', function (string $text, ?array $expected) {
+    expect(TransactionService::parseTypedListRequest($text))->toBe($expected);
+})->with([
+    ['Rekap detail pengeluaran', ['type' => 'expense', 'period' => 'week']],
+    ['rincian pengeluaran minggu ini', ['type' => 'expense', 'period' => 'week']],
+    ['daftar pengeluaran 7 hari terakhir', ['type' => 'expense', 'period' => 'week']],
+    ['lihat detail pemasukan bulan ini', ['type' => 'income', 'period' => 'month']],
+    ['detail pengeluaran hari ini', ['type' => 'expense', 'period' => 'today']],
+    ['rekap pengeluaran', null],                    // ringkasan, bukan daftar
+    ['rincian pengeluaran september', null],        // periode lain → jalur lama
+    ['detail pengeluaran makan 25rb', null],
+    ['lihat transaksi', null],
+    ['beli kopi 25rb', null],
+]);
+
+it('WA: "Rekap detail pengeluaran" → daftar pengeluaran 7 hari, tanpa pemasukan', function () {
+    $reply = lstSend('Rekap detail pengeluaran');
+
+    expect($reply)->toContain('Pengeluaran 7 Hari Terakhir')
+        ->toContain('bayar ongkir')->toContain('bensin')->toContain('beli token listrik')
+        ->toContain('Total pengeluaran: Rp 81.000')
+        ->not->toContain('ada uang masuk')
+        ->not->toContain('Format Tidak Dikenali');
+});
+
+it('WA: nomor di daftar pengeluaran menunjuk transaksi yang benar', function () {
+    lstSend('Rekap detail pengeluaran');
+
+    // 1 = bayar ongkir (pengeluaran terbaru), bukan "ada uang masuk"
+    expect(lstSend('1 hapus'))->toContain('bayar ongkir');
+});
+
+it('WA: "rincian pemasukan" → hanya pemasukan', function () {
+    expect(lstSend('rincian pemasukan'))
+        ->toContain('Pemasukan 7 Hari Terakhir')
+        ->toContain('ada uang masuk')
+        ->toContain('Total pemasukan: Rp 2.000.000')
+        ->not->toContain('bensin');
+});

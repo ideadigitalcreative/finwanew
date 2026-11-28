@@ -2109,6 +2109,15 @@ class ProcessIncomingMessage implements ShouldQueue
         // Pesan bernominal ("pengeluaran hari ini makanan 29rb") adalah catatan transaksi,
         // bukan permintaan daftar → lewati fast path ini.
         $isAmountEntry = FAQService::looksLikeTransactionEntry($messageText);
+
+        // "rekap detail pengeluaran", "rincian pemasukan minggu ini" → daftar per jenis
+        // (dulu jatuh ke "Format Tidak Dikenali").
+        $typedList = $isAmountEntry ? null : TransactionService::parseTypedListRequest($messageText);
+        if ($typedList !== null) {
+            $this->transactionService->handleViewTransactions(0, [], $typedList);
+            return;
+        }
+
         foreach ($viewTransactionKeywords as $keyword) {
             if (! $isAmountEntry && str_contains($textLower, $keyword)) {
                 $this->transactionService->handleViewTransactions();
