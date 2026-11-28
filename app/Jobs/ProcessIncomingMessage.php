@@ -2106,8 +2106,11 @@ class ProcessIncomingMessage implements ShouldQueue
             'pengeluaran hari ini',
         ];
         
+        // Pesan bernominal ("pengeluaran hari ini makanan 29rb") adalah catatan transaksi,
+        // bukan permintaan daftar → lewati fast path ini.
+        $isAmountEntry = FAQService::looksLikeTransactionEntry($messageText);
         foreach ($viewTransactionKeywords as $keyword) {
-            if (str_contains($textLower, $keyword)) {
+            if (! $isAmountEntry && str_contains($textLower, $keyword)) {
                 $this->transactionService->handleViewTransactions();
                 return;
             }
@@ -2311,7 +2314,9 @@ class ProcessIncomingMessage implements ShouldQueue
                 }
 
                 // If it has transaction keywords, prevent entering query/check/edit mode
-                if ($hasTxKeyword && in_array($finwaIntent, ['cek_saldo', 'cek_budget', 'cek_statistik', 'cek_target', 'query', 'unknown', 'koreksi_transaksi', 'edit_transaksi'])) {
+                // Pesan bernominal yang ditebak AI sebagai lihat_transaksi juga dicatat sebagai transaksi
+                $amountEntryAsView = $finwaIntent === 'lihat_transaksi' && FAQService::looksLikeTransactionEntry($messageText);
+                if (($hasTxKeyword && in_array($finwaIntent, ['cek_saldo', 'cek_budget', 'cek_statistik', 'cek_target', 'query', 'unknown', 'koreksi_transaksi', 'edit_transaksi'])) || $amountEntryAsView) {
                     // Fallthrough to transaction handler logic below
                     Log::info('Overriding AI intent to transaction due to keyword detection', [
                         'original_intent' => $finwaIntent,
