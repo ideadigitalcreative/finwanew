@@ -303,8 +303,25 @@ it('membedakan belanja pakai fasilitas dari bayar tagihan', function (string $te
     ['bayar spaylater 500rb', 'repayment'],
     ['bayar tagihan kartu kredit bca 1jt', 'repayment'],
     ['cicilan kredivo 250rb', 'repayment'],
+    ['Pengeluaran pembayaran shopee pay later 540.949', 'repayment'],
+    ['pembayaran tagihan spaylater 300rb', 'repayment'],
+    ['lunas kredivo 250rb', 'repayment'],
+    ['pembayaran listrik pakai spaylater 300rb', 'purchase'],
     ['beli kopi 25rb', null],
 ]);
+
+it('WA: "pembayaran shopee pay later" setelah belanja → pelunasan, bukan belanja baru', function () {
+    dcmSend('beli sepatu pakai spaylater 500rb');
+    $reply = dcmSend('Pengeluaran pembayaran shopee pay later 500.000');
+
+    $pay = dcmTx()->sortByDesc('id')->first();
+    expect($pay->isCreditPurchase())->toBeFalse()
+        ->and($pay->category->type)->toBe('pengeluaran_bayar_hutang')
+        ->and($pay->balance_id)->toBe($this->cash->id)
+        ->and(dcmWallet())->toBe(500_000.0)
+        ->and(dcmOutstanding('hutang'))->toBe(0.0)
+        ->and($reply)->not->toContain('saldo dompet tidak berubah');
+});
 
 it('WA: belanja pakai paylater → pengeluaran + hutang naik, dompet tidak berubah', function () {
     $reply = dcmSend('beli sepatu pakai spaylater 500rb');

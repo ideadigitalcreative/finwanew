@@ -37,7 +37,9 @@ final class CreditFacility
 
     private const USE_WORDS = '(?:pakai|pake|pakek|pk|via|lewat|dengan|dgn|menggunakan|gunakan|gesek)';
 
-    private const PAY_WORDS = '(?:bayar|byr|bayarin|membayar|lunasi|lunasin|melunasi|pelunasan|cicil|nyicil|cicilan|angsur|angsuran|tagihan)';
+    // "pembayaran shopee pay later 540.949" dulu tidak dikenali sebagai bayar tagihan,
+    // jatuh ke mode belanja → hutang malah naik dan dompet tidak berkurang.
+    private const PAY_WORDS = '(?:bayar|byr|bayarin|membayar|pembayaran|pembayarannya|dibayar|lunas|lunasi|lunasin|melunasi|pelunasan|cicil|nyicil|cicilan|angsur|angsuran|tagihan)';
 
     /** Nama baku fasilitas kredit yang disebut di teks; null bila tidak ada. */
     public static function canonical(?string $text): ?string
