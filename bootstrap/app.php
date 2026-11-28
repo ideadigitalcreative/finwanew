@@ -18,6 +18,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
+        // Exclude webhook routes from CSRF protection
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/*',
+            'api/webhooks/*',
+        ]);
+
         // Add canonical domain redirect as prepended (runs first)
         $middleware->web(prepend: [
             ForceCanonicalDomain::class,

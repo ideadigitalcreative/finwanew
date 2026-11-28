@@ -246,6 +246,60 @@ class WhatsAppEngineWebhookController extends Controller
                     ]);
                 }
             } else {
+                // Real MSISDN was provided but not registered directly. This happens when
+                // the user is known only via their LID (e.g. Baileys senderPn discovery):
+                // the LID is already linked to a user, but their real phone number was
+                // never stored. Link the phone number to that user so future replies can
+                // be routed to @s.whatsapp.net instead of @lid (which returns ack 463).
+                $lidMapping = \App\Models\UserLidMapping::findByLid($lidDigits);
+                $lidRow = \App\Models\UserWhatsAppNumber::where('whatsapp_number', $lidDigits)
+                    ->where('is_active', true)
+                    ->first();
+
+                $ownerUserId = $lidMapping->user_id ?? $lidRow->user_id ?? null;
+                $ownerTenantId = $lidMapping->tenant_id ?? $lidRow->tenant_id ?? null;
+
+                if ($ownerUserId && $ownerTenantId) {
+                    // Store the real phone number on the LID mapping so lid-resolve works
+                    \App\Models\UserLidMapping::linkLidToUser(
+                        $lidDigits,
+                        $ownerUserId,
+                        $ownerTenantId,
+                        $phoneNumber
+                    );
+
+                    // Also register the real phone number as an active WhatsApp number
+                    $phoneExists = \App\Models\UserWhatsAppNumber::where('whatsapp_number', $phoneNumber)
+                        ->where('user_id', $ownerUserId)
+                        ->where('tenant_id', $ownerTenantId)
+                        ->exists();
+
+                    if (! $phoneExists) {
+                        \App\Models\UserWhatsAppNumber::create([
+                            'user_id' => $ownerUserId,
+                            'tenant_id' => $ownerTenantId,
+                            'whatsapp_number' => $phoneNumber,
+                            'name' => 'Phone (from LID senderPn)',
+                            'is_primary' => false,
+                            'is_active' => true,
+                            'is_lid' => false,
+                        ]);
+                    }
+
+                    Log::info('LID mapping: linked real phone number via known LID', [
+                        'lid' => $lidDigits,
+                        'phone_number' => $phoneNumber,
+                        'user_id' => $ownerUserId,
+                        'tenant_id' => $ownerTenantId,
+                    ]);
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Phone number linked to user via LID',
+                        'tenant_id' => $ownerTenantId,
+                    ]);
+                }
+
                 Log::warning('Phone number not registered, cannot create LID mapping', [
                     'lid' => $lid,
                     'phone_number' => $phoneNumber,
@@ -259,6 +313,99 @@ class WhatsAppEngineWebhookController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error handling LID mapping', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'payload' => $request->all(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Internal server error: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Resolve LID to the real phone number (MSISDN) so the gateway can send the
+     * reply to @s.whatsapp.net instead of @lid (which WhatsApp rejects with ack 463).
+     *
+     * Payload from gateway:
+     * { "lid": "94588232532003", "sessionId": "wa_1_628xxx" }
+     */
+    public function handleLidResolve(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'lid' => 'required|string',
+            'sessionId' => 'sometimes|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Invalid payload',
+                'errors' => $validator->errors(),
+            ], 400);
+        }
+
+        try {
+            $lid = preg_replace('/\D/', '', str_replace('@lid', '', $request->input('lid')));
+
+            if ($lid === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Empty LID',
+                ], 422);
+            }
+
+            // 1. Try the dedicated LID mapping table (has verified phone_number)
+            $lidMapping = \App\Models\UserLidMapping::findByLid($lid);
+            if ($lidMapping && ! empty($lidMapping->phone_number)) {
+                $phone = preg_replace('/\D/', '', (string) $lidMapping->phone_number);
+                if ($phone !== '' && $phone !== $lid) {
+                    return response()->json([
+                        'success' => true,
+                        'phone_number' => $phone,
+                        'source' => 'lid_mapping',
+                    ]);
+                }
+            }
+
+            // 2. Fallback: LID is stored as a UserWhatsAppNumber (is_lid = true).
+            //    Find the owning user, then return their primary real phone number.
+            $lidRow = \App\Models\UserWhatsAppNumber::where('whatsapp_number', $lid)
+                ->where('is_active', true)
+                ->first();
+
+            if ($lidRow) {
+                $primary = \App\Models\UserWhatsAppNumber::where('user_id', $lidRow->user_id)
+                    ->where('tenant_id', $lidRow->tenant_id)
+                    ->where('is_active', true)
+                    ->where('is_lid', false)
+                    ->orderByDesc('is_primary')
+                    ->first();
+
+                if ($primary && ! empty($primary->whatsapp_number)) {
+                    $phone = preg_replace('/\D/', '', (string) $primary->whatsapp_number);
+                    if ($phone !== '' && $phone !== $lid) {
+                        return response()->json([
+                            'success' => true,
+                            'phone_number' => $phone,
+                            'source' => 'user_whatsapp_number',
+                        ]);
+                    }
+                }
+            }
+
+            // No real phone number known — gateway will fall back to sending to LID.
+            Log::info('LID resolve: no phone number found', ['lid' => $lid]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'No phone number mapping found for LID',
+            ], 404);
+
+        } catch (\Exception $e) {
+            Log::error('Error handling LID resolve', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'payload' => $request->all(),

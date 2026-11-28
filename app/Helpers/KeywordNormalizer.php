@@ -5,6 +5,35 @@ namespace App\Helpers;
 class KeywordNormalizer
 {
     /**
+     * Buang nominal dari akhir deskripsi untuk ditampilkan di pesan balasan.
+     *
+     * Nominal sudah tampil di baris terpisah ("💵 Rp 22.000"), jadi baris
+     * keterangan cukup "ganti oli motor", bukan "ganti oli motor 22k".
+     * Hanya untuk tampilan — deskripsi di database tidak diubah.
+     *
+     * Contoh:
+     *   "makan siang 10 rb"   → "makan siang"
+     *   "ganti oli motor 22k" → "ganti oli motor"
+     *   "beli beras 5 kg"     → "beli beras 5 kg" (satuan, bukan nominal)
+     */
+    public static function stripAmountFromDescription(?string $description): string
+    {
+        $desc = trim((string) $description);
+        if ($desc === '') {
+            return $desc;
+        }
+
+        $clean = (string) preg_replace(
+            '/\s*\b(?:rp\.?\s*)?\d+(?:[.,]\d+)?\s*(?:rb|ribu|rebu|k|jt|juta)?\s*$/iu',
+            '',
+            $desc
+        );
+        $clean = rtrim($clean, " \t-–—:,.");
+
+        return $clean !== '' ? $clean : $desc;
+    }
+
+    /**
      * Normalize user input to standard keywords
      *
      * @param  string  $input  User's message
@@ -59,17 +88,46 @@ class KeywordNormalizer
             // Account reset
             'reset' => 'reset akun',
         ];
-        // Check exact matches first
-        if (isset($mappings[$inputLower])) {
-            return $mappings[$inputLower];
+        // 1) Cocok PERSIS dengan seluruh pesan (abaikan tanda baca di ujung):
+        //    "bantuan" → "help", "reset" → "reset akun", "hapus transaksi" → "hapus transaksi terakhir".
+        $inputBare = rtrim($inputLower, " 	?!.,");
+        if (isset($mappings[$inputBare])) {
+            return $mappings[$inputBare];
         }
 
-        // Check partial matches (contains)
-        foreach ($mappings as $variation => $standard) {
-            if (stripos($inputLower, $variation) !== false) {
-                // Replace the variation with standard in the original input
-                return str_ireplace($variation, $standard, $input);
+        // 2) Hanya sinonim "lihat" yang aman diganti bila ada di AWAL pesan dan
+        //    diikuti kata lain ("lihat transaksi september" → "cek transaksi september").
+        //    Mapping lain TIDAK lagi diganti di tengah kalimat — dulu substring replace
+        //    merusak pesan, mis.:
+        //      "hapus transaksi makan siang" → "hapus transaksi terakhir makan siang"
+        //      "gimana kondisi keuangan"    → "help kondisi keuangan"
+        //      "download laporan"           → "download cek statistik"
+        //      "preset"                     → "preset akun"
+        $prefixSafe = [
+            'lihat transaksi', 'daftar transaksi', 'riwayat transaksi', 'history transaksi',
+            'lihat dompet', 'list dompet', 'daftar dompet', 'dompet saya',
+        ];
+        foreach ($prefixSafe as $variation) {
+            if (preg_match('/^'.preg_quote($variation, '/').'\b/iu', $inputLower)) {
+                return $mappings[$variation].mb_substr(trim($input), mb_strlen($variation));
             }
+        }
+
+        // 3) Variasi kata kerja "tambah dompet" di AWAL pesan → bentuk baku, nama dompet utuh:
+        //    "Tambahkan dompet seabank", "tambahin rekening BCA", "bikin e-wallet Gopay",
+        //    "mau tambah dompet Jago" → "tambah dompet …". Dulu hanya "tambah dompet" persis
+        //    yang dikenali; "Tambahkan dompet seabank" dibalas sapaan.
+        $addWallet = '/^(?:(?:tolong|mohon|coba|minta|mau|ingin|pengen|saya\s+mau|aku\s+mau)\s+)?'
+            .'(?:tambahkan|tambahin|tambahi|nambahin|nambah|menambahkan|menambah|tambah|buatkan|buatin|bikinin|bikinkan|bikin|membuat|buat|daftarkan|daftarin)\s+'
+            .'(?:(?:1|satu|sebuah)\s+)?(dompet|rekening|e-?wallet|wallet|akun\s+bank|bank)\b/iu';
+        if (preg_match($addWallet, trim($input), $m)) {
+            $noun = match (true) {
+                (bool) preg_match('/wallet/i', $m[1]) => 'dompet',
+                (bool) preg_match('/^akun\s+bank$/i', $m[1]) => 'bank',
+                default => mb_strtolower($m[1]),
+            };
+
+            return 'tambah '.$noun.mb_substr(trim($input), mb_strlen($m[0]));
         }
 
         // No match found, return original

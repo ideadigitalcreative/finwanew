@@ -112,16 +112,19 @@ class DashboardController extends Controller
                     ->orWhere('end_date', '>=', now());
             })
             ->with('category')
-            ->get()
-            ->map(function ($budget) {
-                return [
-                    'category_name' => $budget->category->name ?? 'Unknown',
-                    'limit' => (float) $budget->amount,
-                    'used' => $budget->getCurrentSpending(),
-                    'period' => $budget->period,
-                    'color' => $budget->category->color ?? '#CCCCCC',
-                ];
-            });
+            ->get();
+
+        \App\Models\Budget::loadBulkSpending($budgets);
+
+        $budgets = $budgets->map(function ($budget) {
+            return [
+                'category_name' => $budget->category->name ?? 'Unknown',
+                'limit' => (float) $budget->amount,
+                'used' => $budget->getCurrentSpending(),
+                'period' => $budget->period,
+                'color' => $budget->category->color ?? '#CCCCCC',
+            ];
+        });
 
         return response()->json([
             'total_balance' => (float) $totalBalance,

@@ -11,13 +11,24 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // 1. Update transactions table type enum
-        // Note: Using raw DB statement because Blueprint doesn't support modifying enum easily across all drivers
-        DB::statement("ALTER TABLE transactions MODIFY COLUMN type ENUM('income', 'expense', 'debit_internal', 'kredit_internal') NOT NULL");
+        if (DB::getDriverName() === 'mysql') {
+            // Idempoten: bila kedua nilai internal sudah ada, jangan ALTER
+            // (mencegah "data truncated" — daftar ENUM migrasi ini lebih
+            // pendek dari ENUM di DB yang diperluas migrasi lain).
+            $current = collect(DB::select("SHOW COLUMNS FROM categories WHERE Field = 'type'"))->first()->Type ?? '';
+            $trxCurrent = collect(DB::select("SHOW COLUMNS FROM transactions WHERE Field = 'type'"))->first()->Type ?? '';
+            $enumDone = str_contains($current, "'debit_internal'")
+                && str_contains($current, "'kredit_internal'")
+                && str_contains($trxCurrent, "'debit_internal'")
+                && str_contains($trxCurrent, "'kredit_internal'");
+            if (! $enumDone) {
+                // 1. Update transactions table type enum
+            // Note: Using raw DB statement because Blueprint doesn't support modifying enum easily across all drivers
+            DB::statement("ALTER TABLE transactions MODIFY COLUMN type ENUM('income', 'expense', 'debit_internal', 'kredit_internal') NOT NULL");
 
-        // 2. Update categories table type enum
-        // We need to list all existing types and add the new ones
-        DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
+            // 2. Update categories table type enum
+            // We need to list all existing types and add the new ones
+            DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
             'pendapatan_gaji',
             'pendapatan_bonus',
             'pendapatan_investasi',
@@ -49,6 +60,8 @@ return new class extends Migration
             'debit_internal',
             'kredit_internal'
         ) NOT NULL");
+            }
+        }
 
         // 3. Add the internal transfer categories to all existing tenants
         $tenants = DB::table('tenants')->pluck('id');
@@ -93,8 +106,9 @@ return new class extends Migration
             ->whereIn('type', ['debit_internal', 'kredit_internal'])
             ->delete();
 
-        // 2. Revert categories enum
-        DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
+        if (DB::getDriverName() === 'mysql') {
+            // 2. Revert categories enum
+            DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
             'pendapatan_gaji',
             'pendapatan_bonus',
             'pendapatan_investasi',
@@ -125,8 +139,9 @@ return new class extends Migration
             'pengeluaran_lainnya'
         ) NOT NULL");
 
-        // 3. Revert transactions enum
-        // Warning: This might fail if there are transactions with the new types!
-        DB::statement("ALTER TABLE transactions MODIFY COLUMN type ENUM('income', 'expense') NOT NULL");
+            // 3. Revert transactions enum
+            // Warning: This might fail if there are transactions with the new types!
+            DB::statement("ALTER TABLE transactions MODIFY COLUMN type ENUM('income', 'expense') NOT NULL");
+        }
     }
 };

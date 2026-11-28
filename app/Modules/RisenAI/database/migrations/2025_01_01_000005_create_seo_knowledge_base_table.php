@@ -8,6 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempoten: tabel sudah ada dibuat di luar migrasi — lewati.
+        if (Schema::hasTable('seo_knowledge_base')) {
+            return;
+        }
+
         Schema::create('seo_knowledge_base', function (Blueprint $table) {
             $table->id();
             $table->string('category')->index(); // feature, company, target, faq, pricing

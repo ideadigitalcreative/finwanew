@@ -182,6 +182,15 @@
                                 <div class="w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center">
                                     <Check class="w-3.5 h-3.5 text-orange-600" />
                                 </div>
+                                <span class="text-sm text-gray-700 font-medium">
+                                    Catat di Grup WhatsApp
+                                    <span class="ml-1 rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold text-white align-middle">BARU</span>
+                                </span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center">
+                                    <Check class="w-3.5 h-3.5 text-orange-600" />
+                                </div>
                                 <span class="text-sm text-gray-700 font-medium">Dukungan Prioritas</span>
                             </div>
                         </div>
@@ -223,7 +232,7 @@
 import { computed } from 'vue';
 import { Gift, ArrowRight, Users, Check, Lock, CreditCard, MessageCircle, Tag } from 'lucide-vue-next';
 
-const WA_BOT_NUMBER = '6285762000079';
+const WA_BOT_NUMBER = '6285159205506';
 const waRegisterUrl = computed(() => {
     const message = encodeURIComponent('Halo kak, saya mau daftar FinWa. Ketik Daftar untuk mulai ya!');
     return `https://wa.me/${WA_BOT_NUMBER}?text=${message}`;

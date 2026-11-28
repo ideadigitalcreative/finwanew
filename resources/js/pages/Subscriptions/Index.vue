@@ -1,8 +1,7 @@
-```
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, useForm, Link } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watchEffect } from 'vue';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -11,17 +10,17 @@ import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
 import { useSweetAlert } from '@/composables/useSweetAlert';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Upload, X, Eye } from 'lucide-vue-next';
+import type { BreadcrumbItem } from '@/types';
+
+const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Dashboard', href: '/dashboard' },
+    { title: 'Subscription', href: '/subscriptions' },
+];
 
 interface Duration {
     value: number;
     label: string;
     discount: number;
-}
-
-interface PlanDetails {
-    name: string;
-    monthly_price: number;
 }
 
 interface Bank {
@@ -100,6 +99,8 @@ interface Props {
 const props = defineProps<Props>();
 const { showError, showSuccess } = useSweetAlert();
 
+type Plan = Props['plans'][string];
+
 const showPaymentProofDialog = ref(false);
 const showPaymentProofViewDialog = ref(false);
 const showUpgradeDialog = ref(false);
@@ -114,13 +115,23 @@ const uploadForm = useForm({
     payment_proof: null as File | null,
 });
 
-const durationOptions = computed<Duration[]>(() => props.durationOptions);
+const durationOptions = computed<Duration[]>(() => props.durationOptions ?? []);
+const planList = computed<Plan[]>(() => Object.values(props.plans ?? {}));
 
-const selectedPlan = ref(props.plans['lite'] || Object.values(props.plans)[0]);
-const selectedDuration = ref<Duration>(durationOptions.value[0] || { value: 1, label: '1 Bulan', discount: 0 });
+const fallbackPlan: Plan = {
+    slug: 'growth',
+    name: 'Paket Lite',
+    monthly_price: 0,
+    description: '',
+    features: [],
+};
+const fallbackDuration: Duration = { value: 1, label: '1 Bulan', discount: 0 };
+
+const selectedPlan = ref<Plan>(props.plans?.lite ?? planList.value[0] ?? fallbackPlan);
+const selectedDuration = ref<Duration>(durationOptions.value[0] ?? fallbackDuration);
 const upgradeNotes = ref('');
 
-const extensionDuration = ref<Duration>(durationOptions.value[0] || { value: 1, label: '1 Bulan', discount: 0 });
+const extensionDuration = ref<Duration>(durationOptions.value[0] ?? fallbackDuration);
 const extensionNotes = ref('');
 
 const upgradeRequestForm = useForm({
@@ -135,6 +146,21 @@ const extensionRequestForm = useForm({
     plan: props.subscription?.package === 'pro' ? 'pro' : 'growth',
     duration_months: extensionDuration.value.value,
     notes: '',
+});
+
+watchEffect(() => {
+    const preferredPlan = props.plans?.lite ?? planList.value[0];
+    if (preferredPlan && selectedPlan.value === fallbackPlan) {
+        selectedPlan.value = preferredPlan;
+    }
+    const preferredDuration = durationOptions.value[0];
+    if (preferredDuration && selectedDuration.value === fallbackDuration) {
+        selectedDuration.value = preferredDuration;
+        extensionDuration.value = preferredDuration;
+    }
+    upgradeRequestForm.plan = selectedPlan.value.slug;
+    upgradeRequestForm.duration_months = selectedDuration.value.value;
+    extensionRequestForm.duration_months = extensionDuration.value.value;
 });
 
 const formatCurrency = (amount: number) => {
@@ -155,9 +181,8 @@ const formatPackage = (pkg: string) => {
     if (pkg === 'growth') return 'Paket Lite';
     if (pkg === 'pro') return 'Paket PRO';
     if (pkg === 'free') return 'Free Trial';
-    if (pkg === 'paid') return 'Paket Premium'; // Legacy mapping
+    if (pkg === 'paid') return 'Paket Premium';
     
-    // Check in plans prop
     for (const key in props.plans) {
         if (props.plans[key].slug === pkg) return props.plans[key].name;
     }
@@ -165,16 +190,6 @@ const formatPackage = (pkg: string) => {
     return pkg || '-';
 };
 
-const getPackageFeatures = (pkg: string) => {
-    const planKey = pkg === 'growth' ? 'lite' : pkg;
-    return props.plans[planKey]?.features || [
-        'Unlimited Transactions',
-        'Multi-device support',
-        'Standard Support',
-    ];
-};
-
-// Calculate totals like checkout page
 const upgradeSubtotal = computed(() => {
     return selectedPlan.value.monthly_price * selectedDuration.value.value;
 });
@@ -222,18 +237,30 @@ const updateExtensionDuration = (duration: Duration) => {
     extensionRequestForm.duration_months = duration.value;
 };
 
+const submitUpgradeRequest = () => {
+    upgradeRequestForm.notes = upgradeNotes.value;
+    upgradeRequestForm.post('/subscriptions/request', {
+        preserveScroll: true,
+        onSuccess: () => {
+            showSuccess('Berhasil', 'Permintaan upgrade berhasil diajukan. Silakan upload bukti pembayaran jika sudah transfer.');
+            showUpgradeDialog.value = false;
+        },
+        onError: () => {
+            showError('Gagal', 'Terjadi kesalahan saat mengajukan upgrade.');
+        },
+    });
+};
+
 const handleFileSelect = (event: Event) => {
     const target = event.target as HTMLInputElement;
     if (target.files && target.files[0]) {
         const file = target.files[0];
         
-        // Validate file type
         if (!file.type.startsWith('image/')) {
             showError('Error', 'File harus berupa gambar');
             return;
         }
         
-        // Validate file size (5MB)
         if (file.size > 5 * 1024 * 1024) {
             showError('Error', 'Ukuran file maksimal 5MB');
             return;
@@ -242,7 +269,6 @@ const handleFileSelect = (event: Event) => {
         selectedFile.value = file;
         uploadForm.payment_proof = file;
         
-        // Create preview
         const reader = new FileReader();
         reader.onload = (e) => {
             previewUrl.value = e.target?.result as string;
@@ -251,20 +277,15 @@ const handleFileSelect = (event: Event) => {
     }
 };
 
-// Get subscription for upload (prioritize pending)
 const subscriptionForUpload = computed(() => {
-    // First, try pendingSubscription from props (full data)
     if (props.pendingSubscription) {
         return props.pendingSubscription;
     }
-    // Then, try subscription if it's pending
     if (props.subscription?.status === 'pending') {
         return props.subscription;
     }
-    // Finally, check subscriptions array for pending subscription (has ID but limited data)
     const pendingFromHistory = props.subscriptions.find(s => s.status === 'pending');
     if (pendingFromHistory) {
-        // Return minimal data with ID for upload
         return {
             id: pendingFromHistory.id,
             package: pendingFromHistory.package,
@@ -321,66 +342,11 @@ const viewPaymentProof = (url: string) => {
     showPaymentProofViewDialog.value = true;
 };
 
-const openUpgradeDialog = () => {
-    selectedDuration.value = durationOptions.value[0] || { value: 1, label: '1 Bulan', discount: 0 };
-    upgradeNotes.value = '';
-    upgradeRequestForm.clearErrors();
-    showUpgradeDialog.value = true;
-};
-
-const openExtensionDialog = () => {
-    extensionDuration.value = durationOptions.value[0] || { value: 1, label: '1 Bulan', discount: 0 };
-    extensionNotes.value = '';
-    extensionRequestForm.clearErrors();
-    showExtensionDialog.value = true;
-};
-
-const submitUpgradeRequest = () => {
-    upgradeRequestForm.request_type = 'upgrade';
-    upgradeRequestForm.plan = selectedPlan.value.slug;
-    upgradeRequestForm.duration_months = selectedDuration.value.value;
-    upgradeRequestForm.notes = upgradeNotes.value;
-    upgradeRequestForm.post('/subscriptions', {
-        preserveScroll: true,
-        onSuccess: () => {
-            showSuccess('Permintaan Dikirim', 'Pengajuan upgrade berhasil dikirim. Admin akan segera menghubungi Anda.');
-            upgradeNotes.value = '';
-            showUpgradeDialog.value = false;
-        },
-        onError: (errors) => {
-            const firstError = Object.values(errors)[0] as string | undefined;
-            showError('Gagal', firstError || 'Gagal mengirim permintaan upgrade');
-        },
-    });
-};
-
-const submitExtensionRequest = () => {
-    if (!props.subscription) return;
-    extensionRequestForm.request_type = 'extend';
-    extensionRequestForm.plan = props.subscription.package === 'pro' ? 'pro' : 'growth';
-    extensionRequestForm.duration_months = extensionDuration.value.value;
-    extensionRequestForm.notes = extensionNotes.value;
-    extensionRequestForm.post('/subscriptions', {
-        preserveScroll: true,
-        onSuccess: () => {
-            showSuccess('Permintaan Dikirim', 'Pengajuan perpanjangan berhasil dikirim. Admin akan segera memprosesnya.');
-            extensionNotes.value = '';
-            showExtensionDialog.value = false;
-        },
-        onError: (errors) => {
-            const firstError = Object.values(errors)[0] as string | undefined;
-            showError('Gagal', firstError || 'Gagal mengirim permintaan perpanjangan');
-        },
-    });
-};
-
-// Copy to clipboard function
 const copyToClipboard = async (text: string) => {
     try {
         await navigator.clipboard.writeText(text);
-        showSuccess('Berhasil', 'Teks berhasil disalin ke clipboard');
-    } catch (err) {
-        // Fallback for older browsers
+        showSuccess('Berhasil', 'Nomor rekening disalin ke clipboard');
+    } catch {
         const textArea = document.createElement('textarea');
         textArea.value = text;
         textArea.style.position = 'fixed';
@@ -389,8 +355,8 @@ const copyToClipboard = async (text: string) => {
         textArea.select();
         try {
             document.execCommand('copy');
-            showSuccess('Berhasil', 'Teks berhasil disalin ke clipboard');
-        } catch (err) {
+            showSuccess('Berhasil', 'Nomor rekening disalin ke clipboard');
+        } catch {
             showError('Error', 'Gagal menyalin teks');
         }
         document.body.removeChild(textArea);
@@ -399,228 +365,299 @@ const copyToClipboard = async (text: string) => {
 </script>
 
 <template>
-    <Head title="Subscription" />
+    <Head title="Subscription Management" />
 
-    <AppLayout>
-        <div class="flex h-full flex-1 flex-col gap-8 overflow-x-auto p-6 bg-gray-50/50 dark:bg-black/10">
-            <!-- Header -->
-            <div>
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Subscription Management</h2>
-                <p class="text-sm text-gray-500 mt-1">Kelola paket langganan Anda</p>
+    <AppLayout :breadcrumbs="breadcrumbs">
+        <div class="bg-[#fbf9f3] min-h-screen flex h-full flex-1 flex-col gap-6 p-4 md:p-6 font-['Plus_Jakarta_Sans',sans-serif]">
+            <!-- Header Section -->
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-10 h-10 rounded-xl bg-[#ffd23f] text-[#574500] flex items-center justify-center shadow-sm">
+                            <span class="material-symbols-outlined text-[24px]">verified</span>
+                        </span>
+                        <div>
+                            <h2 class="text-xl md:text-2xl font-bold text-[#1b1c19]">Langganan & Paket</h2>
+                            <p class="text-xs md:text-sm text-[#4d4634]">Kelola status langganan dan akses fitur aplikasi FinWa Anda</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <Link
+                        v-if="!hasPendingRequest"
+                        href="/subscriptions/new"
+                        class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#ffd23f] text-[#725a00] hover:bg-[#ffe089] rounded-xl font-bold text-sm shadow-sm transition-all active:scale-95"
+                    >
+                        <span class="material-symbols-outlined text-lg">add_circle</span>
+                        {{ subscription ? 'Perpanjang / Ganti Paket' : 'Upgrade Paket' }}
+                    </Link>
+                </div>
             </div>
 
-            <!-- Pending Request Alert -->
-            <div v-if="pendingRequest" class="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+            <!-- Pending Request Alert Banner -->
+            <div v-if="pendingRequest" class="rounded-2xl border border-[#ffd23f] bg-[#fff9e6] p-5 shadow-sm">
                 <div class="flex items-start gap-4">
                     <div class="flex-shrink-0 mt-0.5">
-                        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/50">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-amber-600 dark:text-amber-400">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <polyline points="12 6 12 12 16 14"></polyline>
-                            </svg>
+                        <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ffd23f] text-[#574500]">
+                            <span class="material-symbols-outlined text-2xl">pending_actions</span>
                         </div>
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h3 class="text-lg font-bold text-amber-900 dark:text-amber-50 mb-2">Pengajuan Sedang Diproses</h3>
-                        <p class="text-base text-amber-800 dark:text-amber-200 leading-relaxed mb-3">
-                            Anda sudah mengajukan <span class="font-bold text-amber-900 dark:text-amber-50">{{ pendingRequest.request_type === 'extend' ? 'perpanjangan' : 'upgrade' }}</span> paket
-                            <span class="font-bold text-amber-900 dark:text-amber-50">{{ formatPackage(pendingRequest.plan) }}</span> selama
-                            <span class="font-bold text-amber-900 dark:text-amber-50">{{ pendingRequest.duration_months }} bulan</span>.
-                            Admin akan menghubungi Anda segera untuk proses pembayaran.
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                            <h3 class="text-base md:text-lg font-bold text-[#574500]">Pengajuan Sedang Diproses Admin</h3>
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#ffd23f] text-[#574500]">
+                                <span class="material-symbols-outlined text-sm">schedule</span>
+                                Menunggu Verifikasi
+                            </span>
+                        </div>
+                        <p class="text-sm text-[#4d4634] leading-relaxed mb-4">
+                            Anda mengajukan permintaan <span class="font-bold text-[#1b1c19]">{{ pendingRequest.request_type === 'extend' ? 'perpanjangan' : 'upgrade' }}</span> untuk
+                            <span class="font-bold text-[#1b1c19]">{{ formatPackage(pendingRequest.plan) }}</span> selama
+                            <span class="font-bold text-[#1b1c19]">{{ pendingRequest.duration_months }} bulan</span>.
+                            Tim admin sedang memeriksa pembayaran dan akan segera mengaktifkan status akun Anda.
                         </p>
-                        <div class="flex flex-wrap gap-4 pt-4 border-t border-amber-200 dark:border-amber-800/50">
+
+                        <div class="flex flex-wrap gap-4 pt-3 border-t border-[#ffd23f]/40">
                             <div class="flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-700 dark:text-amber-400">
-                                    <rect width="18" height="18" x="3" y="4" rx="2" ry="2"></rect>
-                                    <line x1="16" x2="16" y1="2" y2="6"></line>
-                                    <line x1="8" x2="8" y1="2" y2="6"></line>
-                                    <line x1="3" x2="21" y1="10" y2="10"></line>
-                                </svg>
-                                <span class="text-sm font-semibold text-amber-900 dark:text-amber-100">Diajukan: {{ formatDate(pendingRequest.created_at) }}</span>
+                                <span class="material-symbols-outlined text-base text-[#725a00]">calendar_today</span>
+                                <span class="text-xs md:text-sm font-semibold text-[#574500]">Diajukan: {{ formatDate(pendingRequest.created_at) }}</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-700 dark:text-amber-400">
-                                    <line x1="12" x2="12" y1="2" y2="22"></line>
-                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                                </svg>
-                                <span class="text-sm font-semibold text-amber-900 dark:text-amber-100">Total: <span class="font-bold text-lg">{{ formatCurrency(Number(pendingRequest.price)) }}</span></span>
+                                <span class="material-symbols-outlined text-base text-[#725a00]">payments</span>
+                                <span class="text-xs md:text-sm font-semibold text-[#574500]">Total Biaya: <strong class="text-[#1b1c19] text-base">{{ formatCurrency(Number(pendingRequest.price)) }}</strong></span>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Current Subscription Card -->
-            <div v-if="subscription" class="rounded-2xl bg-white p-8 shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:bg-gray-800">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                    <div>
-                        <h3 class="text-2xl font-bold text-gray-900 dark:text-white">{{ formatPackage(subscription.package) }}</h3>
-                        <p class="text-sm text-gray-500 mt-1">
-                            Berakhir: {{ formatDate(subscription.ends_at) }}
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <span
-                            class="rounded-full px-3 py-1 text-sm font-medium"
-                            :class="{
-                                'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400': subscription.status === 'active',
-                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400': subscription.status === 'pending',
-                                'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400': subscription.status === 'expired',
-                            }"
+            <!-- Main Current Subscription Card -->
+            <div v-if="subscription" class="rounded-2xl bg-white p-6 md:p-8 border border-[#eae8e2] shadow-sm">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#eae8e2]">
+                    <div class="flex items-start gap-4">
+                        <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm"
+                            :class="subscription.status === 'active' ? 'bg-[#51fac1]/30 text-[#006c4f]' : 'bg-[#ffd23f]/30 text-[#725a00]'"
                         >
-                            {{ subscription.status === 'pending' ? 'Menunggu Pembayaran' : subscription.status === 'active' ? 'Aktif' : 'Kedaluwarsa' }}
-                        </span>
+                            <span class="material-symbols-outlined text-2xl">
+                                {{ subscription.status === 'active' ? 'workspace_premium' : 'receipt_long' }}
+                            </span>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-3">
+                                <h3 class="text-2xl font-black text-[#1b1c19] tracking-tight">{{ formatPackage(subscription.package) }}</h3>
+                                <span
+                                    class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold"
+                                    :class="{
+                                        'bg-[#51fac1]/30 text-[#006c4f]': subscription.status === 'active',
+                                        'bg-[#ffd23f]/40 text-[#725a00]': subscription.status === 'pending',
+                                        'bg-[#ffc9d0]/60 text-[#ad2c4f]': subscription.status === 'expired',
+                                    }"
+                                >
+                                    <span class="material-symbols-outlined text-sm">
+                                        {{ subscription.status === 'active' ? 'check_circle' : subscription.status === 'pending' ? 'timelapse' : 'cancel' }}
+                                    </span>
+                                    {{ subscription.status === 'pending' ? 'Menunggu Pembayaran' : subscription.status === 'active' ? 'Aktif' : 'Kedaluwarsa' }}
+                                </span>
+                            </div>
+                            <p class="text-sm text-[#4d4634] mt-1 flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-base text-[#4d4634]/60">event</span>
+                                Masa Berlaku: <span class="font-semibold text-[#1b1c19]">{{ formatDate(subscription.ends_at) }}</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-3">
                         <Link
                             v-if="subscription.status === 'active' && !hasPendingRequest"
                             href="/subscriptions/new"
-                            class="inline-flex items-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-                            style="background-color: oklch(0.65 0.19 137.46);"
+                            class="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold bg-[#ffd23f] text-[#725a00] hover:bg-[#ffe089] shadow-sm transition-all active:scale-95"
                         >
-                            Perpanjang
+                            <span class="material-symbols-outlined text-lg">autorenew</span>
+                            Perpanjang Sekarang
                         </Link>
                     </div>
                 </div>
 
-                <!-- Payment Proof Section (for pending status) -->
-                <div v-if="subscription.status === 'pending' || pendingSubscription" class="rounded-xl bg-gray-50 p-6 border border-gray-100 dark:bg-gray-700/30 dark:border-gray-700">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                            <h4 class="text-sm font-bold text-gray-900 dark:text-white mb-1">Bukti Pembayaran</h4>
-                            <p v-if="subscriptionForUpload?.payment_proof" class="text-sm text-gray-500">
-                                Bukti pembayaran sudah diupload. Menunggu verifikasi admin.
-                            </p>
-                            <p v-else class="text-sm text-gray-500">
-                                Silakan upload bukti transfer untuk mempercepat proses verifikasi.
-                            </p>
+                <!-- Info Banner if Active exists while pending is shown -->
+                <div v-if="subscription.status === 'pending' && activeSubscription" class="mt-6 rounded-xl bg-[#51fac1]/15 p-4 border border-[#51fac1]/40">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <div class="flex items-center gap-2.5">
+                            <span class="material-symbols-outlined text-[#006c4f] text-xl">verified</span>
+                            <div>
+                                <p class="text-xs font-bold text-[#006c4f] uppercase tracking-wider">Paket Anda yang Masih Aktif</p>
+                                <p class="text-base font-black text-[#006c4f]">{{ formatPackage(activeSubscription.package) }}</p>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-3">
+                        <p class="text-xs md:text-sm font-semibold text-[#006c4f]">
+                            Berlaku hingga: <span class="underline">{{ formatDate(activeSubscription.ends_at) }}</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Payment Proof Upload Alert (When Pending) -->
+                <div v-if="subscription.status === 'pending' || pendingSubscription" class="mt-6 rounded-xl bg-[#fff9e6] p-5 border border-[#ffd23f]/50">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <span class="material-symbols-outlined text-[#725a00] text-2xl mt-0.5">receipt</span>
+                            <div>
+                                <h4 class="text-sm font-bold text-[#1b1c19]">Bukti Pembayaran Tagihan</h4>
+                                <p v-if="subscriptionForUpload?.payment_proof" class="text-xs md:text-sm text-[#4d4634] mt-0.5">
+                                    Bukti pembayaran telah berhasil dikirimkan. Tim FinWa sedang memverifikasi dana Anda.
+                                </p>
+                                <p v-else class="text-xs md:text-sm text-[#4d4634] mt-0.5">
+                                    Silakan unggah bukti transfer/QRIS untuk mengonfirmasi perpanjangan atau upgrade akun.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2.5 flex-shrink-0">
                             <Button
                                 v-if="subscriptionForUpload?.payment_proof"
                                 @click="viewPaymentProof(subscriptionForUpload.payment_proof!)"
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                class="rounded-xl"
-                                title="Lihat Bukti Pembayaran"
+                                class="rounded-xl border-[#eae8e2] bg-white text-[#1b1c19] hover:bg-[#f5f3ee] font-semibold"
                             >
-                                <Eye class="mr-2 h-4 w-4" />
-                                Lihat
+                                <span class="material-symbols-outlined text-lg mr-1.5 text-[#4d4634]">visibility</span>
+                                Lihat Bukti
                             </Button>
                             <Button
                                 @click="openPaymentProofDialog"
                                 type="button"
-                                :variant="subscriptionForUpload?.payment_proof ? 'outline' : 'default'"
                                 size="sm"
-                                class="rounded-xl"
-                                :class="subscriptionForUpload?.payment_proof ? '' : 'text-white'"
-                                :style="subscriptionForUpload?.payment_proof ? '' : 'background-color: oklch(0.65 0.19 137.46);'"
+                                class="rounded-xl bg-[#ffd23f] text-[#725a00] hover:bg-[#ffe089] font-bold shadow-sm active:scale-95"
                             >
-                                <Upload class="mr-2 h-4 w-4" />
-                                {{ subscriptionForUpload?.payment_proof ? 'Ganti Bukti' : 'Upload Bukti' }}
+                                <span class="material-symbols-outlined text-lg mr-1.5">upload</span>
+                                {{ subscriptionForUpload?.payment_proof ? 'Ganti Bukti' : 'Unggah Bukti' }}
                             </Button>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Active Subscription Info (if pending is displayed) -->
-                <div v-if="subscription.status === 'pending' && activeSubscription" class="mt-6 rounded-xl bg-blue-50 p-4 border border-blue-100 dark:bg-blue-900/20 dark:border-blue-800/30">
-                    <p class="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">PAKET AKTIF SAAT INI</p>
-                    <div class="flex justify-between items-center">
-                        <p class="text-base font-bold text-blue-900 dark:text-blue-100">{{ formatPackage(activeSubscription.package) }}</p>
-                        <p class="text-sm text-blue-700 dark:text-blue-300">Berakhir: {{ formatDate(activeSubscription.ends_at) }}</p>
                     </div>
                 </div>
             </div>
 
             <!-- Free Trial / No Subscription Card -->
-            <div v-else class="rounded-2xl bg-white p-8 shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:bg-gray-800">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6">
-                    <div>
-                        <h3 class="text-2xl font-bold text-gray-900 dark:text-white">Free Trial</h3>
-                        <p class="text-sm text-gray-500 mt-1">
-                            <span v-if="tenant.trial_ends_at">
-                                Berakhir: {{ formatDate(tenant.trial_ends_at) }}
-                            </span>
-                            <span v-else>
-                                Upgrade untuk mengakses semua fitur
-                            </span>
-                        </p>
+            <div v-else class="rounded-2xl bg-white p-6 md:p-8 border border-[#eae8e2] shadow-sm">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div class="flex items-start gap-4">
+                        <div class="w-12 h-12 rounded-2xl bg-[#ffd23f]/25 text-[#725a00] flex items-center justify-center shadow-sm">
+                            <span class="material-symbols-outlined text-2xl">hourglass_empty</span>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-3">
+                                <h3 class="text-2xl font-black text-[#1b1c19]">Masa Uji Coba Gratis (Free Trial)</h3>
+                                <span class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold bg-[#ffd23f]/30 text-[#725a00]">
+                                    <span class="material-symbols-outlined text-sm">schedule</span>
+                                    Trial
+                                </span>
+                            </div>
+                            <p class="text-sm text-[#4d4634] mt-1">
+                                <span v-if="tenant.trial_ends_at">
+                                    Berakhir pada: <strong class="text-[#1b1c19]">{{ formatDate(tenant.trial_ends_at) }}</strong>
+                                </span>
+                                <span v-else>
+                                    Tingkatkan ke paket Pro atau Lite untuk membuka seluruh fitur otomatisasi keuangan FinWa.
+                                </span>
+                            </p>
+                        </div>
                     </div>
+
                     <Link
                         v-if="!hasPendingRequest"
                         href="/subscriptions/new"
-                        class="inline-flex items-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
-                        style="background-color: oklch(0.65 0.19 137.46);"
+                        class="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold bg-[#ffd23f] text-[#725a00] hover:bg-[#ffe089] shadow-sm transition-all active:scale-95"
                     >
+                        <span class="material-symbols-outlined text-lg">rocket_launch</span>
                         Upgrade Sekarang
                     </Link>
                 </div>
 
-                <!-- Payment Proof Section (if there's a pending subscription in history) -->
-                <div v-if="pendingSubscription || (subscriptions.find(s => s.status === 'pending'))" class="rounded-xl bg-gray-50 p-6 border border-gray-100 dark:bg-gray-700/30 dark:border-gray-700">
+                <!-- Proof upload prompt if pending subscription in history -->
+                <div v-if="pendingSubscription || (subscriptions.find(s => s.status === 'pending'))" class="mt-6 rounded-xl bg-[#fff9e6] p-5 border border-[#ffd23f]/50">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
-                            <h4 class="text-sm font-bold text-gray-900 dark:text-white mb-1">Upload Bukti Pembayaran</h4>
-                            <p class="text-sm text-gray-500">
-                                Anda memiliki subscription yang menunggu pembayaran. Silakan upload bukti transfer.
+                            <h4 class="text-sm font-bold text-[#1b1c19] flex items-center gap-2">
+                                <span class="material-symbols-outlined text-[#725a00] text-lg">payment</span>
+                                Ada Tagihan Menunggu Pembayaran
+                            </h4>
+                            <p class="text-xs md:text-sm text-[#4d4634] mt-1">
+                                Anda telah memesan paket langganan. Silakan unggah bukti transfer agar akun langsung diaktifkan.
                             </p>
                         </div>
                         <Button
                             @click="openPaymentProofDialog"
                             type="button"
                             size="sm"
-                            class="rounded-xl text-white"
-                            style="background-color: oklch(0.65 0.19 137.46);"
+                            class="rounded-xl bg-[#ffd23f] text-[#725a00] hover:bg-[#ffe089] font-bold shadow-sm active:scale-95"
                         >
-                            <Upload class="mr-2 h-4 w-4" />
-                            Upload Bukti
+                            <span class="material-symbols-outlined text-lg mr-1.5">upload</span>
+                            Unggah Bukti Transfer
                         </Button>
                     </div>
                 </div>
             </div>
 
-            <!-- Subscription History -->
-            <div class="rounded-2xl bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] dark:bg-gray-800 overflow-hidden">
-                <div class="border-b border-gray-100 p-6 dark:border-gray-700">
-                    <h3 class="text-lg font-bold text-gray-900 dark:text-white">Riwayat Subscription</h3>
+            <!-- Subscription History Table Card -->
+            <div class="rounded-2xl bg-white border border-[#eae8e2] shadow-sm overflow-hidden">
+                <div class="border-b border-[#eae8e2] p-5 md:p-6 bg-white flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="material-symbols-outlined text-[#725a00] text-xl">history</span>
+                        <h3 class="text-base md:text-lg font-bold text-[#1b1c19]">Riwayat Langganan</h3>
+                    </div>
+                    <span class="text-xs font-semibold text-[#4d4634]">Total {{ subscriptions.length }} Transaksi</span>
                 </div>
+
                 <div class="overflow-x-auto">
-                    <table class="w-full">
-                        <thead class="bg-gray-50 dark:bg-gray-900/50">
+                    <table class="w-full text-left">
+                        <thead class="bg-[#f5f3ee] border-b border-[#eae8e2]">
                             <tr>
-                                <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Paket</th>
-                                <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Status</th>
-                                <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Mulai</th>
-                                <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Berakhir</th>
-                                <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Dibuat</th>
+                                <th class="px-6 py-3.5 text-xs font-bold uppercase tracking-wider text-[#4d4634]">Paket</th>
+                                <th class="px-6 py-3.5 text-xs font-bold uppercase tracking-wider text-[#4d4634]">Status</th>
+                                <th class="px-6 py-3.5 text-xs font-bold uppercase tracking-wider text-[#4d4634]">Mulai</th>
+                                <th class="px-6 py-3.5 text-xs font-bold uppercase tracking-wider text-[#4d4634]">Berakhir</th>
+                                <th class="px-6 py-3.5 text-xs font-bold uppercase tracking-wider text-[#4d4634]">Dibuat</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                        <tbody class="divide-y divide-[#eae8e2]">
                             <tr
                                 v-for="sub in subscriptions"
                                 :key="sub.id"
-                                class="hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors"
+                                class="hover:bg-[#fbf9f3] transition-colors"
                             >
-                                <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{{ formatPackage(sub.package) }}</td>
+                                <td class="px-6 py-4">
+                                    <div class="flex items-center gap-2.5">
+                                        <span class="w-7 h-7 rounded-lg bg-[#ffd23f]/25 text-[#725a00] flex items-center justify-center font-bold text-xs">
+                                            {{ sub.package === 'pro' ? 'PRO' : 'L' }}
+                                        </span>
+                                        <span class="text-sm font-bold text-[#1b1c19]">{{ formatPackage(sub.package) }}</span>
+                                    </div>
+                                </td>
                                 <td class="px-6 py-4">
                                     <span
-                                        class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                        class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold"
                                         :class="{
-                                            'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400': sub.status === 'active',
-                                            'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400': sub.status === 'pending' || sub.status === 'cancelled',
-                                            'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400': sub.status === 'expired',
+                                            'bg-[#51fac1]/30 text-[#006c4f]': sub.status === 'active',
+                                            'bg-[#ffd23f]/40 text-[#725a00]': sub.status === 'pending' || sub.status === 'cancelled',
+                                            'bg-[#ffc9d0]/60 text-[#ad2c4f]': sub.status === 'expired',
                                         }"
                                     >
-                                        {{ sub.status === 'pending' ? 'Menunggu Pembayaran' : sub.status }}
+                                        <span class="material-symbols-outlined text-[14px]">
+                                            {{ sub.status === 'active' ? 'check' : sub.status === 'pending' ? 'timelapse' : 'close' }}
+                                        </span>
+                                        {{ sub.status === 'pending' ? 'Menunggu Pembayaran' : sub.status === 'active' ? 'Aktif' : sub.status === 'expired' ? 'Kedaluwarsa' : sub.status }}
                                     </span>
                                 </td>
-                                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(sub.starts_at) }}</td>
-                                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(sub.ends_at) }}</td>
-                                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">{{ formatDate(sub.created_at) }}</td>
+                                <td class="px-6 py-4 text-sm text-[#4d4634] font-medium">{{ formatDate(sub.starts_at) }}</td>
+                                <td class="px-6 py-4 text-sm text-[#4d4634] font-medium">{{ formatDate(sub.ends_at) }}</td>
+                                <td class="px-6 py-4 text-sm text-[#4d4634]/70">{{ formatDate(sub.created_at) }}</td>
                             </tr>
                             <tr v-if="subscriptions.length === 0">
-                                <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
-                                    Belum ada riwayat subscription
+                                <td colspan="5" class="px-6 py-12 text-center text-sm text-[#4d4634]">
+                                    <div class="flex flex-col items-center justify-center gap-2">
+                                        <span class="material-symbols-outlined text-4xl text-[#4d4634]/40">receipt_long</span>
+                                        <p class="font-medium text-[#4d4634]">Belum ada riwayat langganan yang tercatat</p>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -629,17 +666,21 @@ const copyToClipboard = async (text: string) => {
             </div>
         </div>
 
-        <!-- Upgrade Dialog -->
+        <!-- Upgrade / Change Plan Dialog -->
         <Dialog :open="showUpgradeDialog" @update:open="showUpgradeDialog = $event">
-            <DialogContent class="!max-w-[95vw] sm:!max-w-2xl !max-h-[90vh] rounded-2xl p-0 gap-0 bg-white dark:bg-gray-800 flex flex-col">
-                <DialogHeader class="p-6 pb-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-                    <DialogTitle class="text-xl font-bold text-gray-900 dark:text-white">Upgrade ke Paket Lengkap</DialogTitle>
-                    <DialogDescription class="text-sm text-gray-500">Pilih durasi langganan dan metode pembayaran</DialogDescription>
+            <DialogContent class="!max-w-[95vw] sm:!max-w-2xl !max-h-[90vh] rounded-2xl p-0 gap-0 bg-white flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
+                <DialogHeader class="p-6 pb-4 border-b border-[#eae8e2] flex-shrink-0">
+                    <DialogTitle class="text-xl font-bold text-[#1b1c19] flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#725a00]">rocket_launch</span>
+                        Upgrade ke Paket Lengkap
+                    </DialogTitle>
+                    <DialogDescription class="text-sm text-[#4d4634]">Pilih durasi langganan dan metode pembayaran yang Anda inginkan</DialogDescription>
                 </DialogHeader>
+
                 <div class="p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
                     <!-- Plan Selection -->
                     <div>
-                        <Label class="mb-3 block text-sm font-medium text-gray-700 dark:text-gray-300">Pilih Paket</Label>
+                        <Label class="mb-3 block text-sm font-bold text-[#1b1c19]">Pilih Paket</Label>
                         <div class="grid grid-cols-2 gap-3">
                             <button
                                 v-for="plan in plans"
@@ -648,18 +689,18 @@ const copyToClipboard = async (text: string) => {
                                 @click="updatePlan(plan)"
                                 class="p-4 rounded-xl border transition-all text-left relative"
                                 :class="selectedPlan.slug === plan.slug
-                                    ? 'border-green-500 bg-green-50 ring-1 ring-green-500 dark:bg-green-900/20 dark:border-green-500'
-                                    : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600'"
+                                    ? 'border-[#ffd23f] bg-[#fff9e6] ring-2 ring-[#ffd23f]'
+                                    : 'border-[#eae8e2] bg-white hover:border-[#ffd23f]/50'"
                             >
-                                <p class="text-sm font-bold text-gray-900 dark:text-white" :class="plan.slug === 'pro' ? 'text-orange-600 dark:text-orange-400' : ''">{{ plan.name }}</p>
-                                <p class="text-xs text-gray-500 mt-1">{{ formatCurrency(plan.monthly_price) }}/bln</p>
+                                <p class="text-base font-bold text-[#1b1c19]">{{ plan.name }}</p>
+                                <p class="text-xs font-semibold text-[#725a00] mt-1">{{ formatCurrency(plan.monthly_price) }}/bulan</p>
                             </button>
                         </div>
                     </div>
 
                     <!-- Duration Selection -->
                     <div>
-                        <Label class="mb-3 block text-sm font-medium text-gray-700 dark:text-gray-300">Durasi Langganan</Label>
+                        <Label class="mb-3 block text-sm font-bold text-[#1b1c19]">Durasi Langganan</Label>
                         <div class="grid grid-cols-2 gap-3">
                             <button
                                 v-for="duration in durationOptions"
@@ -668,15 +709,20 @@ const copyToClipboard = async (text: string) => {
                                 @click="updateDuration(duration)"
                                 class="p-4 rounded-xl border transition-all text-left relative"
                                 :class="selectedDuration.value === duration.value
-                                    ? 'border-green-500 bg-green-50 ring-1 ring-green-500 dark:bg-green-900/20 dark:border-green-500'
-                                    : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600'"
+                                    ? 'border-[#ffd23f] bg-[#fff9e6] ring-2 ring-[#ffd23f]'
+                                    : 'border-[#eae8e2] bg-white hover:border-[#ffd23f]/50'"
                             >
-                                <p class="text-sm font-bold text-gray-900 dark:text-white">{{ duration.label }}</p>
-                                <div class="mt-1 flex items-center gap-2">
-                                    <p class="text-sm font-bold text-green-600 dark:text-green-400">
-                                        {{ formatCurrency(selectedPlan.monthly_price * duration.value * (1 - duration.discount/100)) }}
+                                <div class="flex items-center justify-between">
+                                    <p class="text-sm font-bold text-[#1b1c19]">{{ duration.label }}</p>
+                                    <span v-if="duration.discount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#ffc9d0] text-[#ad2c4f]">
+                                        -{{ duration.discount }}%
+                                    </span>
+                                </div>
+                                <div class="mt-2 flex items-center gap-2">
+                                    <p class="text-sm font-bold text-[#006c4f]">
+                                        {{ formatCurrency(selectedPlan.monthly_price * duration.value * (1 - duration.discount / 100)) }}
                                     </p>
-                                    <p v-if="duration.discount > 0" class="text-[10px] text-gray-400 line-through">
+                                    <p v-if="duration.discount > 0" class="text-[11px] text-[#4d4634]/50 line-through">
                                         {{ formatCurrency(selectedPlan.monthly_price * duration.value) }}
                                     </p>
                                 </div>
@@ -685,127 +731,127 @@ const copyToClipboard = async (text: string) => {
                     </div>
 
                     <!-- Price Summary -->
-                    <div class="rounded-xl bg-gray-50 p-4 dark:bg-gray-900/50">
+                    <div class="rounded-xl bg-[#f5f3ee] p-4 border border-[#eae8e2]">
                         <div class="space-y-2 text-sm">
-                            <div class="flex justify-between text-gray-600 dark:text-gray-400">
-                                <span>Subtotal</span>
-                                <span>{{ formatCurrency(upgradeSubtotal) }}</span>
+                            <div class="flex justify-between text-[#4d4634]">
+                                <span>Subtotal:</span>
+                                <span class="font-medium text-[#1b1c19]">{{ formatCurrency(upgradeSubtotal) }}</span>
                             </div>
-                            <div v-if="upgradeDiscount > 0" class="flex justify-between text-green-600 dark:text-green-400">
-                                <span>Diskon ({{ selectedDuration.discount }}%)</span>
+                            <div v-if="upgradeDiscount > 0" class="flex justify-between text-[#006c4f] font-semibold">
+                                <span>Diskon ({{ selectedDuration.discount }}%):</span>
                                 <span>-{{ formatCurrency(upgradeDiscount) }}</span>
                             </div>
-                            <div class="border-t border-gray-200 pt-2 flex justify-between items-center dark:border-gray-700">
-                                <span class="font-bold text-gray-900 dark:text-white">Total</span>
-                                <span class="text-lg font-bold text-gray-900 dark:text-white">{{ formatCurrency(upgradeTotal) }}</span>
+                            <div class="border-t border-[#eae8e2] pt-2 flex justify-between items-center">
+                                <span class="font-bold text-[#1b1c19]">Total Pembayaran:</span>
+                                <span class="text-lg font-black text-[#725a00]">{{ formatCurrency(upgradeTotal) }}</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Payment Method -->
+                    <!-- Payment Method Accordion -->
                     <div>
-                        <Label class="mb-3 block text-sm font-medium text-gray-700 dark:text-gray-300">Metode Pembayaran</Label>
+                        <Label class="mb-3 block text-sm font-bold text-[#1b1c19]">Pilih Metode Pembayaran</Label>
                         <div class="space-y-3">
-                            <!-- QRIS Payment Dropdown -->
-                            <div class="rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-gray-700 dark:bg-gray-800">
+                            <!-- QRIS Selection -->
+                            <div class="rounded-xl border border-[#eae8e2] bg-white overflow-hidden">
                                 <button 
                                     @click="selectedPaymentMethod = 'qris'"
-                                    class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    :class="selectedPaymentMethod === 'qris' ? 'bg-gray-50 dark:bg-gray-700/50' : ''"
+                                    type="button"
+                                    class="w-full flex items-center justify-between p-4 text-left transition-colors"
+                                    :class="selectedPaymentMethod === 'qris' ? 'bg-[#fff9e6] border-b border-[#ffd23f]/40' : 'hover:bg-[#f5f3ee]'"
                                 >
                                     <div class="flex items-center gap-3">
-                                        <div class="w-10 h-10 rounded-lg bg-white border border-gray-200 dark:border-gray-600 flex items-center justify-center p-1">
+                                        <div class="w-11 h-11 rounded-lg bg-white border border-[#eae8e2] flex items-center justify-center p-1.5 shadow-xs">
                                             <img src="/qris.png" alt="QRIS" class="w-full h-full object-contain" />
                                         </div>
                                         <div>
-                                            <p class="text-sm font-semibold text-gray-900 dark:text-white">QRIS</p>
-                                            <p class="text-xs text-gray-500">Scan QR code untuk pembayaran instan</p>
+                                            <p class="text-sm font-bold text-[#1b1c19]">QRIS (Semua E-Wallet & Mobile Banking)</p>
+                                            <p class="text-xs text-[#4d4634]">Scan kode QR untuk verifikasi transaksi cepat</p>
                                         </div>
                                     </div>
-                                    <div class="w-5 h-5 rounded-full border flex items-center justify-center"
-                                        :class="selectedPaymentMethod === 'qris' ? 'border-green-500 bg-green-500' : 'border-gray-300 dark:border-gray-600'"
+                                    <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center"
+                                        :class="selectedPaymentMethod === 'qris' ? 'border-[#ffd23f] bg-[#ffd23f]' : 'border-[#eae8e2]'"
                                     >
-                                        <div v-if="selectedPaymentMethod === 'qris'" class="w-2 h-2 rounded-full bg-white"></div>
+                                        <div v-if="selectedPaymentMethod === 'qris'" class="w-2 h-2 rounded-full bg-[#725a00]"></div>
                                     </div>
                                 </button>
                                 
-                                <div v-show="selectedPaymentMethod === 'qris'" class="p-4 border-t border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-900/30">
+                                <div v-show="selectedPaymentMethod === 'qris'" class="p-5 bg-[#fbf9f3]">
                                     <div class="flex flex-col items-center text-center">
-                                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Scan QRIS di bawah ini menggunakan aplikasi e-wallet atau mobile banking Anda.</p>
-                                        
+                                        <p class="text-xs text-[#4d4634] mb-3">Buka GoPay, OVO, Dana, BCA Mobile, atau aplikasi bank Anda lalu scan QRIS ini:</p>
                                         <div 
-                                            class="bg-white p-2 rounded-xl border border-gray-200 inline-block shadow-sm mb-3 cursor-pointer hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700"
+                                            class="bg-white p-3 rounded-2xl border border-[#eae8e2] shadow-sm cursor-pointer hover:shadow-md transition-all"
                                             @click="showQrZoom = true"
-                                            title="Klik untuk memperbesar"
+                                            title="Klik untuk memperbesar gambar QR"
                                         >
-                                            <img src="/qriss.png" alt="Scan QRIS" class="w-40 h-40 object-contain mx-auto" />
+                                            <img src="/qriss.png" alt="Scan QRIS" class="w-44 h-44 object-contain mx-auto" />
                                         </div>
-                                        <p class="text-xs text-gray-400">Klik gambar untuk memperbesar</p>
+                                        <button type="button" @click="showQrZoom = true" class="mt-2 text-xs font-bold text-[#725a00] hover:underline flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-sm">zoom_in</span>
+                                            Klik untuk memperbesar tampilan QR
+                                        </button>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Manual Transfer Dropdown -->
-                            <div class="rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-gray-700 dark:bg-gray-800">
+                            <!-- Bank Transfer Selection -->
+                            <div class="rounded-xl border border-[#eae8e2] bg-white overflow-hidden">
                                 <button 
                                     @click="selectedPaymentMethod = 'manual'"
-                                    class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    :class="selectedPaymentMethod === 'manual' ? 'bg-gray-50 dark:bg-gray-700/50' : ''"
+                                    type="button"
+                                    class="w-full flex items-center justify-between p-4 text-left transition-colors"
+                                    :class="selectedPaymentMethod === 'manual' ? 'bg-[#fff9e6] border-b border-[#ffd23f]/40' : 'hover:bg-[#f5f3ee]'"
                                 >
                                     <div class="flex items-center gap-3">
-                                        <div class="w-10 h-10 rounded-lg bg-white border border-gray-200 dark:border-gray-600 flex items-center justify-center text-green-600">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" x2="22" y1="10" y2="10"></line></svg>
+                                        <div class="w-11 h-11 rounded-lg bg-[#51fac1]/20 text-[#006c4f] border border-[#51fac1]/30 flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-2xl">account_balance</span>
                                         </div>
                                         <div>
-                                            <p class="text-sm font-semibold text-gray-900 dark:text-white">Transfer Bank Manual</p>
-                                            <p class="text-xs text-gray-500">Transfer ke rekening bank admin</p>
+                                            <p class="text-sm font-bold text-[#1b1c19]">Transfer Bank Manual</p>
+                                            <p class="text-xs text-[#4d4634]">Transfer ke nomor rekening bank resmi FinWa</p>
                                         </div>
                                     </div>
-                                    <div class="w-5 h-5 rounded-full border flex items-center justify-center"
-                                        :class="selectedPaymentMethod === 'manual' ? 'border-green-500 bg-green-500' : 'border-gray-300 dark:border-gray-600'"
+                                    <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center"
+                                        :class="selectedPaymentMethod === 'manual' ? 'border-[#ffd23f] bg-[#ffd23f]' : 'border-[#eae8e2]'"
                                     >
-                                        <div v-if="selectedPaymentMethod === 'manual'" class="w-2 h-2 rounded-full bg-white"></div>
+                                        <div v-if="selectedPaymentMethod === 'manual'" class="w-2 h-2 rounded-full bg-[#725a00]"></div>
                                     </div>
                                 </button>
 
-                                <div v-show="selectedPaymentMethod === 'manual'" class="p-4 border-t border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-900/30">
-                                    <!-- Bank Accounts -->
+                                <div v-show="selectedPaymentMethod === 'manual'" class="p-5 bg-[#fbf9f3] space-y-3">
                                     <div v-if="banks && banks.length > 0" class="space-y-3">
                                         <div
                                             v-for="bank in banks"
                                             :key="bank.id"
-                                            class="p-3 rounded-xl bg-white border border-gray-200 shadow-sm dark:bg-gray-800 dark:border-gray-700"
+                                            class="p-4 rounded-xl bg-white border border-[#eae8e2] shadow-xs"
                                         >
                                             <div class="flex items-start justify-between gap-4">
                                                 <div class="flex-1">
-                                                    <p class="text-sm font-semibold text-gray-900 dark:text-white mb-2">{{ bank.name }}</p>
-                                                    <div class="space-y-1.5">
+                                                    <p class="text-sm font-black text-[#1b1c19] mb-1.5">{{ bank.name }}</p>
+                                                    <div class="space-y-1 text-xs">
                                                         <div class="flex items-center gap-2 flex-wrap">
-                                                            <span class="text-xs text-gray-500 min-w-[90px]">No. Rekening:</span>
-                                                            <span class="text-sm font-mono text-gray-900 dark:text-white font-medium">{{ bank.account_number }}</span>
+                                                            <span class="text-[#4d4634]">No. Rekening:</span>
+                                                            <span class="text-sm font-mono text-[#1b1c19] font-bold bg-[#f5f3ee] px-2 py-0.5 rounded">{{ bank.account_number }}</span>
                                                             <button
                                                                 @click="copyToClipboard(bank.account_number)"
                                                                 type="button"
-                                                                class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                                                class="p-1 rounded hover:bg-[#eae8e2] transition-colors text-[#725a00]"
                                                                 title="Salin nomor rekening"
                                                             >
-                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2h8c1.1 0 2 .9 2 2"></path></svg>
+                                                                <span class="material-symbols-outlined text-base">content_copy</span>
                                                             </button>
                                                         </div>
                                                         <div class="flex items-center gap-2">
-                                                            <span class="text-xs text-gray-500 min-w-[90px]">Atas Nama:</span>
-                                                            <span class="text-sm text-gray-900 dark:text-white">{{ bank.account_name }}</span>
-                                                        </div>
-                                                        <div v-if="bank.description" class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                                                            <p class="text-xs text-gray-500">{{ bank.description }}</p>
+                                                            <span class="text-[#4d4634]">Atas Nama:</span>
+                                                            <span class="text-xs font-semibold text-[#1b1c19]">{{ bank.account_name }}</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-else class="p-4 rounded-lg bg-yellow-50 border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800">
-                                        <p class="text-sm text-yellow-700 dark:text-yellow-300">Belum ada rekening bank yang tersedia. Silakan hubungi admin untuk informasi pembayaran.</p>
+                                    <div v-else class="p-4 rounded-xl bg-[#fff9e6] border border-[#ffd23f]/40 text-xs font-medium text-[#725a00]">
+                                        Belum ada data rekening bank yang ditampilkan. Silakan gunakan QRIS atau hubungi dukungan FinWa.
                                     </div>
                                 </div>
                             </div>
@@ -814,26 +860,26 @@ const copyToClipboard = async (text: string) => {
 
                     <!-- Notes -->
                     <div>
-                        <Label for="upgrade_notes" class="text-sm font-medium text-gray-700 dark:text-gray-300">Catatan (Opsional)</Label>
+                        <Label for="upgrade_notes" class="text-sm font-bold text-[#1b1c19]">Catatan Tambahan (Opsional)</Label>
                         <textarea
                             id="upgrade_notes"
                             v-model="upgradeNotes"
                             rows="2"
-                            class="mt-1.5 w-full rounded-xl border-gray-200 bg-white px-3 py-2 text-sm focus:border-green-500 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                            placeholder="Sertakan catatan tambahan untuk admin"
+                            class="mt-1.5 w-full rounded-xl border-[#eae8e2] bg-white px-3 py-2 text-sm focus:border-[#ffd23f] focus:ring-[#ffd23f] text-[#1b1c19]"
+                            placeholder="Tuliskan catatan untuk admin jika diperlukan"
                         ></textarea>
                         <InputError :message="upgradeRequestForm.errors.notes" />
                     </div>
                 </div>
 
                 <!-- Footer with buttons -->
-                <div class="p-6 pt-4 border-t border-gray-100 dark:border-gray-700 flex-shrink-0 bg-white dark:bg-gray-800">
+                <div class="p-6 pt-4 border-t border-[#eae8e2] flex-shrink-0 bg-white">
                     <div class="flex flex-col sm:flex-row gap-3">
                         <Button
                             type="button"
                             variant="outline"
                             @click="showUpgradeDialog = false"
-                            class="w-full sm:w-auto rounded-xl order-2 sm:order-1"
+                            class="w-full sm:w-auto rounded-xl border-[#eae8e2] text-[#1b1c19] hover:bg-[#f5f3ee] order-2 sm:order-1"
                         >
                             Batal
                         </Button>
@@ -841,224 +887,9 @@ const copyToClipboard = async (text: string) => {
                             type="button"
                             @click="submitUpgradeRequest"
                             :disabled="upgradeRequestForm.processing"
-                            class="w-full sm:flex-1 text-white hover:opacity-90 rounded-xl order-1 sm:order-2"
-                            style="background-color: oklch(0.65 0.19 137.46);"
+                            class="w-full sm:flex-1 rounded-xl bg-[#ffd23f] text-[#725a00] hover:bg-[#ffe089] font-bold shadow-sm active:scale-95 order-1 sm:order-2"
                         >
-                            {{ upgradeRequestForm.processing ? 'Mengirim...' : 'Ajukan Upgrade' }}
-                        </Button>
-                    </div>
-                </div>
-            </DialogContent>
-        </Dialog>
-
-        <!-- Extension Dialog -->
-        <Dialog :open="showExtensionDialog" @update:open="showExtensionDialog = $event">
-            <DialogContent class="!max-w-[95vw] sm:!max-w-2xl !max-h-[90vh] rounded-2xl p-0 gap-0 bg-white dark:bg-gray-800 flex flex-col">
-                <DialogHeader class="p-6 pb-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-                    <DialogTitle class="text-xl font-bold text-gray-900 dark:text-white">Perpanjang Paket</DialogTitle>
-                    <DialogDescription class="text-sm text-gray-500">Pilih durasi perpanjangan dan metode pembayaran</DialogDescription>
-                </DialogHeader>
-                <div class="p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
-                    <!-- Plan Info -->
-                    <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h4 class="text-base font-bold text-gray-900 dark:text-white">{{ subscription ? formatPackage(subscription.package) : 'Paket Lite' }}</h4>
-                                <p class="text-sm text-gray-500">
-                                    {{ formatCurrency(subscription?.package === 'pro' ? plans['pro']?.monthly_price : plans['lite']?.monthly_price) }}/bulan
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Duration Selection -->
-                    <div>
-                        <Label class="mb-3 block text-sm font-medium text-gray-700 dark:text-gray-300">Durasi Perpanjangan</Label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <button
-                                v-for="duration in durationOptions"
-                                :key="duration.value"
-                                type="button"
-                                @click="updateExtensionDuration(duration)"
-                                class="p-4 rounded-xl border transition-all text-left relative"
-                                :class="extensionDuration.value === duration.value
-                                    ? 'border-green-500 bg-green-50 ring-1 ring-green-500 dark:bg-green-900/20 dark:border-green-500'
-                                    : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600'"
-                            >
-                                <p class="text-sm font-bold text-gray-900 dark:text-white">{{ duration.label }}</p>
-                                <div class="mt-1 flex items-center gap-2">
-                                    <p class="text-sm font-bold text-green-600 dark:text-green-400">
-                                        {{ formatCurrency((subscription?.package === 'pro' ? plans['pro']?.monthly_price : plans['lite']?.monthly_price) * duration.value * (1 - duration.discount/100)) }}
-                                    </p>
-                                    <p v-if="duration.discount > 0" class="text-[10px] text-gray-400 line-through">
-                                        {{ formatCurrency((subscription?.package === 'pro' ? plans['pro']?.monthly_price : plans['lite']?.monthly_price) * duration.value) }}
-                                    </p>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Price Summary -->
-                    <div class="rounded-xl bg-gray-50 p-4 dark:bg-gray-900/50">
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between text-gray-600 dark:text-gray-400">
-                                <span>Subtotal</span>
-                                <span>{{ formatCurrency(extensionSubtotal) }}</span>
-                            </div>
-                            <div v-if="extensionDiscount > 0" class="flex justify-between text-green-600 dark:text-green-400">
-                                <span>Diskon ({{ extensionDuration.discount }}%)</span>
-                                <span>-{{ formatCurrency(extensionDiscount) }}</span>
-                            </div>
-                            <div class="border-t border-gray-200 pt-2 flex justify-between items-center dark:border-gray-700">
-                                <span class="font-bold text-gray-900 dark:text-white">Total</span>
-                                <span class="text-lg font-bold text-gray-900 dark:text-white">{{ formatCurrency(extensionTotal) }}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Payment Method -->
-                    <div>
-                        <Label class="mb-3 block text-sm font-medium text-gray-700 dark:text-gray-300">Metode Pembayaran</Label>
-                        <div class="space-y-3">
-                            <!-- QRIS Payment Dropdown -->
-                            <div class="rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-gray-700 dark:bg-gray-800">
-                                <button 
-                                    @click="selectedPaymentMethod = 'qris'"
-                                    class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    :class="selectedPaymentMethod === 'qris' ? 'bg-gray-50 dark:bg-gray-700/50' : ''"
-                                >
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-10 h-10 rounded-lg bg-white border border-gray-200 dark:border-gray-600 flex items-center justify-center p-1">
-                                            <img src="/qris.png" alt="QRIS" class="w-full h-full object-contain" />
-                                        </div>
-                                        <div>
-                                            <p class="text-sm font-semibold text-gray-900 dark:text-white">QRIS</p>
-                                            <p class="text-xs text-gray-500">Scan QR code untuk pembayaran instan</p>
-                                        </div>
-                                    </div>
-                                    <div class="w-5 h-5 rounded-full border flex items-center justify-center"
-                                        :class="selectedPaymentMethod === 'qris' ? 'border-green-500 bg-green-500' : 'border-gray-300 dark:border-gray-600'"
-                                    >
-                                        <div v-if="selectedPaymentMethod === 'qris'" class="w-2 h-2 rounded-full bg-white"></div>
-                                    </div>
-                                </button>
-                                
-                                <div v-show="selectedPaymentMethod === 'qris'" class="p-4 border-t border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-900/30">
-                                    <div class="flex flex-col items-center text-center">
-                                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Scan QRIS di bawah ini menggunakan aplikasi e-wallet atau mobile banking Anda.</p>
-                                        
-                                        <div 
-                                            class="bg-white p-2 rounded-xl border border-gray-200 inline-block shadow-sm mb-3 cursor-pointer hover:shadow-md transition-shadow dark:bg-gray-800 dark:border-gray-700"
-                                            @click="showQrZoom = true"
-                                            title="Klik untuk memperbesar"
-                                        >
-                                            <img src="/qriss.png" alt="Scan QRIS" class="w-40 h-40 object-contain mx-auto" />
-                                        </div>
-                                        <p class="text-xs text-gray-400">Klik gambar untuk memperbesar</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Manual Transfer Dropdown -->
-                            <div class="rounded-xl border border-gray-200 bg-white overflow-hidden dark:border-gray-700 dark:bg-gray-800">
-                                <button 
-                                    @click="selectedPaymentMethod = 'manual'"
-                                    class="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                                    :class="selectedPaymentMethod === 'manual' ? 'bg-gray-50 dark:bg-gray-700/50' : ''"
-                                >
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-10 h-10 rounded-lg bg-white border border-gray-200 dark:border-gray-600 flex items-center justify-center text-green-600">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" x2="22" y1="10" y2="10"></line></svg>
-                                        </div>
-                                        <div>
-                                            <p class="text-sm font-semibold text-gray-900 dark:text-white">Transfer Bank Manual</p>
-                                            <p class="text-xs text-gray-500">Transfer ke rekening bank admin</p>
-                                        </div>
-                                    </div>
-                                    <div class="w-5 h-5 rounded-full border flex items-center justify-center"
-                                        :class="selectedPaymentMethod === 'manual' ? 'border-green-500 bg-green-500' : 'border-gray-300 dark:border-gray-600'"
-                                    >
-                                        <div v-if="selectedPaymentMethod === 'manual'" class="w-2 h-2 rounded-full bg-white"></div>
-                                    </div>
-                                </button>
-
-                                <div v-show="selectedPaymentMethod === 'manual'" class="p-4 border-t border-gray-200 bg-gray-50/50 dark:border-gray-700 dark:bg-gray-900/30">
-                                    <!-- Bank Accounts -->
-                                    <div v-if="banks && banks.length > 0" class="space-y-3">
-                                        <div
-                                            v-for="bank in banks"
-                                            :key="bank.id"
-                                            class="p-3 rounded-xl bg-white border border-gray-200 shadow-sm dark:bg-gray-800 dark:border-gray-700"
-                                        >
-                                            <div class="flex items-start justify-between gap-4">
-                                                <div class="flex-1">
-                                                    <p class="text-sm font-semibold text-gray-900 dark:text-white mb-2">{{ bank.name }}</p>
-                                                    <div class="space-y-1.5">
-                                                        <div class="flex items-center gap-2 flex-wrap">
-                                                            <span class="text-xs text-gray-500 min-w-[90px]">No. Rekening:</span>
-                                                            <span class="text-sm font-mono text-gray-900 dark:text-white font-medium">{{ bank.account_number }}</span>
-                                                            <button
-                                                                @click="copyToClipboard(bank.account_number)"
-                                                                type="button"
-                                                                class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                                                                title="Salin nomor rekening"
-                                                            >
-                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2h8c1.1 0 2 .9 2 2"></path></svg>
-                                                            </button>
-                                                        </div>
-                                                        <div class="flex items-center gap-2">
-                                                            <span class="text-xs text-gray-500 min-w-[90px]">Atas Nama:</span>
-                                                            <span class="text-sm text-gray-900 dark:text-white">{{ bank.account_name }}</span>
-                                                        </div>
-                                                        <div v-if="bank.description" class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                                                            <p class="text-xs text-gray-500">{{ bank.description }}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div v-else class="p-4 rounded-lg bg-yellow-50 border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800">
-                                        <p class="text-sm text-yellow-700 dark:text-yellow-300">Belum ada rekening bank yang tersedia. Silakan hubungi admin untuk informasi pembayaran.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Notes -->
-                    <div>
-                        <Label for="extension_notes" class="text-sm font-medium text-gray-700 dark:text-gray-300">Catatan (Opsional)</Label>
-                        <textarea
-                            id="extension_notes"
-                            v-model="extensionNotes"
-                            rows="2"
-                            class="mt-1.5 w-full rounded-xl border-gray-200 bg-white px-3 py-2 text-sm focus:border-green-500 focus:ring-green-500 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                            placeholder="Sertakan catatan tambahan untuk admin"
-                        ></textarea>
-                        <InputError :message="extensionRequestForm.errors.notes" />
-                    </div>
-                </div>
-
-                <!-- Footer with buttons -->
-                <div class="p-6 pt-4 border-t border-gray-100 dark:border-gray-700 flex-shrink-0 bg-white dark:bg-gray-800">
-                    <div class="flex flex-col sm:flex-row gap-3">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            @click="showExtensionDialog = false"
-                            class="w-full sm:w-auto rounded-xl order-2 sm:order-1"
-                        >
-                            Batal
-                        </Button>
-                        <Button
-                            type="button"
-                            @click="submitExtensionRequest"
-                            :disabled="extensionRequestForm.processing"
-                            class="w-full sm:flex-1 text-white hover:opacity-90 rounded-xl order-1 sm:order-2"
-                            style="background-color: oklch(0.65 0.19 137.46);"
-                        >
-                            {{ extensionRequestForm.processing ? 'Mengirim...' : 'Ajukan Perpanjangan' }}
+                            {{ upgradeRequestForm.processing ? 'Mengirim Permintaan...' : 'Kirim Pengajuan Upgrade' }}
                         </Button>
                     </div>
                 </div>
@@ -1067,17 +898,19 @@ const copyToClipboard = async (text: string) => {
 
         <!-- QR Code Zoom Modal -->
         <Dialog v-model:open="showQrZoom">
-            <DialogContent class="max-w-md p-6 rounded-2xl">
+            <DialogContent class="max-w-md p-6 rounded-2xl font-['Plus_Jakarta_Sans',sans-serif] bg-white">
                 <div class="flex flex-col items-center text-center">
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Scan QRIS</h3>
-                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-lg dark:bg-gray-800 dark:border-gray-700">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="material-symbols-outlined text-[#725a00] text-2xl">qr_code_scanner</span>
+                        <h3 class="text-lg font-bold text-[#1b1c19]">Scan QRIS FinWa</h3>
+                    </div>
+                    <div class="bg-white p-4 rounded-2xl border border-[#eae8e2] shadow-sm">
                         <img src="/qriss.png" alt="Scan QRIS" class="w-72 h-72 object-contain mx-auto" />
                     </div>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-4">Scan menggunakan aplikasi e-wallet atau mobile banking Anda</p>
+                    <p class="text-xs text-[#4d4634] mt-3">Gunakan kamera pemindai di GoPay, OVO, Dana, ShopeePay, atau m-Banking Anda</p>
                     <Button 
                         @click="showQrZoom = false" 
-                        class="mt-4 text-white"
-                        style="background-color: oklch(0.65 0.19 137.46);"
+                        class="mt-5 w-full bg-[#ffd23f] text-[#725a00] hover:bg-[#ffe089] font-bold rounded-xl shadow-sm"
                     >
                         Tutup
                     </Button>
@@ -1087,33 +920,36 @@ const copyToClipboard = async (text: string) => {
 
         <!-- Payment Proof View Dialog -->
         <Dialog :open="showPaymentProofViewDialog" @update:open="showPaymentProofViewDialog = $event">
-            <DialogContent class="max-w-4xl rounded-2xl p-0 overflow-hidden bg-white dark:bg-gray-800">
-                <DialogHeader class="p-6 pb-4">
-                    <DialogTitle class="text-xl font-bold text-gray-900 dark:text-white">Bukti Pembayaran</DialogTitle>
-                    <DialogDescription class="text-sm text-gray-500">Bukti transfer pembayaran</DialogDescription>
+            <DialogContent class="max-w-3xl rounded-2xl p-0 overflow-hidden bg-white font-['Plus_Jakarta_Sans',sans-serif]">
+                <DialogHeader class="p-6 pb-4 border-b border-[#eae8e2]">
+                    <DialogTitle class="text-xl font-bold text-[#1b1c19] flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#725a00]">image</span>
+                        Pratinjau Bukti Pembayaran
+                    </DialogTitle>
+                    <DialogDescription class="text-sm text-[#4d4634]">Berkas bukti transfer yang telah Anda kirimkan</DialogDescription>
                 </DialogHeader>
-                <div v-if="viewingPaymentProofUrl" class="p-6 pt-0 space-y-6">
-                    <div class="relative rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
+                <div v-if="viewingPaymentProofUrl" class="p-6 space-y-4">
+                    <div class="relative rounded-2xl border border-[#eae8e2] bg-[#f5f3ee] p-3 flex items-center justify-center">
                         <img 
                             :src="viewingPaymentProofUrl" 
                             alt="Bukti Pembayaran" 
-                            class="w-full h-auto rounded-lg max-h-[60vh] object-contain mx-auto" 
+                            class="w-full h-auto rounded-xl max-h-[60vh] object-contain mx-auto" 
                         />
                     </div>
-                    <div class="flex justify-between items-center">
+                    <div class="flex justify-between items-center pt-2">
                         <a
                             :href="viewingPaymentProofUrl"
                             target="_blank"
-                            class="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline inline-flex items-center gap-2"
+                            class="text-sm font-bold text-[#006c4f] hover:underline inline-flex items-center gap-1.5"
                         >
-                            <Eye class="w-4 h-4" />
-                            Buka di tab baru
+                            <span class="material-symbols-outlined text-lg">open_in_new</span>
+                            Buka Berkas di Tab Baru
                         </a>
                         <Button
                             type="button"
                             variant="outline"
                             @click="showPaymentProofViewDialog = false"
-                            class="rounded-xl"
+                            class="rounded-xl border-[#eae8e2] text-[#1b1c19]"
                         >
                             Tutup
                         </Button>
@@ -1124,68 +960,68 @@ const copyToClipboard = async (text: string) => {
 
         <!-- Payment Proof Upload Dialog -->
         <Dialog :open="showPaymentProofDialog" @update:open="showPaymentProofDialog = $event">
-            <DialogContent class="max-w-lg rounded-2xl p-0 overflow-hidden bg-white dark:bg-gray-800">
-                <DialogHeader class="p-6 pb-0">
-                    <DialogTitle class="text-xl font-bold text-gray-900 dark:text-white">Upload Bukti Pembayaran</DialogTitle>
-                    <DialogDescription class="text-sm text-gray-500">
-                        Upload bukti transfer pembayaran Anda. Format: JPG, PNG, GIF, WebP (maks. 5MB)
+            <DialogContent class="max-w-lg rounded-2xl p-0 overflow-hidden bg-white font-['Plus_Jakarta_Sans',sans-serif]">
+                <DialogHeader class="p-6 pb-4 border-b border-[#eae8e2]">
+                    <DialogTitle class="text-xl font-bold text-[#1b1c19] flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[#725a00]">upload_file</span>
+                        Unggah Bukti Pembayaran
+                    </DialogTitle>
+                    <DialogDescription class="text-sm text-[#4d4634]">
+                        Format didukung: JPG, PNG, WebP (Ukuran maksimal 5MB)
                     </DialogDescription>
                 </DialogHeader>
-                <div class="p-6 space-y-6">
+                <div class="p-6 space-y-5">
                     <!-- Current Payment Proof (if exists) -->
-                    <div v-if="subscriptionForUpload?.payment_proof && !previewUrl" class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-                        <Label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Bukti Pembayaran Saat Ini</Label>
+                    <div v-if="subscriptionForUpload?.payment_proof && !previewUrl" class="rounded-xl border border-[#eae8e2] bg-[#f5f3ee] p-4">
+                        <Label class="mb-2 block text-xs font-bold uppercase tracking-wider text-[#4d4634]">Bukti Pembayaran Tersimpan</Label>
                         <div class="relative">
-                            <img :src="subscriptionForUpload.payment_proof" alt="Bukti Pembayaran" class="w-full h-auto rounded-lg border border-gray-200 max-h-48 object-contain bg-white" />
+                            <img :src="subscriptionForUpload.payment_proof" alt="Bukti Pembayaran" class="w-full h-auto rounded-lg border border-[#eae8e2] max-h-44 object-contain bg-white" />
                             <a
                                 :href="subscriptionForUpload.payment_proof"
                                 target="_blank"
-                                class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                                class="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#006c4f] hover:underline"
                             >
-                                <Eye class="w-4 h-4" />
-                                Lihat di tab baru
+                                <span class="material-symbols-outlined text-sm">visibility</span>
+                                Lihat gambar asli
                             </a>
                         </div>
-                        <p class="mt-2 text-xs text-gray-500">
-                            Anda dapat mengganti bukti pembayaran dengan mengupload file baru di bawah.
-                        </p>
                     </div>
 
                     <!-- File Input -->
                     <div>
-                        <Label for="payment_proof" class="text-sm font-medium text-gray-700 dark:text-gray-300">Pilih File Baru</Label>
+                        <Label for="payment_proof" class="text-sm font-bold text-[#1b1c19]">Pilih Berkas Gambar</Label>
                         <Input
                             id="payment_proof"
                             type="file"
                             accept="image/*"
                             @change="handleFileSelect"
-                            class="mt-1.5 rounded-xl cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                            class="mt-1.5 rounded-xl cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-[#ffd23f] file:text-[#725a00] hover:file:bg-[#ffe089]"
                         />
                         <InputError :message="uploadForm.errors.payment_proof" />
                     </div>
 
                     <!-- Preview New File -->
                     <div v-if="previewUrl" class="relative">
-                        <Label class="text-sm font-medium text-gray-700 dark:text-gray-300">Preview File Baru</Label>
-                        <div class="mt-2 relative">
-                            <img :src="previewUrl" alt="Preview" class="w-full h-auto rounded-lg border border-gray-200 max-h-48 object-contain bg-white" />
+                        <Label class="text-xs font-bold uppercase tracking-wider text-[#4d4634]">Pratinjau Berkas Baru</Label>
+                        <div class="mt-2 relative rounded-xl border border-[#eae8e2] p-2 bg-[#f5f3ee]">
+                            <img :src="previewUrl" alt="Preview" class="w-full h-auto rounded-lg max-h-48 object-contain bg-white mx-auto" />
                             <button
                                 @click="previewUrl = null; selectedFile = null; uploadForm.payment_proof = null"
                                 type="button"
-                                class="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-sm"
-                                title="Hapus preview"
+                                class="absolute top-3 right-3 p-1.5 bg-[#ffc9d0] text-[#ad2c4f] rounded-full hover:bg-[#ffc9d0]/80 transition-colors shadow-sm"
+                                title="Hapus gambar"
                             >
-                                <X class="w-4 h-4" />
+                                <span class="material-symbols-outlined text-base">close</span>
                             </button>
                         </div>
                     </div>
 
-                    <div class="flex justify-end gap-3 pt-2">
+                    <div class="flex justify-end gap-3 pt-3 border-t border-[#eae8e2]">
                         <Button
                             type="button"
                             variant="outline"
                             @click="closePaymentProofDialog"
-                            class="rounded-xl"
+                            class="rounded-xl border-[#eae8e2] text-[#1b1c19] hover:bg-[#f5f3ee]"
                         >
                             Batal
                         </Button>
@@ -1193,10 +1029,10 @@ const copyToClipboard = async (text: string) => {
                             type="button"
                             @click="handleUpload"
                             :disabled="!selectedFile || uploadForm.processing || !subscriptionForUpload"
-                            style="background-color: oklch(0.65 0.19 137.46);"
-                            class="text-white disabled:opacity-50 rounded-xl"
+                            class="bg-[#ffd23f] text-[#725a00] hover:bg-[#ffe089] font-bold disabled:opacity-50 rounded-xl shadow-sm"
                         >
-                            {{ uploadForm.processing ? 'Mengupload...' : subscriptionForUpload?.payment_proof ? 'Ganti Bukti' : 'Upload Bukti' }}
+                            <span class="material-symbols-outlined text-lg mr-1.5">upload</span>
+                            {{ uploadForm.processing ? 'Mengunggah...' : subscriptionForUpload?.payment_proof ? 'Ganti Bukti' : 'Kirim Bukti' }}
                         </Button>
                     </div>
                 </div>

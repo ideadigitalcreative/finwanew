@@ -167,6 +167,10 @@ Route::middleware(['auth', 'verified', 'superadmin'])->prefix('superadmin')->nam
     Route::get('/gemini-settings', [\App\Http\Controllers\SuperAdmin\GeminiSettingsController::class, 'index'])->name('gemini-settings.index');
     Route::put('/gemini-settings', [\App\Http\Controllers\SuperAdmin\GeminiSettingsController::class, 'update'])->name('gemini-settings.update');
 
+    Route::get('/hybrid-llm-settings', [\App\Http\Controllers\SuperAdmin\HybridLLMSettingsController::class, 'index'])->name('hybrid-llm-settings.index');
+    Route::put('/hybrid-llm-settings', [\App\Http\Controllers\SuperAdmin\HybridLLMSettingsController::class, 'update'])->name('hybrid-llm-settings.update');
+    Route::post('/hybrid-llm-settings/test', [\App\Http\Controllers\SuperAdmin\HybridLLMSettingsController::class, 'test'])->name('hybrid-llm-settings.test');
+
     // WhatsApp Management (Super Admin)
     Route::prefix('whatsapp')->name('whatsapp.')->group(function () {
         Route::get('/', [\App\Http\Controllers\SuperAdmin\WhatsAppController::class, 'index'])->name('index');
@@ -196,6 +200,8 @@ Route::middleware(['auth', 'verified', 'tenant'])->group(function () {
 Route::middleware(['auth', 'verified', 'tenant', 'subscription'])->group(function () {
     Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])->name('dashboard');
 
+    Route::get('/laporan', [\App\Http\Controllers\ReportController::class, 'index'])->name('laporan.index');
+
     Route::prefix('transactions')->group(function () {
         Route::get('/', [\App\Http\Controllers\TransactionController::class, 'index'])->name('transactions.index');
         Route::post('/parse', [\App\Http\Controllers\TransactionController::class, 'parse'])->name('transactions.parse');
@@ -205,6 +211,8 @@ Route::middleware(['auth', 'verified', 'tenant', 'subscription'])->group(functio
         Route::patch('/{transaction}/status', [\App\Http\Controllers\TransactionController::class, 'updateStatus'])->name('transactions.update-status');
         Route::put('/{transaction}', [\App\Http\Controllers\TransactionController::class, 'update'])->name('transactions.update');
         Route::delete('/{transaction}', [\App\Http\Controllers\TransactionController::class, 'destroy'])->name('transactions.destroy');
+        Route::post('/{transaction}/upload-attachment', [\App\Http\Controllers\TransactionController::class, 'uploadAttachment'])->name('transactions.upload-attachment');
+        Route::delete('/{transaction}/delete-attachment', [\App\Http\Controllers\TransactionController::class, 'deleteAttachment'])->name('transactions.delete-attachment');
     });
 
     Route::prefix('export')->group(function () {
@@ -249,7 +257,16 @@ Route::middleware(['auth', 'verified', 'tenant', 'subscription'])->group(functio
         Route::post('/numbers', [\App\Http\Controllers\WhatsAppChannelController::class, 'storeNumber'])->name('whatsapp.numbers.store');
         Route::put('/numbers/{userWhatsAppNumber}', [App\Http\Controllers\WhatsAppChannelController::class, 'updateNumber'])->name('whatsapp.numbers.update');
         Route::delete('/numbers/{userWhatsAppNumber}', [App\Http\Controllers\WhatsAppChannelController::class, 'destroyNumber'])->name('whatsapp.numbers.destroy');
-        Route::post('/numbers/{userWhatsAppNumber}/primary', [App\Http\Controllers\WhatsAppChannelController::class, 'setPrimaryNumber'])->name('whatsapp.numbers.set-primary');
+        Route::post('/numbers/{userWhatsAppNumber}/primary', [\App\Http\Controllers\WhatsAppChannelController::class, 'setPrimaryNumber'])->name('whatsapp.numbers.set-primary');
+    });
+
+    // Detail transaksi milik satu nomor WhatsApp (anggota)
+    Route::get('/whatsapp-numbers/{userWhatsAppNumber}/transactions', [\App\Http\Controllers\WhatsAppChannelController::class, 'numberTransactions'])->name('whatsapp.numbers.transactions');
+
+    Route::prefix('telegram')->group(function () {
+        Route::get('/connect', [\App\Http\Controllers\TelegramController::class, 'connect'])->name('telegram.connect');
+        Route::post('/generate-link', [\App\Http\Controllers\TelegramController::class, 'generateLink'])->name('telegram.generate-link');
+        Route::get('/link-status', [\App\Http\Controllers\TelegramController::class, 'linkStatus'])->name('telegram.link-status');
     });
 
     Route::prefix('balances')->group(function () {
@@ -261,14 +278,34 @@ Route::middleware(['auth', 'verified', 'tenant', 'subscription'])->group(functio
     });
 
     Route::get('/hutang-piutang', [\App\Http\Controllers\DebtReceivableController::class, 'index'])->name('debt-receivable.index');
+    Route::post('/hutang-piutang/store', [\App\Http\Controllers\DebtReceivableController::class, 'store'])->name('debt-receivable.store');
+    Route::post('/hutang-piutang/settle', [\App\Http\Controllers\DebtReceivableController::class, 'settle'])->name('debt-receivable.settle');
+    Route::post('/hutang-piutang/{transaction}/cash-mode', [\App\Http\Controllers\DebtReceivableController::class, 'cashMode'])->name('debt-receivable.cash-mode');
+
+    // Tabungan (Celengan Impian)
+    Route::prefix('tabungan')->group(function () {
+        Route::get('/', [\App\Http\Controllers\SavingsGoalController::class, 'index'])->name('tabungan.index');
+        Route::post('/', [\App\Http\Controllers\SavingsGoalController::class, 'store'])->name('tabungan.store');
+        Route::put('/{id}', [\App\Http\Controllers\SavingsGoalController::class, 'update'])->name('tabungan.update');
+        Route::post('/{id}/add-savings', [\App\Http\Controllers\SavingsGoalController::class, 'addSavings'])->name('tabungan.add-savings');
+        Route::post('/{id}/withdraw', [\App\Http\Controllers\SavingsGoalController::class, 'withdraw'])->name('tabungan.withdraw');
+        Route::delete('/{id}', [\App\Http\Controllers\SavingsGoalController::class, 'destroy'])->name('tabungan.destroy');
+    });
 
     Route::prefix('budgets')->group(function () {
         Route::get('/', [\App\Http\Controllers\BudgetController::class, 'index'])->name('budgets.index');
         Route::post('/', [\App\Http\Controllers\BudgetController::class, 'store'])->name('budgets.store');
+        Route::get('/export', [\App\Http\Controllers\BudgetController::class, 'export'])->name('budgets.export');
+        Route::get('/summary', [\App\Http\Controllers\BudgetController::class, 'summary'])->name('budgets.summary');
         Route::put('/{budget}', [\App\Http\Controllers\BudgetController::class, 'update'])->name('budgets.update');
         Route::delete('/{budget}', [\App\Http\Controllers\BudgetController::class, 'destroy'])->name('budgets.destroy');
-        Route::get('/summary', [\App\Http\Controllers\BudgetController::class, 'summary'])->name('budgets.summary');
         Route::post('/{budget}/toggle', [\App\Http\Controllers\BudgetController::class, 'toggle'])->name('budgets.toggle');
+
+        // Budget Global
+        Route::get('/global', [\App\Http\Controllers\BudgetController::class, 'showGlobal'])->name('budgets.global.show');
+        Route::post('/global', [\App\Http\Controllers\BudgetController::class, 'storeGlobal'])->name('budgets.global.store');
+        Route::put('/global/{budgetGlobal}', [\App\Http\Controllers\BudgetController::class, 'updateGlobal'])->name('budgets.global.update');
+        Route::delete('/global/{budgetGlobal}', [\App\Http\Controllers\BudgetController::class, 'destroyGlobal'])->name('budgets.global.destroy');
     });
 
     // File serving for authenticated users
@@ -293,7 +330,7 @@ Route::middleware(['auth', 'verified', 'tenant', 'subscription'])->group(functio
         $decodedPath = trim($decodedPath, '/');
 
         // Security check
-        if (! str_starts_with($decodedPath, 'whatsapp/')) {
+        if (! str_starts_with($decodedPath, 'whatsapp/') && ! str_starts_with($decodedPath, 'transactions/')) {
             abort(403, 'Invalid file path');
         }
 
@@ -315,3 +352,6 @@ Route::middleware(['auth', 'verified', 'tenant', 'subscription'])->group(functio
 require __DIR__.'/settings.php';
 
 require base_path('routes/risen-ai.php');
+
+// Telegram Webhook (web route untuk kompatibilitas nginx)
+Route::post('/webhooks/telegram/message', [\App\Http\Controllers\Webhook\TelegramWebhookController::class, 'handleMessage']);

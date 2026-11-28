@@ -89,7 +89,7 @@ class AccountService
             $reminderCount = Reminder::where('tenant_id', $tenantId)->count();
 
             // Delete all transactions
-            Transaction::where('tenant_id', $tenantId)->delete();
+            Transaction::withTrashed()->where('tenant_id', $tenantId)->forceDelete(); // hapus permanen (reset)
 
             // Delete all wallets/balances
             Balance::where('tenant_id', $tenantId)->delete();

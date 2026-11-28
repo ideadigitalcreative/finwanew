@@ -273,6 +273,9 @@ class AIProcessorService
             // Pendidikan
             'spp', 'uang sekolah', 'uang kuliah', 'buku', 'atk', 'kursus', 'les', 'bimbel',
 
+            // Pakaian & Fashion
+            'pakaian', 'baju', 'celana', 'sepatu', 'tas', 'jaket', 'jilbab', 'kerudung', 'sandal', 'sendal', 'kaos', 'kemeja', 'gamis', 'hijab', 'fashion',
+
             // Keyword informal umum
             'abis', 'habis', 'keluar', 'kluar', 'spending', 'spent',
         ];

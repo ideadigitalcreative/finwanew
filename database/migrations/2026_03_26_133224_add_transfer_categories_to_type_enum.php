@@ -13,7 +13,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
+        // Idempoten: bila kedua nilai transfer sudah ada, jangan ALTER
+        // (mencegah "data truncated" karena daftar ENUM migrasi ini
+        // lebih pendek dari ENUM di DB).
+        $current = DB::getDriverName() === 'mysql'
+            ? (collect(DB::select("SHOW COLUMNS FROM categories WHERE Field = 'type'"))->first()->Type ?? '')
+            : '';
+        if (DB::getDriverName() === 'mysql' && ! str_contains($current, "'pengeluaran_transfer'")) {
+            DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
             'pendapatan_gaji',
             'pendapatan_bonus',
             'pendapatan_investasi',
@@ -43,6 +50,7 @@ return new class extends Migration
             'pengeluaran_transfer',
             'pengeluaran_lainnya'
         ) NOT NULL");
+        }
 
         // Add transfer categories to all existing tenants
         $tenants = DB::table('tenants')->pluck('id');
@@ -87,7 +95,8 @@ return new class extends Migration
             ->whereIn('type', ['pendapatan_transfer', 'pengeluaran_transfer'])
             ->delete();
 
-        DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE categories MODIFY COLUMN type ENUM(
             'pendapatan_gaji',
             'pendapatan_bonus',
             'pendapatan_investasi',
@@ -115,5 +124,6 @@ return new class extends Migration
             'pengeluaran_operasional',
             'pengeluaran_lainnya'
         ) NOT NULL");
+        }
     }
 };

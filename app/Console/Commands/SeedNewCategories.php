@@ -11,15 +11,20 @@ class SeedNewCategories extends Command
 {
     protected $signature = 'categories:seed-new {--tenant= : Seed untuk tenant tertentu saja} {--dry-run : Hanya tampilkan tanpa menulis DB}';
 
-    protected $description = 'Seed kategori baru ke semua tenant existing (pakaian, acara, perawatan_diri, otomotif, sosial, hadiah, usaha, sewa, refund)';
+    protected $description = 'Seed kategori baru ke semua tenant existing (keluarga, baby, langganan, pakaian, perawatan_diri, acara, otomotif, sosial, hadiah, hewan, gadget, usaha, sewa, refund)';
 
     private array $newCategoryTypes = [
+        'pengeluaran_keluarga',
+        'pengeluaran_baby',
+        'pengeluaran_langganan',
         'pengeluaran_pakaian',
         'pengeluaran_perawatan_diri',
         'pengeluaran_acara',
         'pengeluaran_otomotif',
         'pengeluaran_sosial',
         'pengeluaran_hadiah',
+        'pengeluaran_hewan',
+        'pengeluaran_gadget',
         'pendapatan_usaha',
         'pendapatan_sewa',
         'pendapatan_refund',

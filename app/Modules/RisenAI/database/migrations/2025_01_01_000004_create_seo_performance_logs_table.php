@@ -8,6 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempoten: tabel sudah ada dibuat di luar migrasi — lewati.
+        if (Schema::hasTable('seo_performance_logs')) {
+            return;
+        }
+
         Schema::create('seo_performance_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('seo_page_id')

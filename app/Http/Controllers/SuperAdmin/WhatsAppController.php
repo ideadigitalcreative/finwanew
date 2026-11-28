@@ -41,7 +41,7 @@ class WhatsAppController extends Controller
 
         // Daftar nomor admin yang tidak boleh ditampilkan di halaman SuperAdmin
         $adminNumbers = [
-            '6285242766676', // Super admin number
+            config('services.finwa.super_admin_number'), // Super admin number
         ];
 
         $query = Channel::where('type', 'whatsapp')

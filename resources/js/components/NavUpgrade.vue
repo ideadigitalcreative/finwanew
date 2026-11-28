@@ -13,32 +13,29 @@ const close = () => {
 </script>
 
 <template>
-    <div v-if="isVisible && state === 'expanded'" class="px-3 mb-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div class="relative p-4 rounded-2xl bg-gradient-to-br from-primary/10 to-accent/20 backdrop-blur-xl border border-primary/10 shadow-lg shadow-primary/5 overflow-hidden group">
-            <!-- Decorative background elements -->
-            <div class="absolute -right-4 -top-4 w-20 h-20 bg-primary/10 rounded-full blur-2xl group-hover:bg-primary/20 transition-colors duration-500"></div>
-            
+    <div v-if="isVisible && state === 'expanded'" class="px-3 mb-3 animate-in fade-in slide-in-from-bottom-4 duration-500 font-['Plus_Jakarta_Sans',sans-serif]">
+        <div class="relative p-3.5 rounded-2xl bg-[#ffd23f]/15 dark:bg-[#ffd23f]/10 border border-[#ffd23f]/40 dark:border-[#ffd23f]/20 overflow-hidden group">
             <div class="relative z-10">
                 <div class="flex items-center justify-between mb-1">
-                    <h4 class="font-semibold text-sm text-foreground flex items-center gap-1.5">
-                        Upgrade Pro! 👑
+                    <h4 class="font-bold text-xs text-[#574500] dark:text-[#ffd23f] flex items-center gap-1.5">
+                        Upgrade Pro 👑
                     </h4>
-                    <button @click="close" class="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5">
-                        <X class="w-3.5 h-3.5" />
+                    <button @click="close" class="text-[#7f7661] hover:text-[#1b1c19] dark:hover:text-foreground transition-colors p-1 rounded-lg">
+                        <X class="w-3 h-3" />
                     </button>
                 </div>
                 
-                <p class="text-xs text-muted-foreground mb-4 leading-relaxed">
-                    Produktivitas lebih tinggi dengan fitur lengkap
+                <p class="text-[11px] text-[#4d4634] dark:text-muted-foreground mb-3 leading-snug">
+                    Buka fitur tanpa batas & pantau cuan lebih leluasa.
                 </p>
                 
-                <div class="flex gap-3">
+                <div class="flex">
                     <Link 
                         href="/subscriptions" 
-                        class="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary/90 hover:bg-primary backdrop-blur-sm text-primary-foreground rounded-xl text-xs font-medium shadow-lg shadow-primary/20 transition-all active:scale-95"
+                        class="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-[#ffd23f] hover:brightness-95 text-[#574500] rounded-xl text-xs font-bold transition-transform active:scale-95"
                     >
-                        <Zap class="w-3.5 h-3.5" />
-                        Upgrade
+                        <Zap class="w-3.5 h-3.5 fill-[#574500]" />
+                        <span>Langganan Sekarang</span>
                     </Link>
                 </div>
             </div>

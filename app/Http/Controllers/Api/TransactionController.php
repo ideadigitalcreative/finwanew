@@ -59,7 +59,11 @@ class TransactionController extends Controller
             'amount' => 'required|numeric|min:0',
             'type' => 'required|in:income,expense,transfer',
             'category_id' => 'required|exists:categories,id',
-            'balance_id' => 'required|exists:balances,id',
+            // Dompet harus milik tenant user sendiri (cegah menulis ke dompet tenant lain)
+            'balance_id' => [
+                'required',
+                \Illuminate\Validation\Rule::exists('balances', 'id')->where('tenant_id', $tenant->id),
+            ],
             'transaction_date' => 'required|date',
             'description' => 'nullable|string',
         ]);
@@ -81,28 +85,17 @@ class TransactionController extends Controller
                 ], 403);
             }
 
-            DB::beginTransaction();
-
-            $transaction = Transaction::create([
+            // Catat + saldo dalam satu DB transaction (TransactionLedger)
+            $transaction = app(\App\Services\Ledger\TransactionLedger::class)->record([
                 'tenant_id' => $tenant->id,
-                'user_id' => $user->id,
                 'amount' => $request->amount,
                 'type' => $request->type,
                 'category_id' => $request->category_id,
                 'balance_id' => $request->balance_id,
                 'transaction_date' => $request->transaction_date,
                 'description' => $request->description,
-            ]);
-
-            // Update Balance
-            $balance = Balance::find($request->balance_id);
-            if ($request->type === 'income') {
-                $balance->increment('balance', $request->amount);
-            } elseif ($request->type === 'expense') {
-                $balance->decrement('balance', $request->amount);
-            }
-
-            DB::commit();
+                'source' => 'api',
+            ], ['via' => 'api', 'user_id' => $user->id]);
 
             return response()->json([
                 'message' => 'Transaction created successfully',
@@ -110,8 +103,6 @@ class TransactionController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
-            DB::rollBack();
-
             return response()->json(['message' => 'Error creating transaction', 'error' => $e->getMessage()], 500);
         }
     }

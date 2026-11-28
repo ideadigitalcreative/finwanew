@@ -82,7 +82,7 @@ class AccountCommandService
             $reminderCount = Reminder::where('tenant_id', $tenantId)->count();
 
             // Delete all transactions
-            Transaction::where('tenant_id', $tenantId)->delete();
+            Transaction::withTrashed()->where('tenant_id', $tenantId)->forceDelete(); // hapus permanen (reset)
 
             // Delete all wallets/balances
             Balance::where('tenant_id', $tenantId)->delete();
@@ -163,7 +163,7 @@ class AccountCommandService
             $expenseCount = Transaction::where('tenant_id', $tenantId)->where('type', 'expense')->count();
 
             // Delete all transactions only
-            Transaction::where('tenant_id', $tenantId)->delete();
+            Transaction::withTrashed()->where('tenant_id', $tenantId)->forceDelete(); // hapus permanen (reset)
 
             // RESET ALL WALLET BALANCES TO 0
             // Crucial to prevent stranded balance (GHOST MONEY)

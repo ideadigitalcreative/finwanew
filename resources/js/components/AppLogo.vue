@@ -7,11 +7,12 @@ const { state } = useSidebar();
 <template>
     <div class="flex items-center gap-2">
         <!-- Logo lengkap saat sidebar expanded -->
-        <img 
-            v-if="state === 'expanded'" 
-            src="/logo1.png" 
-            alt="Logo FinWa Aplikasi Keuangan" 
-            class="h-8 w-auto transition-all duration-200" 
+        <!-- Mode gelap: invert + hue-rotate membuat teks hitam jadi putih, warna hijau/oranye tetap -->
+        <img
+            v-if="state === 'expanded'"
+            src="/logo1.png"
+            alt="Logo FinWa Aplikasi Keuangan"
+            class="h-8 w-auto transition-all duration-200 dark:invert dark:hue-rotate-180"
         />
         <!-- Logo icon saja saat sidebar collapsed -->
         <img 

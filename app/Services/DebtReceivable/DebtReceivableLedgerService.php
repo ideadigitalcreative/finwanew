@@ -35,7 +35,11 @@ class DebtReceivableLedgerService
         $rows = Transaction::query()
             ->where('tenant_id', $tenantId)
             ->where('status', 'confirmed')
-            ->whereHas('category', static fn ($q) => $q->whereIn('type', $types))
+            ->where(static function ($q) use ($types) {
+                $q->whereHas('category', static fn ($c) => $c->whereIn('type', $types))
+                    // Belanja pakai paylater/kartu kredit: kategori belanja biasa, tapi menambah hutang
+                    ->orWhere('metadata->credit_purchase', true);
+            })
             ->with(['category:id,type,name'])
             ->orderByDesc('transaction_date')
             ->orderByDesc('id')
@@ -54,33 +58,50 @@ class DebtReceivableLedgerService
 
             $amount = (float) $tx->amount;
 
+            // Belanja pakai paylater/kartu kredit → hutang ke fasilitas naik
+            if ($tx->isCreditPurchase() && ! in_array($catType, $types, true)) {
+                if (! isset($hutang[$key])) {
+                    $hutang[$key] = ['counterparty' => $label, 'counterparty_normalized' => $key, 'outstanding' => 0.0, 'history' => []];
+                }
+                $hutang[$key]['outstanding'] += $amount;
+                $hutang[$key]['history'][] = $this->historyEntry($tx, 1);
+
+                continue;
+            }
+
             if (in_array($catType, self::HUTANG_CATEGORY_TYPES, true)) {
                 if (! isset($hutang[$key])) {
-                    $hutang[$key] = ['counterparty' => $label, 'counterparty_normalized' => $key, 'outstanding' => 0.0];
+                    $hutang[$key] = ['counterparty' => $label, 'counterparty_normalized' => $key, 'outstanding' => 0.0, 'history' => []];
                 }
                 // Hutang: terima pinjaman (+), bayar hutang (−)
                 if ($catType === 'pendapatan_hutang') {
                     $hutang[$key]['outstanding'] += $amount;
+                    $effect = 1;
                 } else {
                     $hutang[$key]['outstanding'] -= $amount;
+                    $effect = -1;
                 }
+                $hutang[$key]['history'][] = $this->historyEntry($tx, $effect);
             }
 
             if (in_array($catType, self::PIUTANG_CATEGORY_TYPES, true)) {
                 if (! isset($piutang[$key])) {
-                    $piutang[$key] = ['counterparty' => $label, 'counterparty_normalized' => $key, 'outstanding' => 0.0];
+                    $piutang[$key] = ['counterparty' => $label, 'counterparty_normalized' => $key, 'outstanding' => 0.0, 'history' => []];
                 }
                 // Piutang: keluar pinjaman (+), terima pelunasan (−)
                 if ($catType === 'pengeluaran_piutang') {
                     $piutang[$key]['outstanding'] += $amount;
+                    $effect = 1;
                 } else {
                     $piutang[$key]['outstanding'] -= $amount;
+                    $effect = -1;
                 }
+                $piutang[$key]['history'][] = $this->historyEntry($tx, $effect);
             }
         }
 
-        $hutangList = array_values($hutang);
-        $piutangList = array_values($piutang);
+        $hutangList = array_map(fn ($r) => $this->withSortedHistory($r), array_values($hutang));
+        $piutangList = array_map(fn ($r) => $this->withSortedHistory($r), array_values($piutang));
 
         usort($hutangList, static fn ($a, $b) => abs($b['outstanding']) <=> abs($a['outstanding']));
         usort($piutangList, static fn ($a, $b) => abs($b['outstanding']) <=> abs($a['outstanding']));
@@ -97,6 +118,8 @@ class DebtReceivableLedgerService
                 'category_type' => $tx->category?->type,
                 'category_name' => $tx->category?->name,
                 'counterparty' => $resolved['label'] === 'Tanpa nama' ? null : $resolved['label'],
+                'record_only' => $tx->isDebtRecordOnly(),
+                'credit_purchase' => $tx->isCreditPurchase(),
             ];
         })->values()->all();
 
@@ -105,6 +128,18 @@ class DebtReceivableLedgerService
             'piutang' => $piutangList,
             'recent' => $recent,
         ];
+    }
+
+    /** Sisa hutang ke satu pihak (kunci = counterparty_normalized). */
+    public function hutangOutstanding(int $tenantId, string $counterpartyKey): float
+    {
+        foreach ($this->summarize($tenantId, 0)['hutang'] as $row) {
+            if ($row['counterparty_normalized'] === $counterpartyKey) {
+                return (float) $row['outstanding'];
+            }
+        }
+
+        return 0.0;
     }
 
     /**
@@ -130,5 +165,37 @@ class DebtReceivableLedgerService
         }
 
         return ['label' => 'Tanpa nama', 'key' => 'tanpa nama'];
+    }
+
+    /**
+     * @return array{id: int, transaction_date: string|null, type: string, amount: float, effect: int, description: string}
+     */
+    private function historyEntry(Transaction $tx, int $effect): array
+    {
+        return [
+            'id' => $tx->id,
+            'transaction_date' => $tx->transaction_date?->format('Y-m-d'),
+            'type' => $tx->type,
+            'amount' => (float) $tx->amount,
+            'effect' => $effect,
+            'description' => $tx->description,
+            // Hanya dicatat (hutang lama/paylater): saldo dompet tidak berubah
+            'record_only' => $tx->isDebtRecordOnly(),
+            // Pencatatan hutang/piutang baru (bukan pelunasan) → bisa diubah modenya
+            'convertible' => DebtCashMode::isNewDebtCategory($tx->category?->type),
+            // Belanja pakai paylater/kartu kredit (pengeluaran, dompet tidak berubah)
+            'credit_purchase' => $tx->isCreditPurchase(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function withSortedHistory(array $row): array
+    {
+        usort($row['history'], static fn ($a, $b) => strcmp((string) $a['transaction_date'], (string) $b['transaction_date']));
+
+        return $row;
     }
 }

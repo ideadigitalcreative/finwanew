@@ -40,7 +40,7 @@
                                     <component :is="step.icon" class="h-5 w-5" :stroke-width="1.75" />
                                 </div>
                                 <div class="min-w-0 flex-1 pr-1 sm:pr-2">
-                                    <h3 class="text-lg font-bold tracking-tight text-[var(--fw-700)]">{{ step.title }}</h3>
+                                    <h3 class="text-lg font-bold tracking-tight bg-gradient-to-br from-[#59c323] via-[#4da818] to-[#3d9014] bg-clip-text text-transparent">{{ step.title }}</h3>
                                     <p class="mt-2 text-sm leading-snug text-gray-600 break-words sm:leading-relaxed">
                                         {{ step.description }}
                                     </p>

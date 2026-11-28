@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Balance;
 use App\Models\Budget;
+use App\Models\SavingsGoal;
+use App\Models\BudgetGlobal;
 use App\Models\Cashflow;
 use App\Models\Tenant;
 use App\Models\Transaction;
@@ -42,6 +44,36 @@ class DashboardController extends Controller
         $totalExpense = $transactions->where('type', 'expense')->sum('amount');
         $netCashflow = $totalIncome - $totalExpense;
 
+        // Ringkasan arus kas per nomor WhatsApp (anggota) untuk bulan berjalan;
+        // transaksi dari alias LID digabung ke nomor aslinya
+        $canonicalNumberIds = \App\Models\UserWhatsAppNumber::canonicalIdMap($tenant->id);
+        $memberGroups = $transactions
+            ->whereNotNull('user_whatsapp_number_id')
+            ->groupBy(fn ($tx) => $canonicalNumberIds[(int) $tx->user_whatsapp_number_id] ?? (int) $tx->user_whatsapp_number_id);
+
+        $memberSummary = collect();
+        if ($memberGroups->isNotEmpty()) {
+            $numbers = \App\Models\UserWhatsAppNumber::where('tenant_id', $tenant->id)
+                ->whereIn('id', $memberGroups->keys())
+                ->get(['id', 'whatsapp_number', 'name'])
+                ->keyBy('id');
+
+            $memberSummary = $memberGroups->map(function ($group, $numberId) use ($numbers) {
+                $number = $numbers->get($numberId);
+
+                return [
+                    'number_id' => $numberId,
+                    'name' => $number && $number->name ? $number->name : ($number ? $number->whatsapp_number : 'Nomor #'.$numberId),
+                    'whatsapp_number' => $number?->whatsapp_number,
+                    'total_income' => (float) $group->where('type', 'income')->sum('amount'),
+                    'total_expense' => (float) $group->where('type', 'expense')->sum('amount'),
+                    'count' => $group->count(),
+                ];
+            })
+                ->sortByDesc(fn ($item) => $item['total_income'] + $item['total_expense'])
+                ->values();
+        }
+
         // Update or create cashflow record
         $cashflow = Cashflow::updateOrCreate(
             [
@@ -70,24 +102,24 @@ class DashboardController extends Controller
         $prevTotalExpense = $prevTransactions->where('type', 'expense')->sum('amount');
         $prevNetCashflow = $prevTotalIncome - $prevTotalExpense;
 
-        // Calculate percentage changes with caps for better UX
+        // Persentase perubahan vs bulan lalu. Null = tidak ada pembanding (bulan pertama),
+        // supaya UI tidak menampilkan angka palsu seperti "+999%".
         if ($prevTotalIncome > 0) {
             $incomeChange = (($totalIncome - $prevTotalIncome) / $prevTotalIncome) * 100;
             $incomeChange = max(-999, min(999, $incomeChange)); // Cap at ±999%
         } else {
-            $incomeChange = $totalIncome > 0 ? 999 : 0;
+            $incomeChange = null;
         }
 
         if ($prevTotalExpense > 0) {
             $expenseChange = (($totalExpense - $prevTotalExpense) / $prevTotalExpense) * 100;
             $expenseChange = max(-999, min(999, $expenseChange)); // Cap at ±999%
         } else {
-            $expenseChange = $totalExpense > 0 ? 999 : 0;
+            $expenseChange = null;
         }
 
-        // For net cashflow, handle negative values carefully
         if ($prevNetCashflow == 0) {
-            $netChange = $netCashflow != 0 ? ($netCashflow > 0 ? 999 : -999) : 0;
+            $netChange = null;
         } else {
             $netChange = (($netCashflow - $prevNetCashflow) / abs($prevNetCashflow)) * 100;
             $netChange = max(-999, min(999, $netChange)); // Cap at ±999%
@@ -103,7 +135,7 @@ class DashboardController extends Controller
 
         // Get recent transactions (last 5) for transaction list
         $recentTransactions = Transaction::where('tenant_id', $tenant->id)
-            ->with('category')
+            ->with(['category', 'balance:id,account_name'])
             ->orderBy('transaction_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->limit(5)
@@ -151,7 +183,6 @@ class DashboardController extends Controller
             ->sortByDesc(function ($item) {
                 return $item['total_income'] + $item['total_expense'];
             })
-            ->take(5)
             ->values();
 
         // Get subscription/trial information
@@ -197,20 +228,181 @@ class DashboardController extends Controller
         $budgets = \App\Models\Budget::where('tenant_id', $tenant->id)
             ->where('is_active', true)
             ->where('period', 'monthly')
+            ->with('category')
             ->get();
+
+        \App\Models\Budget::loadBulkSpending($budgets);
 
         $totalBudget = $budgets->sum('amount');
         $totalSpending = 0;
 
-        foreach ($budgets as $budget) {
-            $totalSpending += $budget->getCurrentSpending();
-        }
+        $budgetItems = $budgets->map(function ($budget) use (&$totalSpending) {
+            $spending = $budget->getCurrentSpending();
+            $totalSpending += $spending;
+            $effectiveAmount = $budget->getEffectiveAmount();
+            $usagePct = $effectiveAmount > 0 ? round(($spending / $effectiveAmount) * 100, 1) : 0;
+            return [
+                'id'           => $budget->id,
+                'category_name'=> $budget->category?->name ?? 'Lainnya',
+                'category_icon'=> $budget->category?->icon ?? '📝',
+                'category_type'=> $budget->category?->type ?? '',
+                'amount'       => (float) $budget->amount,
+                'rollover_amount' => (float) $budget->rollover_amount,
+                'effective_amount' => (float) $effectiveAmount,
+                'spending'     => (float) $spending,
+                'remaining'    => max(0, (float) $effectiveAmount - $spending),
+                'usage_percent'=> $usagePct,
+                'is_over'      => $spending > (float) $effectiveAmount,
+                'alert_level'  => $budget->getAlertLevel(),
+            ];
+        })->sortByDesc('usage_percent')->values();
 
         $remaining = $totalBudget - $totalSpending;
         $usagePercentage = $totalBudget > 0 ? ($totalSpending / $totalBudget) * 100 : 0;
 
+        // Budget Global summary
+        $budgetGlobal = BudgetGlobal::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->latest()
+            ->first();
+
+        $globalBudgetData = null;
+        if ($budgetGlobal) {
+            $globalSpending = $budgetGlobal->getCurrentSpending();
+            $globalPct = $budgetGlobal->amount > 0 ? round(($globalSpending / $budgetGlobal->amount) * 100, 1) : 0;
+            $globalBudgetData = [
+                'id' => $budgetGlobal->id,
+                'amount' => (float) $budgetGlobal->amount,
+                'period' => $budgetGlobal->period,
+                'spending' => (float) $globalSpending,
+                'remaining' => max(0, (float) $budgetGlobal->amount - $globalSpending),
+                'usage_percentage' => $globalPct,
+                'is_over_budget' => $globalSpending > (float) $budgetGlobal->amount,
+            ];
+        }
+
+        // Ambil "Celengan Impian" dari tabel tabungan (savings_goals), bukan budget
+        $savingsGoals = SavingsGoal::where('tenant_id', $tenant->id)
+            ->where('status', '!=', 'cancelled')
+            ->orderByRaw("FIELD(status, 'active', 'completed')")
+            ->orderBy('created_at', 'desc')
+            ->take(5)
+            ->get()
+            ->map(fn ($goal) => [
+                'label' => $goal->name,
+                'current' => (float) $goal->current_amount,
+                'target' => (float) $goal->target_amount,
+                'deadline' => $goal->deadline ? $goal->deadline->locale('id')->translatedFormat('M Y') : null,
+                'icon' => $goal->icon,
+            ])
+            ->values();
+
+        // Calculate streak (consecutive days with transactions, up to 30 days back)
+        $streakDays = 0;
+        $checkDate = Carbon::now()->startOfDay();
+        for ($i = 0; $i < 30; $i++) {
+            $hasTx = Transaction::where('tenant_id', $tenant->id)
+                ->where('status', 'confirmed')
+                ->whereDate('transaction_date', $checkDate->toDateString())
+                ->exists();
+            if ($hasTx) {
+                $streakDays++;
+                $checkDate->subDay();
+            } else {
+                break;
+            }
+        }
+
+        // Determine which days of this week (Mon-Sun) have transactions
+        $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
+        $weekEnd = Carbon::now()->endOfWeek(Carbon::SUNDAY);
+        $weekDaysWithTx = Transaction::where('tenant_id', $tenant->id)
+            ->where('status', 'confirmed')
+            ->whereBetween('transaction_date', [$weekStart, $weekEnd])
+            ->pluck('transaction_date')
+            ->map(fn ($d) => Carbon::parse($d)->dayOfWeek)
+            ->unique()
+            ->values();
+        // Map dayOfWeek (0=Sun..6=Sat) to short labels
+        $dayMap = [0 => 'Mg', 1 => 'Sn', 2 => 'Sl', 3 => 'Rb', 4 => 'Km', 5 => 'Jm', 6 => 'Sb'];
+        $activeDays = $weekDaysWithTx->map(fn ($d) => $dayMap[$d] ?? $d)->values()->toArray();
+
+        // Build weekly flow data (income & expense per day this week)
+        $weeklyTransactions = Transaction::where('tenant_id', $tenant->id)
+            ->where('status', 'confirmed')
+            ->whereBetween('transaction_date', [$weekStart, $weekEnd])
+            ->get();
+
+        $dailyGrouped = $weeklyTransactions->groupBy(function ($tx) {
+            return Carbon::parse($tx->transaction_date)->dayOfWeek;
+        });
+
+        $weekDayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon–Sun
+        $weekDayLabels = [0 => 'Min', 1 => 'Sen', 2 => 'Sel', 3 => 'Rab', 4 => 'Kam', 5 => 'Jum', 6 => 'Sab'];
+        $weeklyFlowData = [];
+        $maxWeeklyAmount = 0;
+
+        foreach ($weekDayOrder as $dow) {
+            $dayTx = $dailyGrouped->get($dow, collect());
+            $income = (float) $dayTx->where('type', 'income')->sum('amount');
+            $expense = (float) $dayTx->where('type', 'expense')->sum('amount');
+            $maxWeeklyAmount = max($maxWeeklyAmount, $income, $expense);
+            $weeklyFlowData[] = [
+                'day' => $weekDayLabels[$dow],
+                'income' => $income,
+                'expense' => $expense,
+            ];
+        }
+
+        // Normalize to percentages (0–100) for chart bars
+        if ($maxWeeklyAmount > 0) {
+            $weeklyFlowData = array_map(function ($item) use ($maxWeeklyAmount) {
+                return [
+                    'day' => $item['day'],
+                    'income' => round(($item['income'] / $maxWeeklyAmount) * 100),
+                    'expense' => round(($item['expense'] / $maxWeeklyAmount) * 100),
+                ];
+            }, $weeklyFlowData);
+        }
+
+        // Peak expense day note
+        $peakDay = collect($weeklyFlowData)->sortByDesc('expense')->first();
+        $peakExpenseNote = '';
+        if ($peakDay && $peakDay['expense'] > 0) {
+            $peakExpenseNote = 'Puncak pengeluaran di ' . $peakDay['day'];
+        }
+
+        $periodLabel = $weekStart->locale('id')->translatedFormat('d M') . ' - ' . $weekEnd->locale('id')->translatedFormat('d M Y');
+
         $insightService = new SpendingInsightService($tenant->id);
         $insights = $insightService->generateDashboardInsights();
+
+        // Hitung Level Pengguna Berdasarkan Aktivitas Riil (Transaksi & Streak)
+        $totalConfirmedTx = Transaction::where('tenant_id', $tenant->id)
+            ->where('status', 'confirmed')
+            ->count();
+        $thisMonthTx = $monthlyTransactions->count();
+
+        // Skema Level Finwa:
+        // Level 1: Pemula Cuan (0-5 transaksi)
+        // Level 2: Pemburu Cuan (6-20 transaksi)
+        // Level 3: Pejuang Tabungan (21-50 transaksi atau streak >= 3 hari)
+        // Level 4: Hemat Ranger (51-100 transaksi atau streak >= 7 hari)
+        // Level 5: Juragan Cerdas (101-250 transaksi atau streak >= 14 hari)
+        // Level 6: Sultan Bijak (>250 transaksi atau streak >= 30 hari)
+        if ($totalConfirmedTx > 250 || $streakDays >= 30) {
+            $userLevel = ['level' => 6, 'title' => 'Sultan Bijak', 'icon' => 'military_tech'];
+        } elseif ($totalConfirmedTx >= 101 || $streakDays >= 14) {
+            $userLevel = ['level' => 5, 'title' => 'Juragan Cerdas', 'icon' => 'military_tech'];
+        } elseif ($totalConfirmedTx >= 51 || $streakDays >= 7) {
+            $userLevel = ['level' => 4, 'title' => 'Hemat Ranger', 'icon' => 'military_tech'];
+        } elseif ($totalConfirmedTx >= 21 || $streakDays >= 3) {
+            $userLevel = ['level' => 3, 'title' => 'Pejuang Tabungan', 'icon' => 'military_tech'];
+        } elseif ($totalConfirmedTx >= 6) {
+            $userLevel = ['level' => 2, 'title' => 'Pemburu Cuan', 'icon' => 'military_tech'];
+        } else {
+            $userLevel = ['level' => 1, 'title' => 'Pemula Cuan', 'icon' => 'military_tech'];
+        }
 
         return Inertia::render('Dashboard', [
             'cashflow' => [
@@ -220,9 +412,9 @@ class DashboardController extends Controller
                 'period_start' => $cashflow->period_start,
                 'period_end' => $cashflow->period_end,
                 // Comparison with previous period
-                'income_change' => round($incomeChange, 1),
-                'expense_change' => round($expenseChange, 1),
-                'net_change' => round($netChange, 1),
+                'income_change' => $incomeChange === null ? null : round($incomeChange, 1),
+                'expense_change' => $expenseChange === null ? null : round($expenseChange, 1),
+                'net_change' => $netChange === null ? null : round($netChange, 1),
                 'health_status' => $healthStatus,
                 'prev_total_income' => (float) $prevTotalIncome,
                 'prev_total_expense' => (float) $prevTotalExpense,
@@ -235,6 +427,8 @@ class DashboardController extends Controller
                     'amount' => (float) $transaction->amount,
                     'transaction_date' => $transaction->transaction_date->format('Y-m-d'),
                     'description' => $transaction->description ?? '',
+                    'balance_name' => $transaction->balance?->account_name,
+                    'created_at' => $transaction->created_at?->toISOString(),
                     'category' => $transaction->category ? [
                         'name' => $transaction->category->name,
                         'type' => $transaction->category->type,
@@ -253,9 +447,12 @@ class DashboardController extends Controller
             'balances' => $balances->map(function ($balance) {
                 return [
                     'account_name' => $balance->account_name,
+                    'account_type' => $balance->account_type,
+                    'is_default' => (bool) $balance->is_default,
                     'balance' => (float) $balance->balance,
                     'currency' => $balance->currency,
                     'balance_date' => $balance->balance_date ? $balance->balance_date->format('Y-m-d') : null,
+                    'updated_at' => $balance->updated_at?->toISOString(),
                 ];
             }),
             'chartData' => array_map(function ($item) {
@@ -267,10 +464,11 @@ class DashboardController extends Controller
                 ];
             }, $chartData),
             'topCategories' => $topCategories->toArray(),
+            'memberSummary' => $memberSummary->values(),
             'period' => [
                 'start' => $startDate->format('Y-m-d'),
                 'end' => $endDate->format('Y-m-d'),
-                'label' => $startDate->format('F Y'),
+                'label' => $startDate->locale('id')->translatedFormat('F Y'),
             ],
             'hasWhatsAppNumber' => \App\Models\UserWhatsAppNumber::where('user_id', $request->user()->id)->exists(),
             // Subscription/Trial data
@@ -288,8 +486,17 @@ class DashboardController extends Controller
                 'totalSpending' => (float) $totalSpending,
                 'remaining' => (float) $remaining,
                 'usagePercentage' => round($usagePercentage, 1),
+                'items' => $budgetItems->toArray(),
             ],
+            'budgetGlobal' => $globalBudgetData,
+            'savingsGoals' => $savingsGoals->toArray(),
+            'streakDays' => $streakDays,
+            'userLevel' => $userLevel,
+            'activeDays' => $activeDays,
             'insights' => $insights,
+            'weeklyFlowData' => $weeklyFlowData,
+            'weeklyPeriodLabel' => $periodLabel,
+            'weeklyPeakNote' => $peakExpenseNote,
         ]);
     }
 
@@ -327,7 +534,7 @@ class DashboardController extends Controller
             $expense = $grouped[$key]['expense'] ?? 0;
 
             $data[] = [
-                'month' => $date->format('M Y'),
+                'month' => $date->locale('id')->translatedFormat('M Y'),
                 'income' => $income,
                 'expense' => $expense,
                 'net' => $income - $expense,

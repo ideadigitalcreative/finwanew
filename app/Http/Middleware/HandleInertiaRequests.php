@@ -51,13 +51,18 @@ class HandleInertiaRequests extends Middleware
                     'email' => $user->email,
                     'avatar' => $user->avatar,
                     'whatsapp_number' => $user->whatsapp_number,
+                    'telegram_chat_id' => $user->telegram_chat_id,
+                    'telegram_username' => $user->telegram_username,
                     'tenant_id' => $user->tenant_id,
                     'role_id' => $user->role_id,
                     'is_super_admin' => $user->is_super_admin ?? false,
                     'is_premium' => $user->tenant?->subscriptions()
                         ->where('status', 'active')
                         ->where('plan', '!=', 'free')
-                        ->where('ends_at', '>=', now())
+                        ->where(function ($query) {
+                            $query->whereNull('ends_at')
+                                ->orWhere('ends_at', '>=', now());
+                        })
                         ->exists() ?? false,
                     'tenant' => $user->tenant ? [
                         'id' => $user->tenant->id,

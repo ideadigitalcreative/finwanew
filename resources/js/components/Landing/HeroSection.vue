@@ -52,7 +52,7 @@
                                 />
                             </div>
                         </div>
-                        <p class="my-auto self-center text-xs font-semibold text-[#355d2a] md:text-sm" style="line-height: 1;">+600 pengguna</p>
+                        <p class="my-auto self-center text-xs font-semibold text-[#355d2a] md:text-sm" style="line-height: 1;">+1500 pengguna</p>
                     </div>
                     
                     <h1 class="mt-4 md:mt-6 text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.15]">

@@ -49,9 +49,21 @@ class OcrJobController extends Controller
                 ], 404);
             }
 
-            // If we have a tenant_id, we might need it for further processing
-            if ($request->has('tenant_id')) {
-                config(['app.current_tenant_id' => $request->input('tenant_id')]);
+            // Tenant selalu diambil dari job itu sendiri, bukan dari payload
+            // (payload bisa dipalsukan untuk menulis ke tenant lain).
+            if ($ocrJob->tenant_id) {
+                config(['app.current_tenant_id' => $ocrJob->tenant_id]);
+            }
+
+            // Idempoten: callback ulang untuk job yang sudah selesai tidak
+            // boleh memproses struk dua kali (transaksi tercatat dobel).
+            if ($ocrJob->status === 'completed') {
+                Log::info('OCR callback ignored: job already completed', ['job_id' => $ocrJob->id]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'OCR job already completed',
+                ]);
             }
 
             $baseMetadata = $ocrJob->metadata ?? [];

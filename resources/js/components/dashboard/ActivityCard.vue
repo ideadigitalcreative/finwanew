@@ -141,13 +141,13 @@ const dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
                     </span>
                     {{ lastActivityDate ? 'Aktif' : 'Tidak Aktif' }}
                 </div>
-                <p class="text-[10px] text-gray-400 mt-1">{{ totalThisMonth }} transaksi bulan ini</p>
+                <p class="text-[11px] text-gray-400 mt-1">{{ totalThisMonth }} transaksi bulan ini</p>
             </div>
         </div>
 
         <!-- Day Names Header -->
         <div class="grid grid-cols-7 gap-1 mb-1">
-            <div v-for="day in dayNames" :key="day" class="text-center text-[9px] font-medium text-gray-400 uppercase">
+            <div v-for="day in dayNames" :key="day" class="text-center text-[11px] font-medium text-gray-400 uppercase">
                 {{ day }}
             </div>
         </div>
@@ -169,7 +169,7 @@ const dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
                 <!-- Daily expense label -->
                 <span 
                     v-if="day.expenseLabel" 
-                    class="text-[9px] font-bold leading-none mt-0.5 truncate max-w-full px-0.5"
+                    class="text-[11px] font-bold leading-none mt-0.5 truncate max-w-full px-0.5"
                     :class="day.isToday 
                         ? 'text-red-100' 
                         : 'text-red-500 dark:text-red-400'"
@@ -180,7 +180,7 @@ const dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
         </div>
 
         <!-- Footer Legend -->
-        <div class="flex items-center justify-between text-[9px] text-gray-400 mt-2 pt-2 border-t border-gray-50 dark:border-gray-700/50">
+        <div class="flex items-center justify-between text-[11px] text-gray-400 mt-2 pt-2 border-t border-gray-50 dark:border-gray-700/50">
             <span>Terakhir: <span class="font-semibold text-gray-600 dark:text-gray-300">{{ formattedLastDate }}</span></span>
             <div class="flex items-center gap-1.5">
                 <div class="flex items-center gap-0.5">

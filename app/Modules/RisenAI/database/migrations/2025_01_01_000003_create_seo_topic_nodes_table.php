@@ -8,6 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempoten: tabel sudah ada dibuat di luar migrasi — lewati.
+        if (Schema::hasTable('seo_topic_nodes')) {
+            return;
+        }
+
         Schema::create('seo_topic_nodes', function (Blueprint $table) {
             $table->id();
             $table->string('label');

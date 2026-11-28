@@ -172,4 +172,34 @@ class CategoryInferenceServiceTest extends TestCase
         $this->assertEquals('Pakaian & Fashion', $result['category_name']);
         $this->assertGreaterThanOrEqual(0.4, $result['confidence']);
     }
+
+    public function test_beli_lipstik_masuk_kategori_perawatan_diri(): void
+    {
+        $service = new CategoryInferenceService();
+        $result = $service->infer('beli lipstik 20rb');
+        
+        $this->assertEquals('pengeluaran_perawatan_diri', $result['category_type']);
+        $this->assertEquals('Perawatan Diri', $result['category_name']);
+    }
+
+    public function test_beli_nasi_kuning_masuk_kategori_makanan(): void
+    {
+        $service = new CategoryInferenceService();
+        $result = $service->infer('Beli Nasi kuning Rp 32.000');
+        
+        $this->assertEquals('pengeluaran_makanan', $result['category_type']);
+        $this->assertEquals('Makanan & Minuman', $result['category_name']);
+        $this->assertGreaterThanOrEqual(0.4, $result['confidence']);
+    }
+
+    public function test_nasi_kuning_masuk_kategori_makanan(): void
+    {
+        $service = new CategoryInferenceService();
+        $result = $service->infer('Nasi kuning Rp 32.000');
+        
+        $this->assertEquals('pengeluaran_makanan', $result['category_type']);
+        $this->assertEquals('Makanan & Minuman', $result['category_name']);
+        $this->assertGreaterThanOrEqual(0.4, $result['confidence']);
+    }
 }
+

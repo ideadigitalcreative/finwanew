@@ -2,6 +2,7 @@
 
 namespace App\Services\Transaction;
 
+use App\Helpers\KeywordNormalizer;
 use App\Models\Balance;
 use App\Models\Message;
 use App\Models\Transaction;
@@ -58,22 +59,14 @@ class TransactionConfirmationService
 
         $count = count($transactions);
 
-        // Random confirmation messages for variety
-        $confirmMessages = [
-            'Berhasil Dicatat! 🎉',
-            'Tercatat! ✨',
-            'Sudah Dicatat! 📝',
-            'Oke, Dicatat! 👍',
-            'Siap, Sudah Masuk! ✅',
-        ];
-        $statusText = $needsReview ? 'Menunggu Review ⏳' : $confirmMessages[array_rand($confirmMessages)];
+        // Fitur "tunggu review" dihilangkan — semua transaksi langsung dikonfirmasi
 
         // Default Standard Responses
         $confirmMessages = [
             'Berhasil Dicatat! 🎉', 'Tercatat! ✨', 'Sudah Dicatat! 📝',
             'Oke, Dicatat! 👍', 'Siap, Sudah Masuk! ✅',
         ];
-        $statusText = $needsReview ? 'Menunggu Review ⏳' : $confirmMessages[array_rand($confirmMessages)];
+        $statusText = $confirmMessages[array_rand($confirmMessages)];
 
         // Dynamic Sentiment Response (Respon Emosional) 🎭
         // Restore from Cache if property is lost (Robustness Fix)
@@ -108,7 +101,7 @@ class TransactionConfirmationService
         // Access the first transaction safely for sentiment check
         $firstTransaction = $transactions[0] ?? null;
 
-        if (! $needsReview && $currentSentiment && isset($currentSentiment['mood'])) {
+        if ($currentSentiment && isset($currentSentiment['mood'])) {
             $mood = $currentSentiment['mood'];
             $score = $currentSentiment['score'] ?? 0;
             $txType = $firstTransaction->type ?? 'expense';
@@ -154,19 +147,43 @@ class TransactionConfirmationService
             $transaction->load('category');
             $category = $transaction->category->name ?? 'Lainnya';
             $categoryIcon = $transaction->category->icon ?? '📝';
-            $desc = $transaction->description ?? '-';
+            // Keterangan tanpa nominal — nominal sudah ada di baris "💵 Rp ..."
+            $desc = KeywordNormalizer::stripAmountFromDescription($transaction->description);
 
-            if ($transaction->type === 'income') {
+            // Hutang/piutang yang hanya dicatat: bukan pemasukan/pengeluaran, saldo tidak berubah
+            $debtRecordOnly = $transaction->isDebtRecordOnly();
+            $isNewCashDebt = ! $debtRecordOnly
+                && \App\Services\DebtReceivable\DebtCashMode::isNewDebtCategory($transaction->category->type ?? null);
+            if ($debtRecordOnly) {
+                $isHutang = ($transaction->category->type ?? null) === 'pendapatan_hutang';
+                $typeEmoji = $isHutang ? '🏦' : '🤝';
+                $typeLabel = $isHutang ? 'Hutang (hanya dicatat)' : 'Piutang (hanya dicatat)';
+            } elseif ($transaction->isCreditRepayment()) {
+                // Bayar tagihan paylater/kartu kredit: belanjanya sudah dihitung pengeluaran
+                $typeEmoji = '🏦';
+                $typeLabel = 'Bayar Hutang';
+            } elseif ($transaction->type === 'income') {
                 $totalIncome += $transaction->amount;
             } else {
                 $totalExpense += $transaction->amount;
             }
+            $creditParty = ($transaction->isCreditPurchase() || $transaction->isCreditRepayment())
+                ? (string) ($transaction->metadata['counterparty'] ?? '')
+                : '';
+            $creditOutstanding = $creditParty !== ''
+                ? app(\App\Services\DebtReceivable\DebtReceivableLedgerService::class)->hutangOutstanding(
+                    $transaction->tenant_id,
+                    (string) ($transaction->metadata['counterparty_normalized'] ?? mb_strtolower($creditParty))
+                )
+                : 0.0;
 
             // Format transaksi dengan kategori icon
             $reply .= "{$typeEmoji} *{$typeLabel}*\n";
             $reply .= "💵 Rp {$amount}\n";
             $reply .= "{$categoryIcon} {$category}";
-            if ($desc && $desc !== '-' && strlen($desc) < 50) {
+            if ($transaction->merchant) {
+                $reply .= " • 🏪 {$transaction->merchant}";
+            } elseif ($desc !== '' && strlen($desc) < 50) {
                 $reply .= " • _{$desc}_";
             }
 
@@ -178,10 +195,24 @@ class TransactionConfirmationService
             $reply .= "\n";
 
             // Show balance after transaction (for single transaction)
-            if ($count === 1 && $transaction->balance) {
+            if ($debtRecordOnly) {
+                $reply .= "👛 Saldo dompet *tidak berubah*\n";
+            } elseif ($transaction->isCreditPurchase() && $creditParty !== '') {
+                $reply .= "💳 Pakai {$creditParty} — saldo dompet *tidak berubah*\n";
+                $reply .= "🏦 Hutang {$creditParty}: Rp ".number_format($creditOutstanding, 0, ',', '.')."\n";
+            } elseif ($transaction->isCreditRepayment() && $transaction->balance) {
+                $reply .= "👛 Sisa saldo {$transaction->balance->account_name}: Rp ".number_format($transaction->balance->balance ?? 0, 0, ',', '.')."\n";
+                $reply .= "🏦 Sisa hutang {$creditParty}: Rp ".number_format(max(0, $creditOutstanding), 0, ',', '.')."\n";
+                $reply .= "_Tidak dihitung pengeluaran lagi — sudah tercatat saat belanja._\n";
+            } elseif ($count === 1 && $transaction->balance) {
                 $balanceName = $transaction->balance->account_name ?? 'Dompet Utama';
                 $currentBalance = number_format($transaction->balance->balance ?? 0, 0, ',', '.');
                 $reply .= "👛 Sisa saldo {$balanceName}: Rp {$currentBalance}\n";
+                if ($isNewCashDebt) {
+                    $noun = $transaction->type === 'income' ? 'Hutang' : 'Piutang';
+                    $moved = $transaction->type === 'income' ? 'masuk ke' : 'keluar dari';
+                    $reply .= "💡 _{$noun} lama (uang tidak {$moved} dompet)? Balas: *hanya dicatat*_\n";
+                }
             } elseif ($count === 1) {
                 // Show total balance if no specific balance linked
                 $totalBalance = Balance::where('tenant_id', $this->message->tenant_id)
@@ -190,6 +221,15 @@ class TransactionConfirmationService
                     $currentBalance = number_format($totalBalance, 0, ',', '.');
                     $reply .= "👛 Total saldo: Rp {$currentBalance}\n";
                 }
+            }
+
+            // Dompet yang disebut user belum terdaftar → beri tahu, jangan diam-diam
+            // memakai dompet utama.
+            $missingWallet = $transaction->wallet_not_found_warning ?? null;
+            if (is_string($missingWallet) && $missingWallet !== '') {
+                $usedWallet = $transaction->balance->account_name ?? 'dompet utama';
+                $reply .= "⚠️ _Dompet *{$missingWallet}* belum terdaftar — dicatat di *{$usedWallet}*._\n";
+                $reply .= "_Buat dulu dengan: *tambah dompet {$missingWallet}*_\n";
             }
 
             if ($index < $count - 1) {
@@ -263,6 +303,22 @@ class TransactionConfirmationService
         }
 
         $this->sendReply($reply);
+
+        // Fase 1 reply-edit: simpan pemetaan wa_message_id balasan ini → transaksi,
+        // agar user bisa mengedit transaksi tersebut dengan cara membalas pesannya.
+        $outgoingWaMessageId = Cache::get('wa_out_msgid:'.$this->message->message_id);
+        if ($outgoingWaMessageId) {
+            foreach ($transactions as $transaction) {
+                ReplyEditService::storeMapping(
+                    (int) $this->message->tenant_id,
+                    null,
+                    (string) $outgoingWaMessageId,
+                    (int) $transaction->id,
+                    $this->message->sender_id
+                );
+            }
+            Cache::forget('wa_out_msgid:'.$this->message->message_id);
+        }
     }
 
     /**
@@ -272,13 +328,16 @@ class TransactionConfirmationService
      * MOVED FROM: ProcessIncomingMessage::sendReceiptConfirmation()
      * LINES: 4399-4490
      */
-    public function sendReceiptConfirmation(Transaction $transaction, array $items, ?string $merchant, int $remainingCount = 0): void
+    public function sendReceiptConfirmation(Transaction $transaction, array $items, ?string $merchant, int $remainingCount = 0, ?string $caption = null): void
     {
         $amount = number_format($transaction->amount, 0, ',', '.');
 
         $reply = "🧾 *Struk Tercatat!* ✅\n";
         if ($merchant) {
             $reply .= "🏪 *{$merchant}*\n";
+        }
+        if ($caption) {
+            $reply .= "📝 _{$caption}_\n";
         }
         $reply .= "\n";
 
@@ -390,6 +449,92 @@ class TransactionConfirmationService
             ->sum('amount');
         $monthlyExpenseFormatted = number_format($monthlyExpense, 0, ',', '.');
         $reply .= '📊 Belanja '.now()->translatedFormat('F').": Rp {$monthlyExpenseFormatted}";
+
+        $this->sendReply($reply);
+    }
+
+    /**
+     * Send detailed transfer confirmation for bank transfer proofs
+     * Shows: bank name, recipient, account, reference, transfer note, and total
+     */
+    public function sendTransferConfirmation(
+        Transaction $transaction,
+        ?string $bankName,
+        ?string $recipientName,
+        ?string $recipientAccount,
+        ?string $senderAccount,
+        ?string $referenceNumber,
+        ?string $transferNote,
+        ?string $caption = null
+    ): void {
+        $amount = number_format($transaction->amount, 0, ',', '.');
+
+        $reply = "🏦 *Transfer Tercatat!* ✅\n";
+        if ($bankName) {
+            $reply .= "🏪 *{$bankName}*\n";
+        }
+        if ($caption) {
+            $reply .= "📝 _{$caption}_\n";
+        }
+        $reply .= "\n";
+
+        // Transaction date
+        $transactionDate = $transaction->transaction_date ?? now();
+        $reply .= '📅 '.$transactionDate->translatedFormat('d F Y')."\n";
+
+        // Category info
+        $transaction->load('category');
+        if ($transaction->category) {
+            $catIcon = $transaction->category->icon ?? '📤';
+            $catName = $transaction->category->name ?? 'Transfer Keluar';
+            $reply .= "{$catIcon} Kategori: {$catName}\n";
+        }
+        $reply .= "\n";
+
+        // Transfer details
+        if ($recipientName) {
+            $reply .= "📤 Ke: *{$recipientName}*\n";
+        }
+        if ($recipientAccount) {
+            $reply .= "💳 Rek: {$recipientAccount}\n";
+        }
+        if ($senderAccount) {
+            $reply .= "📥 Dari: {$senderAccount}\n";
+        }
+        if ($transferNote) {
+            $reply .= "📝 Berita: _{$transferNote}_\n";
+        }
+        if ($referenceNumber) {
+            $reply .= "🔖 Ref: {$referenceNumber}\n";
+        }
+
+        // Total
+        $reply .= "\n━━━━━━━━━━━━━━━\n";
+        $reply .= "💵 *TOTAL: Rp {$amount}*\n\n";
+
+        // Balance
+        if ($transaction->balance) {
+            $currentBalance = number_format($transaction->balance->balance ?? 0, 0, ',', '.');
+            $balanceName = $transaction->balance->account_name ?? 'Saldo';
+            $reply .= "👛 Sisa saldo {$balanceName}: Rp {$currentBalance}\n";
+        } else {
+            $totalBalance = Balance::where('tenant_id', $this->message->tenant_id)
+                ->sum('balance');
+            if ($totalBalance > 0) {
+                $currentBalance = number_format($totalBalance, 0, ',', '.');
+                $reply .= "👛 Total saldo: Rp {$currentBalance}\n";
+            }
+        }
+
+        // Monthly summary
+        $monthStart = now()->startOfMonth();
+        $monthEnd = now()->endOfMonth();
+        $monthlyExpense = Transaction::where('tenant_id', $this->message->tenant_id)
+            ->where('type', 'expense')
+            ->whereBetween('transaction_date', [$monthStart, $monthEnd])
+            ->sum('amount');
+        $monthlyExpenseFormatted = number_format($monthlyExpense, 0, ',', '.');
+        $reply .= '📊 Pengeluaran '.now()->translatedFormat('F').": Rp {$monthlyExpenseFormatted}";
 
         $this->sendReply($reply);
     }

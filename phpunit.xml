@@ -31,5 +31,9 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="FINWA_REPLY_EDIT_ENABLED" value="false"/>
+        <env name="FINWA_REPLY_EDIT_DRY_RUN" value="true"/>
+        <!-- Regression guard golden set: gagal bila akurasi rules turun di bawah ini (saat ini 93,07%) -->
+        <env name="GOLDEN_MIN_ACCURACY" value="0.92"/>
     </php>
 </phpunit>

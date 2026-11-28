@@ -7,6 +7,7 @@ use App\Models\OcrJob;
 use App\Models\Transaction;
 use App\Services\Category\CategoryMappingService;
 use App\Services\FinWaAIService;
+use App\Services\GeminiConfigService;
 use App\Services\GroqLLMService;
 use App\Services\Transaction\TransactionConfirmationService;
 use App\Services\Transaction\TransactionService;
@@ -167,6 +168,15 @@ class OcrProcessorService
             Log::info('Gemini Vision: processing receipt image directly', ['ocr_job_id' => $ocrJob->id]);
 
             $fileContent = $this->loadImageContent($filePath);
+
+            // Foto yang SAMA dikirim ulang → jangan dicatat dua kali (dan jangan
+            // panggil Gemini / potong kuota lagi).
+            $imageHash = hash('sha256', $fileContent);
+            $ocrJob->update(['metadata' => array_merge($ocrJob->metadata ?? [], ['image_hash' => $imageHash])]);
+            if ($this->rejectIfDuplicate($ocrJob, 'image_hash', $imageHash)) {
+                return;
+            }
+
             $base64 = base64_encode($fileContent);
 
             $mimeType = 'image/jpeg';
@@ -175,7 +185,28 @@ class OcrProcessorService
                 $detected = $finfo->buffer($fileContent);
                 if ($detected && str_starts_with($detected, 'image/')) {
                     $mimeType = $detected;
+                } elseif ($detected && $detected !== 'application/octet-stream') {
+                    // Video/dokumen/stiker animasi → jangan kirim ke Gemini (pasti gagal
+                    // & dulu tetap memotong kuota). Job failed = kuota tidak dipotong.
+                    $ocrJob->update(['status' => 'failed', 'error_message' => "unsupported_mime:{$detected}", 'completed_at' => now()]);
+                    ($this->sendReplyCallback)(
+                        "⚠️ *Format tidak didukung*\n\nScan struk hanya untuk *foto* (JPG/PNG). Kirim foto struk atau bukti transfer ya.\n\n".
+                        '✅ _Kuota scan Anda tidak terpotong._'
+                    );
+
+                    return;
                 }
+            }
+
+            // Batas inline Gemini ±20MB per request (base64 menambah ~33%)
+            if (strlen($fileContent) > 14 * 1024 * 1024) {
+                $ocrJob->update(['status' => 'failed', 'error_message' => 'image_too_large', 'completed_at' => now()]);
+                ($this->sendReplyCallback)(
+                    "⚠️ *Ukuran foto terlalu besar*\n\nKirim ulang foto struk dengan ukuran lebih kecil (maks ±14 MB).\n\n".
+                    '✅ _Kuota scan Anda tidak terpotong._'
+                );
+
+                return;
             }
 
             $dataUri = "data:{$mimeType};base64,{$base64}";
@@ -194,11 +225,22 @@ class OcrProcessorService
 
             $parsed = $gemini->extractReceiptData($dataUri);
 
-            // Gambar bukan struk atau tidak terbaca — tetap potong kuota, beri edukasi
-            if (! $parsed || empty($parsed['total_amount'])) {
-                Log::warning('Gemini Vision: bukan struk atau tidak terbaca', [
+            // AI/jaringan GAGAL (bukan salah user) → status failed = kuota TIDAK dipotong
+            // (kuota hanya menghitung job 'completed'). Dulu ini dianggap "bukan struk"
+            // dan user diberi tahu kuotanya tetap terpotong.
+            if ($parsed === null && $gemini->lastError !== null) {
+                $this->handleAiUnavailable($ocrJob, $gemini->lastError);
+
+                return;
+            }
+
+            // Gambar bukan struk/transfer atau tidak terbaca — tetap potong kuota, beri edukasi
+            $documentType = $parsed['document_type'] ?? null;
+            if (! $parsed || (int) ($parsed['total_amount'] ?? 0) <= 0 || $documentType === 'unknown') {
+                Log::warning('Gemini Vision: bukan struk/transfer atau tidak terbaca', [
                     'ocr_job_id' => $ocrJob->id,
-                    'parsed' => $parsed,
+                    'document_type' => $documentType,
+                    'has_total' => ! empty($parsed['total_amount']),
                 ]);
 
                 $ocrJob->update([
@@ -214,11 +256,12 @@ class OcrProcessorService
                 ]);
 
                 ($this->sendReplyCallback)(
-                    "⚠️ *Gambar Tidak Dikenali sebagai Struk*\n\n".
+                    "⚠️ *Gambar Tidak Dikenali*\n\n".
                     "AI tidak menemukan data transaksi pada gambar ini.\n\n".
-                    "💡 _Kuota scan Anda tetap terpotong meskipun gambar bukan struk atau buram._\n\n".
+                    "💡 _Kuota scan Anda tetap terpotong meskipun gambar bukan struk/bukti transfer atau buram._\n\n".
                     "Pastikan gambar yang dikirim:\n".
                     "✅ Foto struk belanja yang jelas\n".
+                    "✅ Bukti transfer bank (BCA, BNI, BRI, Mandiri, dll)\n".
                     "✅ Tidak buram atau terpotong\n".
                     '❌ Bukan foto selfie, screenshot chat, atau gambar lainnya'
                 );
@@ -226,18 +269,220 @@ class OcrProcessorService
                 return;
             }
 
+            $isBankTransfer = ($documentType === 'bank_transfer');
+
+            // Tanpa nama/nomor rekening (data pribadi) di log
             Log::info('Gemini Vision extraction success', [
                 'ocr_job_id' => $ocrJob->id,
-                'merchant' => $parsed['merchant_name'] ?? 'N/A',
+                'document_type' => $documentType ?? 'receipt',
                 'total' => $parsed['total_amount'],
                 'items_count' => count($parsed['items'] ?? []),
+                'bank_name' => $parsed['bank_name'] ?? null,
             ]);
 
             $merchant = $parsed['merchant_name'] ?? null;
-            $total = (int) $parsed['total_amount'];
+            // Angka sudah dinormalisasi GeminiAIService (Rupiah::parse); jaga-jaga tetap parse.
+            $total = (int) (\App\Support\Rupiah::parse($parsed['total_amount']) ?? 0);
             $dateRaw = $parsed['date'] ?? null;
             $items = $parsed['items'] ?? [];
-            $tax = (int) ($parsed['tax'] ?? 0);
+            $tax = (int) (\App\Support\Rupiah::parse($parsed['tax'] ?? 0) ?? 0);
+
+            // Nominal tidak masuk akal (salah baca / instruksi palsu di gambar) →
+            // jangan dicatat otomatis. Kuota tidak dipotong.
+            if ($total > self::MAX_RECEIPT_TOTAL) {
+                $this->handleImplausibleTotal($ocrJob, $total);
+
+                return;
+            }
+
+            // ── DATE VALIDATION ──────────────────────────────────────────────
+            if ($dateRaw) {
+                try {
+                    $parsedDate = $this->parseReceiptDateStrict((string) $dateRaw);
+                    $oneYearAgo = now()->subYear();
+                    $tomorrow = now()->addDay();
+
+                    if ($parsedDate->lt($oneYearAgo) || $parsedDate->gt($tomorrow)) {
+                        Log::warning('Gemini Vision: date looks invalid, falling back to today', [
+                            'ocr_job_id' => $ocrJob->id,
+                            'gemini_date' => $dateRaw,
+                            'parsed_as' => $parsedDate->toDateString(),
+                            'reason' => $parsedDate->lt($oneYearAgo) ? 'too_far_in_past' : 'in_future',
+                        ]);
+                        $dateRaw = now()->toDateString();
+                    } else {
+                        // Simpan dalam format ISO agar parser berikutnya tidak salah tafsir
+                        $dateRaw = $parsedDate->toDateString();
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Gemini Vision: date parse error, falling back to today', [
+                        'ocr_job_id' => $ocrJob->id,
+                        'gemini_date' => $dateRaw,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $dateRaw = now()->toDateString();
+                }
+            }
+
+            // Check for duplicate
+            $existingMeta = $ocrJob->metadata ?? [];
+            if (isset($existingMeta['receipt_transaction_id']) && is_numeric($existingMeta['receipt_transaction_id'])) {
+                Log::info('Gemini Vision: transaction already recorded, skipping create', [
+                    'ocr_job_id' => $ocrJob->id,
+                    'transaction_id' => $existingMeta['receipt_transaction_id'],
+                ]);
+
+                return;
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // FLOW: BUKTI TRANSFER BANK
+            // ══════════════════════════════════════════════════════════════════
+            if ($isBankTransfer) {
+                $bankName = $parsed['bank_name'] ?? null;
+                $recipientName = $parsed['recipient_name'] ?? $merchant;
+                $recipientAccount = $parsed['recipient_account'] ?? null;
+                $senderName = $parsed['sender_name'] ?? null;
+                $senderAccount = $parsed['sender_account'] ?? null;
+                $referenceNumber = $parsed['reference_number'] ?? null;
+                $transferNote = $parsed['transfer_note'] ?? null;
+
+                // Bukti transfer yang sama (nomor referensi sama) → jangan dicatat ulang
+                if ($referenceNumber && $this->rejectIfDuplicate($ocrJob, 'entities->reference_number', (string) $referenceNumber)) {
+                    return;
+                }
+
+                // Arah transfer: user sebagai PENERIMA → pemasukan; selain itu pengeluaran.
+                $isIncoming = $this->isIncomingTransfer($recipientName, $recipientAccount, $senderName);
+
+                Log::info('Gemini Vision: bank transfer detected', [
+                    'ocr_job_id' => $ocrJob->id,
+                    'bank' => $bankName,
+                    'amount' => $total,
+                    'direction' => $isIncoming ? 'in' : 'out',
+                    'recipient_account' => self::maskAccount($recipientAccount),
+                ]);
+
+                // Build extracted text
+                $extractedText = 'Transfer';
+                if ($bankName) {
+                    $extractedText .= " {$bankName}";
+                }
+                if ($recipientName) {
+                    $extractedText .= " ke {$recipientName}";
+                }
+                $extractedText .= ' Rp '.number_format($total, 0, ',', '.');
+                if ($dateRaw) {
+                    $extractedText .= "\nTanggal: {$dateRaw}";
+                }
+                if ($transferNote) {
+                    $extractedText .= "\nBerita: {$transferNote}";
+                }
+
+                // Structured data
+                $structuredData = [
+                    'entities' => [
+                        'merchant' => $recipientName,
+                        'nominal' => $total,
+                        'items' => [],
+                        'tanggal' => $dateRaw,
+                        'tax' => 0,
+                        'bank_name' => $bankName,
+                        'recipient_name' => $recipientName,
+                        'recipient_account' => $recipientAccount,
+                        'sender_name' => $senderName,
+                        'sender_account' => $senderAccount,
+                        'reference_number' => $referenceNumber,
+                        'transfer_note' => $transferNote,
+                    ],
+                    'fields' => [
+                        'total' => $total,
+                        'merchant' => $recipientName,
+                        'date_raw' => $dateRaw,
+                    ],
+                    'items' => [],
+                ];
+
+                $ocrJob->update([
+                    'status' => 'completed',
+                    'extracted_text' => $extractedText,
+                    'metadata' => array_merge($existingMeta, [
+                        'ai_source' => 'gemini-vision',
+                        'confidence_score' => 0.95,
+                        'model' => app(GeminiConfigService::class)->getMergedConfig()['model'] ?? config('services.gemini.model'),
+                        'document_type' => 'bank_transfer',
+                        'entities' => $structuredData['entities'],
+                        'structured_data' => $structuredData,
+                        'raw_response' => $parsed,
+                    ]),
+                    'completed_at' => now(),
+                ]);
+
+                // Build description
+                $description = 'Transfer';
+                if ($isIncoming) {
+                    $description = $senderName ? "Transfer masuk dari {$senderName}" : 'Transfer masuk';
+                } elseif ($recipientName) {
+                    $description = "Transfer ke {$recipientName}";
+                }
+                if ($bankName) {
+                    $description .= " ({$bankName})";
+                }
+                if ($transferNote) {
+                    $description .= " - {$transferNote}";
+                }
+
+                // Keterangan foto dari user: kategori, dompet & deskripsi ikut keterangan
+                $hints = $this->captionHints($isIncoming, $isIncoming ? null : $bankName);
+                if ($hints['caption'] !== null) {
+                    $description = "{$hints['caption']} — {$description}";
+                }
+
+                $txData = [
+                    'type' => $isIncoming ? 'income' : 'expense',
+                    'amount' => $total,
+                    'category_type' => $hints['category_type'] ?? ($isIncoming ? 'pendapatan_transfer' : 'pengeluaran_transfer'),
+                    'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw ?: $hints['date']),
+                    'description' => mb_substr($description, 0, 255),
+                    'source' => 'transfer_ai',
+                    'confidence_score' => 0.95,
+                    'account_name' => $hints['account_name'],
+                ];
+                if ($hints['caption'] !== null) {
+                    $txData['metadata'] = ['caption' => $hints['caption']];
+                }
+
+                $transaction = $this->transactionService->createTransaction($txData, false);
+                if (! $transaction) {
+                    ($this->sendReplyCallback)('⚠️ Gagal mencatat transaksi transfer. Silakan coba lagi.');
+
+                    return;
+                }
+
+                $ocrJob->update([
+                    'metadata' => array_merge($ocrJob->metadata ?? [], [
+                        'receipt_transaction_id' => $transaction->id,
+                    ]),
+                ]);
+
+                // Send transfer-specific confirmation
+                $this->confirmationService->sendTransferConfirmation(
+                    $transaction,
+                    $bankName,
+                    $recipientName,
+                    $recipientAccount,
+                    $senderAccount,
+                    $referenceNumber,
+                    $transferNote,
+                    $hints['caption']
+                );
+
+                return;
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // FLOW: STRUK BELANJA (existing logic)
+            // ══════════════════════════════════════════════════════════════════
             $items = array_values(array_filter(array_map(function ($item) {
                 if (! is_array($item)) {
                     return null;
@@ -266,35 +511,6 @@ class OcrProcessorService
                     'price' => $price,
                 ];
             }, $items), fn ($v) => $v !== null));
-
-            // ── DATE VALIDATION ──────────────────────────────────────────────
-            // Gemini kadang salah parse format DD-MM-YYYY jadi tahun yang aneh
-            // (misal: "01-05-2026" dibaca sebagai "2001-05-26").
-            // Validasi: tanggal tidak boleh >1 tahun lalu atau di masa depan >1 hari.
-            if ($dateRaw) {
-                try {
-                    $parsedDate = \Carbon\Carbon::parse($dateRaw);
-                    $oneYearAgo = now()->subYear();
-                    $tomorrow = now()->addDay();
-
-                    if ($parsedDate->lt($oneYearAgo) || $parsedDate->gt($tomorrow)) {
-                        Log::warning('Gemini Vision: date looks invalid, falling back to today', [
-                            'ocr_job_id' => $ocrJob->id,
-                            'gemini_date' => $dateRaw,
-                            'parsed_as' => $parsedDate->toDateString(),
-                            'reason' => $parsedDate->lt($oneYearAgo) ? 'too_far_in_past' : 'in_future',
-                        ]);
-                        $dateRaw = now()->toDateString();
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('Gemini Vision: date parse error, falling back to today', [
-                        'ocr_job_id' => $ocrJob->id,
-                        'gemini_date' => $dateRaw,
-                        'error' => $e->getMessage(),
-                    ]);
-                    $dateRaw = now()->toDateString();
-                }
-            }
 
             // Build extracted text for message content
             $extractedText = $merchant ? "Struk: {$merchant}" : 'Struk Belanja';
@@ -328,23 +544,14 @@ class OcrProcessorService
                 'items' => $items,
             ];
 
-            $existingMeta = $ocrJob->metadata ?? [];
-            if (isset($existingMeta['receipt_transaction_id']) && is_numeric($existingMeta['receipt_transaction_id'])) {
-                Log::info('Gemini Vision: receipt already recorded, skipping create', [
-                    'ocr_job_id' => $ocrJob->id,
-                    'transaction_id' => $existingMeta['receipt_transaction_id'],
-                ]);
-
-                return;
-            }
-
             $ocrJob->update([
                 'status' => 'completed',
                 'extracted_text' => $extractedText,
                 'metadata' => array_merge($existingMeta, [
                     'ai_source' => 'gemini-vision',
                     'confidence_score' => 0.95,
-                    'model' => config('services.gemini.model', 'gemini-2.5-flash'),
+                    'model' => app(GeminiConfigService::class)->getMergedConfig()['model'] ?? config('services.gemini.model'),
+                    'document_type' => 'receipt',
                     'entities' => $structuredData['entities'],
                     'structured_data' => $structuredData,
                     'raw_response' => $parsed,
@@ -368,16 +575,26 @@ class OcrProcessorService
                 }
             }
 
+            // Keterangan foto dari user: kategori, dompet & deskripsi ikut keterangan
+            $hints = $this->captionHints(false);
+            $description = $merchant ? "Belanja di {$merchant}" : 'Belanja dari struk';
+            if ($hints['caption'] !== null) {
+                $description = "{$hints['caption']} — {$description}";
+            }
+
             $txData = [
                 'type' => 'expense',
                 'amount' => $total,
-                'category_type' => $categoryType,
-                'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw),
-                'description' => $merchant ? "Belanja di {$merchant}" : 'Belanja dari struk',
+                'category_type' => $hints['category_type'] ?? $categoryType,
+                'transaction_date' => $this->receiptParser->parseReceiptDate($dateRaw ?: $hints['date']),
+                'description' => mb_substr($description, 0, 255),
                 'source' => 'receipt_ai',
                 'confidence_score' => 0.95,
-                'account_name' => null,
+                'account_name' => $hints['account_name'],
             ];
+            if ($hints['caption'] !== null) {
+                $txData['metadata'] = ['caption' => $hints['caption']];
+            }
 
             $transaction = $this->transactionService->createTransaction($txData, false);
             if (! $transaction) {
@@ -392,7 +609,29 @@ class OcrProcessorService
                 ]),
             ]);
 
-            $this->confirmationService->sendReceiptConfirmation($transaction, $items, $merchant);
+            $this->confirmationService->sendReceiptConfirmation($transaction, $items, $merchant, 0, $hints['caption']);
+
+            // Cek silang: jumlah item (+pajak) vs total. Beda jauh → kemungkinan salah baca,
+            // minta user memeriksa (transaksi tetap tercatat & bisa dikoreksi).
+            $mismatch = $this->receiptTotalMismatch($items, $tax, $total);
+            if ($mismatch !== null) {
+                $ocrJob->update([
+                    'metadata' => array_merge($ocrJob->metadata ?? [], [
+                        'needs_review' => true,
+                        'items_sum' => $mismatch,
+                    ]),
+                ]);
+                ($this->sendReplyCallback)(
+                    "⚠️ *Mohon cek kembali*\n\n".
+                    'Total struk terbaca *Rp '.number_format($total, 0, ',', '.')."*, ".
+                    'tapi jumlah item *Rp '.number_format($mismatch, 0, ',', '.')."*.\n\n".
+                    "Kalau totalnya salah, balas: _ubah jadi [nominal yang benar]_"
+                );
+            } elseif ($hints['category_type'] === null) {
+                // Belanja campuran → tawarkan pecah per kategori (user tidak memberi
+                // kategori sendiri lewat keterangan foto)
+                $this->offerReceiptSplit($transaction, $items, $total);
+            }
 
         } catch (\Throwable $e) {
             Log::error('Gemini Vision process failed', [
@@ -401,6 +640,477 @@ class OcrProcessorService
             ]);
             $this->handleOcrFailure($ocrJob, $e->getMessage());
         }
+    }
+
+    /** @var callable|null fn(string $kind, string $title, array $options, array $aliases, string $footer): void */
+    protected $clarifyCallback = null;
+
+    /** Pertanyaan bernomor dikirim lewat job (yang tahu identitas pengirim). */
+    public function setClarifyCallback(callable $callback): static
+    {
+        $this->clarifyCallback = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Struk belanja campuran (mis. makanan + perlengkapan rumah) dicatat sebagai SATU
+     * transaksi satu kategori. Bila item-itemnya jatuh ke ≥ 2 kategori, tawarkan
+     * memecahnya per kategori. Total tetap sama: selisih pajak/diskon/pembulatan
+     * dimasukkan ke kelompok terbesar.
+     */
+    protected function offerReceiptSplit(Transaction $transaction, array $items, int $total): void
+    {
+        if ($this->clarifyCallback === null || count($items) < 2 || $total <= 0) {
+            return;
+        }
+
+        $transaction->loadMissing('category');
+        $mainType = (string) ($transaction->category->type ?? 'pengeluaran_belanja');
+        $tenantId = (int) $this->message->tenant_id;
+        $inference = new \App\Services\Transaction\CategoryInferenceService;
+
+        $groups = [];
+        foreach ($items as $item) {
+            $name = trim((string) ($item['name'] ?? ''));
+            $value = (int) ($item['qty'] ?? 1) * (int) ($item['price'] ?? 0);
+            if ($name === '' || $value <= 0) {
+                continue;
+            }
+            try {
+                $type = (string) ($inference->infer($name, false, $tenantId)['category_type'] ?? '');
+            } catch (\Throwable $e) {
+                $type = '';
+            }
+            // Item yang tidak dikenali ikut kategori utama struk
+            if (! str_starts_with($type, 'pengeluaran_') || str_ends_with($type, '_lainnya')) {
+                $type = $mainType;
+            }
+            $groups[$type]['amount'] = ($groups[$type]['amount'] ?? 0) + $value;
+            $groups[$type]['items'][] = $name;
+        }
+
+        if (count($groups) < 2 || count($groups) > 5) {
+            return;
+        }
+
+        // Jumlah item harus dekat dengan total; kalau jauh, pembacaan item tidak bisa dipercaya
+        $sum = array_sum(array_column($groups, 'amount'));
+        $diff = $total - $sum;
+        if (abs($diff) > max(5000, (int) round($total * 0.15))) {
+            return;
+        }
+        uasort($groups, fn ($a, $b) => $b['amount'] <=> $a['amount']);
+        $largest = array_key_first($groups);
+        $groups[$largest]['amount'] += $diff;
+        if (min(array_column($groups, 'amount')) <= 0) {
+            return;
+        }
+
+        $categories = \App\Models\Category::where('tenant_id', $tenantId)->whereIn('type', array_keys($groups))->get()->keyBy('type');
+        $lines = [];
+        $payload = [];
+        foreach ($groups as $type => $group) {
+            $cat = $categories->get($type);
+            $label = trim(($cat->icon ?? '📁').' '.($cat->name ?? ucwords(str_replace(['pengeluaran_', '_'], ['', ' '], $type))));
+            $lines[] = "• {$label} — Rp ".number_format($group['amount'], 0, ',', '.').' _('.count($group['items']).' item)_';
+            $payload[] = ['category_type' => $type, 'amount' => $group['amount'], 'items' => array_slice($group['items'], 0, 8)];
+        }
+
+        ($this->clarifyCallback)(
+            'receipt_split',
+            "✂️ *Struk ini berisi ".count($groups)." jenis belanja:*\n".implode("\n", $lines)."\n\nMau dipecah per kategori?",
+            [
+                '1' => ['label' => 'Ya, pecah jadi '.count($groups).' transaksi', 'action' => [
+                    'type' => 'receipt_split', 'transaction_id' => $transaction->id, 'groups' => $payload,
+                ]],
+                '2' => ['label' => 'Tidak, biarkan satu transaksi', 'action' => ['type' => 'cancel', 'message' => '👍 Oke, tetap satu transaksi.']],
+            ],
+            ['ya' => '1', 'iya' => '1', 'pecah' => '1', 'pisah' => '1', 'ok' => '1', 'oke' => '1', 'tidak' => '2', 'gak' => '2', 'ga' => '2', 'jangan' => '2', 'biarkan' => '2'],
+            '_Balas *1* / *pecah*, atau *2*. Diabaikan juga tidak apa-apa._'
+        );
+    }
+
+    /**
+     * Pecah satu transaksi struk menjadi satu transaksi per kategori (jawaban "1" atas
+     * offerReceiptSplit). Dompet, tanggal, dan total tidak berubah.
+     */
+    public function splitReceipt(array $action): void
+    {
+        $tenantId = (int) $this->message->tenant_id;
+        $original = Transaction::with(['balance'])->where('tenant_id', $tenantId)->find((int) ($action['transaction_id'] ?? 0));
+        $groups = is_array($action['groups'] ?? null) ? $action['groups'] : [];
+
+        if (! $original || count($groups) < 2) {
+            ($this->sendReplyCallback)('⚠️ Transaksi struk tidak ditemukan (mungkin sudah dihapus). Tidak ada yang dipecah.');
+
+            return;
+        }
+        // Nominal sudah diubah setelah struk dicatat → pembagian lama tidak berlaku lagi
+        if ((int) $original->amount !== (int) array_sum(array_column($groups, 'amount'))) {
+            ($this->sendReplyCallback)('⚠️ Nominal transaksi struk sudah berubah, jadi tidak bisa dipecah otomatis. Transaksi dibiarkan apa adanya.');
+
+            return;
+        }
+
+        $ledger = app(\App\Services\Ledger\TransactionLedger::class);
+        $merchant = trim((string) preg_replace('/^Belanja di\s+/u', '', (string) $original->description));
+        $created = [];
+
+        foreach ($groups as $group) {
+            $names = implode(', ', array_slice((array) ($group['items'] ?? []), 0, 4));
+            $tx = $this->transactionService->createTransaction([
+                'type' => 'expense',
+                'amount' => (int) $group['amount'],
+                'category_type' => (string) $group['category_type'],
+                'transaction_date' => $original->transaction_date->toDateString(),
+                'description' => mb_substr(trim($original->description.($names !== '' ? " — {$names}" : '')), 0, 255),
+                'source' => 'receipt_ai',
+                'confidence_score' => 0.95,
+                'account_name' => $original->balance?->account_name,
+                'metadata' => ['split_from' => $original->id],
+            ], false);
+
+            if (! $tx) {
+                // Gagal di tengah (mis. batas transaksi bulanan) → batalkan yang sudah dibuat
+                foreach ($created as $done) {
+                    $ledger->delete($done);
+                }
+                ($this->sendReplyCallback)('⚠️ Struk tidak jadi dipecah — transaksi asli tetap tercatat utuh.');
+
+                return;
+            }
+            $created[] = $tx;
+        }
+
+        $ledger->delete($original);
+
+        $reply = '✂️ *Struk dipecah jadi '.count($created)." transaksi* ✅\n";
+        if ($merchant !== '') {
+            $reply .= "🏪 {$merchant}\n";
+        }
+        $reply .= "\n";
+        foreach ($created as $tx) {
+            $tx->load('category');
+            $reply .= ($tx->category->icon ?? '📁').' '.($tx->category->name ?? 'Lainnya').' — Rp '.number_format((float) $tx->amount, 0, ',', '.')."\n";
+        }
+        $reply .= "\n💵 Total tetap: Rp ".number_format((float) $original->amount, 0, ',', '.');
+        if ($original->balance) {
+            $reply .= "\n👛 Sisa saldo {$original->balance->account_name}: Rp ".number_format((float) $original->balance->fresh()->balance, 0, ',', '.');
+        }
+
+        ($this->sendReplyCallback)($reply);
+    }
+
+    /**
+     * Keterangan (caption) yang diketik user bersama foto struk, mis.
+     * "Beli minum kemarin lewat rek mandiri". Kosong bila tidak ada.
+     */
+    protected function caption(): string
+    {
+        $meta = is_array($this->message->metadata) ? $this->message->metadata : [];
+        $raw = is_array($this->message->raw_data) ? $this->message->raw_data : [];
+        $caption = $meta['caption'] ?? $raw['caption'] ?? '';
+        if (! is_string($caption)) {
+            return '';
+        }
+        $caption = trim((string) preg_replace('/\s+/u', ' ', $caption));
+
+        // Bukan keterangan: referensi media (URL / path upload)
+        if ($caption === '' || preg_match('#^(https?://|/?storage/|whatsapp/)#i', $caption)) {
+            return '';
+        }
+
+        return mb_substr($caption, 0, 200);
+    }
+
+    /**
+     * Petunjuk dari keterangan foto. Struk tetap sumber nominal & tanggal; keterangan
+     * user menentukan kategori, dompet, dan deskripsi (struk tidak tahu itu "beli minum").
+     *
+     * @param  string|null  $sourceBank  bank sumber dana di bukti transfer keluar —
+     *                                   dipakai memilih dompet bila keterangan tidak menyebutnya
+     * @return array{caption: ?string, category_type: ?string, account_name: ?string, date: ?string}
+     */
+    protected function captionHints(bool $isIncome, ?string $sourceBank = null): array
+    {
+        $caption = $this->caption();
+        $hints = ['caption' => $caption !== '' ? $caption : null, 'category_type' => null, 'account_name' => null, 'date' => null];
+        $tenantId = (int) $this->message->tenant_id;
+
+        if ($caption !== '') {
+            try {
+                $inference = (new \App\Services\Transaction\CategoryInferenceService)->infer($caption, $isIncome, $tenantId);
+                $cat = $inference['category_type'] ?? null;
+                $prefix = $isIncome ? 'pendapatan_' : 'pengeluaran_';
+                if (is_string($cat) && str_starts_with($cat, $prefix) && ! str_ends_with($cat, '_lainnya')) {
+                    $hints['category_type'] = $cat;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Receipt caption: category inference failed', ['error' => $e->getMessage()]);
+            }
+
+            $hints['date'] = (new \App\Services\Transaction\TransactionExtractorService)->extractDateFromText($caption);
+            $hints['account_name'] = $this->walletFromCaption($caption, $tenantId);
+        }
+
+        // Keterangan tidak menyebut dompet → pakai bank sumber dana di bukti transfer,
+        // hanya bila user memang punya dompet bernama bank itu.
+        if ($hints['account_name'] === null && $sourceBank) {
+            $balance = app(\App\Services\BalanceService::class)->findOrCreateBalance($tenantId, $sourceBank, null);
+            $hints['account_name'] = $balance?->account_name;
+        }
+
+        if ($hints['caption'] !== null || $hints['account_name'] !== null) {
+            Log::info('Receipt caption hints', [
+                'message_id' => $this->message->id,
+                'has_caption' => $hints['caption'] !== null,
+                'category_type' => $hints['category_type'],
+                'account_name' => $hints['account_name'],
+            ]);
+        }
+
+        return $hints;
+    }
+
+    /**
+     * Dompet milik tenant yang disebut di keterangan ("lewat rek mandiri" → "Bank Mandiri").
+     * Hanya mengembalikan dompet yang SUDAH ada — tidak pernah membuat dompet baru.
+     */
+    protected function walletFromCaption(string $caption, int $tenantId): ?string
+    {
+        $balanceService = app(\App\Services\BalanceService::class);
+
+        $named = (new \App\Services\Transaction\TransactionExtractorService)->extractAccountNameFromMessage($caption);
+        if ($named) {
+            $balance = $balanceService->findOrCreateBalance($tenantId, $named, null);
+            if ($balance) {
+                return $balance->account_name;
+            }
+        }
+
+        // Nama dompet (tanpa awalan "Bank"/"Dompet"/"Rekening") muncul sebagai kata utuh
+        return app(\App\Services\Wallet\WalletResolver::class)->match($tenantId, $caption, true)?->account_name;
+    }
+
+    /**
+     * Host yang boleh menjadi sumber gambar: aplikasi sendiri, gateway WhatsApp,
+     * plus tambahan opsional OCR_ALLOWED_MEDIA_HOSTS (dipisah koma).
+     *
+     * @return list<string>
+     */
+    protected function allowedMediaHosts(): array
+    {
+        $hosts = [
+            parse_url((string) config('app.url'), PHP_URL_HOST),
+            parse_url((string) config('services.whatsapp.engine_url'), PHP_URL_HOST),
+        ];
+        foreach (explode(',', (string) config('services.ocr_worker.allowed_media_hosts', '')) as $h) {
+            $hosts[] = trim($h);
+        }
+
+        return array_values(array_unique(array_filter(array_map(
+            fn ($h) => strtolower((string) $h),
+            $hosts
+        ))));
+    }
+
+    /**
+     * Struk/bukti transfer yang sama sudah pernah dicatat di tenant ini (30 hari)?
+     * Bila ya: balas user, tandai job failed (kuota tidak dipotong), return true.
+     */
+    protected function rejectIfDuplicate(OcrJob $ocrJob, string $metaPath, string $value): bool
+    {
+        $previous = OcrJob::where('tenant_id', $ocrJob->tenant_id)
+            ->where('id', '!=', $ocrJob->id)
+            ->where('status', 'completed')
+            ->where('created_at', '>=', now()->subDays(30))
+            ->where("metadata->{$metaPath}", $value)
+            ->whereNotNull('metadata->receipt_transaction_id')
+            ->latest('id')
+            ->first();
+        if (! $previous) {
+            return false;
+        }
+
+        $tx = Transaction::find($previous->metadata['receipt_transaction_id'] ?? null);
+        if (! $tx) {
+            return false; // transaksi lama sudah dihapus → boleh dicatat lagi
+        }
+
+        $ocrJob->update(['status' => 'failed', 'error_message' => 'duplicate_receipt', 'completed_at' => now()]);
+        Log::info('Gemini Vision: struk duplikat dilewati', ['ocr_job_id' => $ocrJob->id, 'previous_job' => $previous->id, 'by' => $metaPath]);
+
+        ($this->sendReplyCallback)(
+            "ℹ️ *Struk ini sudah pernah dicatat*\n\n".
+            'Rp '.number_format((float) $tx->amount, 0, ',', '.').' — '.\Carbon\Carbon::parse($tx->transaction_date)->translatedFormat('d M Y').".\n".
+            "Tidak dicatat ulang supaya tidak dobel.\n\n".
+            '✅ _Kuota scan Anda tidak terpotong._'
+        );
+
+        return true;
+    }
+
+    /**
+     * Bukti transfer: apakah user pengirim pesan adalah PENERIMA transfer?
+     * Cocok bila rekening penerima = rekening dompet tenant, atau nama penerima =
+     * nama user (dan bukan sekaligus nama pengirim).
+     */
+    protected function isIncomingTransfer(?string $recipientName, ?string $recipientAccount, ?string $senderName): bool
+    {
+        $digits = fn (?string $s) => preg_replace('/\D/', '', (string) $s);
+
+        $acc = $digits($recipientAccount);
+        if (strlen($acc) >= 6) {
+            $tail = substr($acc, -6); // bukti transfer sering menyamarkan digit awal
+            $own = \App\Models\Balance::where('tenant_id', $this->message->tenant_id)
+                ->whereNotNull('account_number')
+                ->pluck('account_number')
+                ->map($digits)
+                ->filter(fn ($a) => strlen($a) >= 6);
+            if ($own->contains(fn ($a) => str_ends_with($a, $tail))) {
+                return true;
+            }
+        }
+
+        $norm = fn (?string $s) => trim(preg_replace('/[^a-z ]/', '', mb_strtolower((string) $s)));
+        $recipient = $norm($recipientName);
+        if (mb_strlen($recipient) < 3) {
+            return false;
+        }
+
+        $names = $this->senderUserNames();
+        foreach ($names as $name) {
+            $name = $norm($name);
+            if (mb_strlen($name) < 3) {
+                continue;
+            }
+            $matches = str_contains($recipient, $name) || str_contains($name, $recipient)
+                || (similar_text($recipient, $name, $pct) && $pct >= 85);
+            if ($matches && $norm($senderName) !== $recipient) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return list<string> nama user pemilik nomor WA pengirim (+ nama kontak WA) */
+    protected function senderUserNames(): array
+    {
+        $names = [];
+        try {
+            $numberId = app(\App\Services\WhatsAppUserMappingService::class)
+                ->resolveUserWhatsAppNumberId((string) $this->message->sender_id, $this->message->tenant_id);
+            if ($numberId) {
+                $number = \App\Models\UserWhatsAppNumber::with('user')->find($numberId);
+                $names[] = $number?->user?->name;
+                $names[] = $number?->name;
+            }
+        } catch (\Throwable $e) {
+            // abaikan — default pengeluaran
+        }
+
+        return array_values(array_filter($names));
+    }
+
+    /** "1234567890" → "******7890" (untuk log) */
+    public static function maskAccount(?string $account): ?string
+    {
+        $d = preg_replace('/\D/', '', (string) $account);
+
+        return $d === '' ? null : str_repeat('*', max(0, strlen($d) - 4)).substr($d, -4);
+    }
+
+    /** Total struk di atas ini dianggap salah baca → tidak dicatat otomatis. */
+    public const MAX_RECEIPT_TOTAL = 100_000_000;
+
+    /**
+     * Gemini tidak bisa dihubungi / error / limit → job 'failed' (kuota tidak
+     * dipotong) dan user diberi tahu dengan jujur, bukan "gambar tidak dikenali".
+     */
+    protected function handleAiUnavailable(OcrJob $ocrJob, string $reason): void
+    {
+        $ocrJob->update([
+            'status' => 'failed',
+            'error_message' => "gemini:{$reason}",
+            'completed_at' => now(),
+        ]);
+
+        Log::warning('Gemini Vision: AI tidak tersedia, kuota tidak dipotong', [
+            'ocr_job_id' => $ocrJob->id,
+            'reason' => $reason,
+        ]);
+
+        $message = match ($reason) {
+            'not_configured' => "⚠️ *Scan struk belum aktif*\n\nAI pembaca struk belum dikonfigurasi di server. Silakan catat manual dulu, mis. _belanja 150rb di alfamart_.",
+            'bad_response' => "⚠️ *Struk belum bisa dibaca*\n\nAI kesulitan membaca gambar ini. Coba foto ulang lebih dekat & terang, atau ketik manual: _belanja 150rb di alfamart_.",
+            default => "⏳ *Layanan pembaca struk sedang sibuk*\n\nSilakan kirim ulang fotonya beberapa menit lagi, atau ketik manual: _belanja 150rb di alfamart_.",
+        };
+
+        ($this->sendReplyCallback)($message."\n\n✅ _Kuota scan Anda tidak terpotong._");
+    }
+
+    protected function handleImplausibleTotal(OcrJob $ocrJob, int $total): void
+    {
+        $ocrJob->update([
+            'status' => 'failed',
+            'error_message' => 'implausible_total',
+            'completed_at' => now(),
+        ]);
+
+        ($this->sendReplyCallback)(
+            "⚠️ *Nominal struk tidak wajar*\n\n".
+            'AI membaca total *Rp '.number_format($total, 0, ',', '.')."* — sepertinya salah baca.\n".
+            "Transaksi tidak dicatat. Silakan ketik manual, mis. _belanja 150rb di alfamart_.\n\n".
+            '✅ _Kuota scan Anda tidak terpotong._'
+        );
+    }
+
+    /**
+     * Tanggal struk: utamakan YYYY-MM-DD (format yang diminta prompt), lalu format
+     * Indonesia DD-MM-YYYY / DD/MM/YY (hari dulu). Carbon::parse("03/05/2026")
+     * membaca format AS (3 Mei → 5 Maret), jadi tidak dipakai untuk pola ini.
+     */
+    protected function parseReceiptDateStrict(string $raw): \Carbon\Carbon
+    {
+        $raw = trim($raw);
+
+        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})/', $raw, $m)) {
+            return \Carbon\Carbon::create((int) $m[1], (int) $m[2], (int) $m[3])->startOfDay();
+        }
+        if (preg_match('/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/', $raw, $m)) {
+            $year = (int) $m[3];
+            if ($year < 100) {
+                $year += 2000;
+            }
+
+            return \Carbon\Carbon::create($year, (int) $m[2], (int) $m[1])->startOfDay();
+        }
+
+        return \Carbon\Carbon::parse($raw);
+    }
+
+    /**
+     * @return int|null jumlah item (+pajak) bila beda jauh dari total, null bila wajar
+     */
+    protected function receiptTotalMismatch(array $items, int $tax, int $total): ?int
+    {
+        if ($items === [] || $total <= 0) {
+            return null;
+        }
+
+        $sum = array_sum(array_map(fn ($it) => (int) ($it['qty'] ?? 1) * (int) ($it['price'] ?? 0), $items));
+        if ($sum <= 0) {
+            return null;
+        }
+
+        // Toleransi diskon/service/pembulatan: 15% atau Rp 5.000
+        $diff = abs(($sum + $tax) - $total);
+        $diffNoTax = abs($sum - $total);
+        $tolerance = max(5000, (int) round($total * 0.15));
+
+        return min($diff, $diffNoTax) > $tolerance ? $sum : null;
     }
 
     /**
@@ -433,15 +1143,25 @@ class OcrProcessorService
         }
 
         if ($downloadUrl) {
+            // Hanya unduh dari host yang kita kenal (app sendiri / gateway WhatsApp),
+            // bukan URL sembarang dari isi pesan (SSRF / mengirim file pihak lain ke Google).
+            $host = strtolower((string) parse_url($downloadUrl, PHP_URL_HOST));
+            if ($host === '' || ! in_array($host, $this->allowedMediaHosts(), true)) {
+                Log::warning('Gemini Vision: host media tidak diizinkan', ['host' => $host]);
+                throw new \Exception('Failed to fetch image (host not allowed)');
+            }
+
             $expectedKey = config('services.ocr_worker.api_key');
-            $addsApiKey = ! empty($expectedKey) && str_contains($downloadUrl, '/api/files');
+            // API key worker HANYA dikirim ke host aplikasi sendiri
+            $addsApiKey = ! empty($expectedKey)
+                && str_contains($downloadUrl, '/api/files')
+                && $host === strtolower((string) parse_url((string) config('app.url'), PHP_URL_HOST));
             Log::info('Downloading image from URL for Gemini', [
-                'url' => $downloadUrl,
+                'host' => $host,
                 'adds_api_key' => $addsApiKey,
-                'url_has_path_param' => str_contains($downloadUrl, 'path='),
             ]);
             $http = Http::timeout(30);
-            if (! empty($expectedKey) && str_contains($downloadUrl, '/api/files')) {
+            if ($addsApiKey) {
                 $http = $http->withHeaders(['X-API-Key' => $expectedKey]);
             }
             $response = $http->get($downloadUrl);
@@ -461,6 +1181,17 @@ class OcrProcessorService
             Log::error('Image file not found', ['path' => $absolutePath, 'original' => $filePath]);
             throw new \Exception('File struk tidak ditemukan di server: '.basename($absolutePath));
         }
+
+        // File lokal WAJIB berada di folder upload publik (storage/app/public).
+        // Menolak "../../.env", path absolut sembarang, dsb.
+        $real = realpath($absolutePath);
+        $root = realpath(storage_path('app/public'));
+        if ($real === false || $root === false
+            || ! str_starts_with($real, rtrim($root, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR)) {
+            Log::warning('Gemini Vision: path di luar folder upload ditolak', ['original' => mb_substr($filePath, 0, 200)]);
+            throw new \Exception('File struk tidak ditemukan di server: path tidak valid');
+        }
+        $absolutePath = $real;
 
         Log::debug('Loading image from local filesystem for Gemini', [
             'absolute_path' => $absolutePath,
@@ -1463,7 +2194,7 @@ class OcrProcessorService
         $ocrJob->update([
             'status' => 'failed',
             'completed_at' => now(),
-            'error' => $error,
+            'error_message' => mb_substr($error, 0, 1000),
         ]);
 
         // Log technical error for debugging (not shown to user)

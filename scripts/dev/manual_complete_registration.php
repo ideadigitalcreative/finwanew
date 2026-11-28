@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
 
 echo "=== MANUAL COMPLETE REGISTRATION ===\n\n";
 
-$lid = '6285762000079'; // LID Rafada
+$lid = '6285159205506'; // LID Rafada
 $name = 'Rafada';
 $email = 'Rafada32@gmail.com';
 

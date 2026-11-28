@@ -8,6 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempoten: tabel sudah ada dibuat di luar migrasi — lewati.
+        if (Schema::hasTable('seo_keyword_clusters')) {
+            return;
+        }
+
         Schema::create('seo_keyword_clusters', function (Blueprint $table) {
             $table->id();
             $table->string('cluster_name');

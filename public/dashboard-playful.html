@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finwa Dashboard - Playful Preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="dashboard-playful.css">
+</head>
+<body>
+
+<!-- Animated Background Shapes -->
+<div class="bg-shapes">
+    <div class="shape"></div>
+    <div class="shape"></div>
+    <div class="shape"></div>
+    <div class="shape"></div>
+</div>
+
+<div class="dashboard">
+
+    <!-- ========== HEADER ========== -->
+    <div class="dashboard-header animate-in">
+        <div>
+            <h1>Halo, Ahmad!</h1>
+            <p class="greeting">Berikut ringkasan keuanganmu hari ini</p>
+        </div>
+        <div class="header-right">
+            <div class="period-badge">
+                <!-- calendar icon -->
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>September 2026</span>
+            </div>
+            <div class="avatar wiggle-hover">A</div>
+        </div>
+    </div>
+
+    <!-- ========== UPGRADE BANNER ========== -->
+    <div class="upgrade-banner animate-in delay-1">
+        <div class="upgrade-info">
+            <div class="upgrade-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.912 5.813a2 2 0 001.275 1.275L21 12l-5.813 1.912a2 2 0 00-1.275 1.275L12 21l-1.912-5.813a2 2 0 00-1.275-1.275L3 12l5.813-1.912a2 2 0 001.275-1.275z"/></svg>
+            </div>
+            <div class="upgrade-text">
+                <h4>Upgrade ke Premium</h4>
+                <p>Trial &bull; 12 hari tersisa</p>
+            </div>
+        </div>
+        <button class="upgrade-btn">Upgrade <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-left:2px;"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>
+    </div>
+
+    <!-- ========== MAIN GRID ========== -->
+    <div class="main-grid">
+
+        <!-- ===== MAIN CONTENT ===== -->
+        <div class="main-content">
+
+            <!-- Stats Row: Income & Expense -->
+            <div class="stats-row animate-in delay-2">
+                <div class="stat-card income">
+                    <div class="stat-deco"></div>
+                    <div class="stat-deco"></div>
+                    <div class="stat-label">
+                        <div class="stat-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#065f46" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                        </div>
+                        <span>Pemasukan</span>
+                    </div>
+                    <div class="stat-amount">Rp 12.450.000</div>
+                    <div class="stat-change">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                        18.5% dari bulan lalu
+                    </div>
+                </div>
+                <div class="stat-card expense">
+                    <div class="stat-deco"></div>
+                    <div class="stat-deco"></div>
+                    <div class="stat-label">
+                        <div class="stat-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9f1239" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>
+                        </div>
+                        <span>Pengeluaran</span>
+                    </div>
+                    <div class="stat-amount">Rp 7.830.000</div>
+                    <div class="stat-change">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                        5.2% dari bulan lalu
+                    </div>
+                </div>
+            </div>
+
+            <!-- Net Cashflow Banner -->
+            <div class="cashflow-banner animate-in delay-3">
+                <div class="cf-info">
+                    <div class="cf-label">Arus Kas Bersih</div>
+                    <div class="cf-amount">+Rp 4.620.000</div>
+                </div>
+                <div class="cf-icon-wrap">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="m12 15-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
+                </div>
+            </div>
+
+            <!-- Chart Area: Money Flow -->
+            <div class="chart-area animate-in delay-3">
+                <div class="chart-header">
+                    <h3>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        Arus Uang
+                    </h3>
+                    <div class="chart-tabs">
+                        <button>6 Bulan</button>
+                        <button class="active">12 Bulan</button>
+                    </div>
+                </div>
+                <div class="bar-chart">
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 45%" title="Rp 5.2jt"></div>
+                            <div class="bar expense-bar" style="height: 35%" title="Rp 3.8jt"></div>
+                        </div>
+                        <span class="bar-label">Okt</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 55%" title="Rp 6.5jt"></div>
+                            <div class="bar expense-bar" style="height: 40%" title="Rp 4.5jt"></div>
+                        </div>
+                        <span class="bar-label">Nov</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 50%" title="Rp 5.8jt"></div>
+                            <div class="bar expense-bar" style="height: 55%" title="Rp 6.2jt"></div>
+                        </div>
+                        <span class="bar-label">Des</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 65%" title="Rp 7.8jt"></div>
+                            <div class="bar expense-bar" style="height: 38%" title="Rp 4.2jt"></div>
+                        </div>
+                        <span class="bar-label">Jan</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 58%" title="Rp 6.9jt"></div>
+                            <div class="bar expense-bar" style="height: 42%" title="Rp 4.8jt"></div>
+                        </div>
+                        <span class="bar-label">Feb</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 72%" title="Rp 8.5jt"></div>
+                            <div class="bar expense-bar" style="height: 35%" title="Rp 4.0jt"></div>
+                        </div>
+                        <span class="bar-label">Mar</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 68%" title="Rp 8.0jt"></div>
+                            <div class="bar expense-bar" style="height: 50%" title="Rp 5.6jt"></div>
+                        </div>
+                        <span class="bar-label">Apr</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 80%" title="Rp 9.5jt"></div>
+                            <div class="bar expense-bar" style="height: 48%" title="Rp 5.4jt"></div>
+                        </div>
+                        <span class="bar-label">Mei</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 75%" title="Rp 8.8jt"></div>
+                            <div class="bar expense-bar" style="height: 52%" title="Rp 5.9jt"></div>
+                        </div>
+                        <span class="bar-label">Jun</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 85%" title="Rp 10.2jt"></div>
+                            <div class="bar expense-bar" style="height: 45%" title="Rp 5.1jt"></div>
+                        </div>
+                        <span class="bar-label">Jul</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 78%" title="Rp 9.2jt"></div>
+                            <div class="bar expense-bar" style="height: 55%" title="Rp 6.3jt"></div>
+                        </div>
+                        <span class="bar-label">Agu</span>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-pair">
+                            <div class="bar income-bar" style="height: 95%" title="Rp 12.4jt"></div>
+                            <div class="bar expense-bar" style="height: 60%" title="Rp 7.8jt"></div>
+                        </div>
+                        <span class="bar-label">Sep</span>
+                    </div>
+                </div>
+                <!-- Legend -->
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: var(--green);"></div>
+                        <span>Pemasukan</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: var(--red);"></div>
+                        <span>Pengeluaran</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mid Row: Expense Donut + Goal Tracker -->
+            <div class="mid-row animate-in delay-4">
+                <!-- Expense Donut -->
+                <div class="card donut-card">
+                    <div class="card-title">
+                        <div class="icon" style="background: var(--purple-light);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>
+                        </div>
+                        Kategori Pengeluaran
+                    </div>
+                    <div class="donut-container">
+                        <div class="donut-svg-wrap">
+                            <svg viewBox="0 0 160 160">
+                                <circle cx="80" cy="80" r="60" fill="none" stroke="#f3f4f6" stroke-width="20"/>
+                                <circle cx="80" cy="80" r="60" fill="none" stroke="#f97316" stroke-width="20"
+                                    stroke-dasharray="132 377" stroke-dashoffset="0" stroke-linecap="round"/>
+                                <circle cx="80" cy="80" r="60" fill="none" stroke="#3b82f6" stroke-width="20"
+                                    stroke-dasharray="75 377" stroke-dashoffset="-132" stroke-linecap="round"/>
+                                <circle cx="80" cy="80" r="60" fill="none" stroke="#8b5cf6" stroke-width="20"
+                                    stroke-dasharray="68 377" stroke-dashoffset="-207" stroke-linecap="round"/>
+                                <circle cx="80" cy="80" r="60" fill="none" stroke="#10b981" stroke-width="20"
+                                    stroke-dasharray="57 377" stroke-dashoffset="-275" stroke-linecap="round"/>
+                                <circle cx="80" cy="80" r="60" fill="none" stroke="#ec4899" stroke-width="20"
+                                    stroke-dasharray="45 377" stroke-dashoffset="-332" stroke-linecap="round"/>
+                            </svg>
+                            <div class="donut-center">
+                                <span class="donut-total">Rp 7.8jt</span>
+                                <span class="donut-label">Total</span>
+                            </div>
+                        </div>
+                        <div class="donut-legend">
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background: #f97316;"></div>
+                                <span>Makanan</span>
+                                <span class="legend-amount">Rp 2.7jt</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background: #3b82f6;"></div>
+                                <span>Transport</span>
+                                <span class="legend-amount">Rp 1.6jt</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background: #8b5cf6;"></div>
+                                <span>Belanja</span>
+                                <span class="legend-amount">Rp 1.4jt</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background: #10b981;"></div>
+                                <span>Tagihan</span>
+                                <span class="legend-amount">Rp 1.2jt</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background: #ec4899;"></div>
+                                <span>Hiburan</span>
+                                <span class="legend-amount">Rp 0.9jt</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Goal Tracker -->
+                <div class="card goal-card">
+                    <div class="card-title">
+                        <div class="icon" style="background: var(--blue-light);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                        </div>
+                        Target Keuangan
+                    </div>
+                    <div class="goal-list">
+                        <div class="goal-item">
+                            <div class="goal-info">
+                                <span class="goal-name">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                                    Dana Rumah
+                                </span>
+                                <span class="goal-pct">68%</span>
+                            </div>
+                            <div class="goal-bar">
+                                <div class="goal-bar-fill g1" style="width: 68%;"></div>
+                            </div>
+                        </div>
+                        <div class="goal-item">
+                            <div class="goal-info">
+                                <span class="goal-name">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 16H9m10 0h3v-3.15a1 1 0 00-.84-.99L16 11l-2.7-3.6a1 1 0 00-.8-.4H5.24a2 2 0 00-1.8 1.1l-.8 1.63A6 6 0 002 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg>
+                                    Dana Mobil
+                                </span>
+                                <span class="goal-pct">42%</span>
+                            </div>
+                            <div class="goal-bar">
+                                <div class="goal-bar-fill g2" style="width: 42%;"></div>
+                            </div>
+                        </div>
+                        <div class="goal-item">
+                            <div class="goal-info">
+                                <span class="goal-name">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
+                                    Liburan
+                                </span>
+                                <span class="goal-pct">85%</span>
+                            </div>
+                            <div class="goal-bar">
+                                <div class="goal-bar-fill g3" style="width: 85%;"></div>
+                            </div>
+                        </div>
+                        <div class="goal-item">
+                            <div class="goal-info">
+                                <span class="goal-name">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                                    Laptop Baru
+                                </span>
+                                <span class="goal-pct">25%</span>
+                            </div>
+                            <div class="goal-bar">
+                                <div class="goal-bar-fill g1" style="width: 25%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Finance Trend -->
+            <div class="card trend-card animate-in delay-5">
+                <div class="chart-header">
+                    <div class="card-title" style="margin-bottom: 0;">
+                        <div class="icon" style="background: var(--cyan-light);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        </div>
+                        Tren Keuangan
+                    </div>
+                    <div class="chart-tabs">
+                        <button class="active">Harian</button>
+                        <button>Bulanan</button>
+                    </div>
+                </div>
+                <div class="trend-line-chart">
+                    <svg viewBox="0 0 700 120" preserveAspectRatio="none">
+                        <line x1="0" y1="30" x2="700" y2="30" stroke="#f3f4f6" stroke-width="1"/>
+                        <line x1="0" y1="60" x2="700" y2="60" stroke="#f3f4f6" stroke-width="1"/>
+                        <line x1="0" y1="90" x2="700" y2="90" stroke="#f3f4f6" stroke-width="1"/>
+                        <path d="M0,90 L100,70 L200,55 L300,40 L400,50 L500,30 L600,45 L700,35"
+                            fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M0,90 L100,70 L200,55 L300,40 L400,50 L500,30 L600,45 L700,35 L700,120 L0,120 Z"
+                            fill="url(#greenGrad)" opacity="0.15"/>
+                        <path d="M0,75 L100,80 L200,65 L300,70 L400,60 L500,75 L600,55 L700,65"
+                            fill="none" stroke="#f43f5e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 4"/>
+                        <circle cx="0" cy="90" r="4" fill="#10b981"/>
+                        <circle cx="100" cy="70" r="4" fill="#10b981"/>
+                        <circle cx="200" cy="55" r="4" fill="#10b981"/>
+                        <circle cx="300" cy="40" r="4" fill="#10b981"/>
+                        <circle cx="400" cy="50" r="4" fill="#10b981"/>
+                        <circle cx="500" cy="30" r="5" fill="#10b981" stroke="white" stroke-width="2"/>
+                        <circle cx="600" cy="45" r="4" fill="#10b981"/>
+                        <circle cx="700" cy="35" r="4" fill="#10b981"/>
+                        <defs>
+                            <linearGradient id="greenGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#10b981"/>
+                                <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div class="trend-labels">
+                    <span>Sen</span><span>Sel</span><span>Rab</span><span>Kam</span><span>Jum</span><span>Sab</span><span>Min</span>
+                </div>
+            </div>
+
+            <!-- Member Summary -->
+            <div class="animate-in delay-5">
+                <div class="card-title section-title" style="margin-bottom: 12px; padding-left: 4px;">
+                    <div class="icon" style="background: var(--green-light);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green-dark)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                    </div>
+                    Ringkasan per Anggota &mdash; September 2026
+                </div>
+                <div class="member-scroll">
+                    <div class="member-card">
+                        <div class="member-avatar-row">
+                            <div class="member-avatar" style="background: linear-gradient(135deg, #bfdbfe, #93c5fd);">A</div>
+                            <div>
+                                <div class="member-name">Ahmad</div>
+                                <div class="member-count">24 transaksi</div>
+                            </div>
+                        </div>
+                        <div class="member-income">+Rp 8.200.000</div>
+                        <div class="member-expense">-Rp 4.500.000</div>
+                        <div class="member-net positive">Selisih: +Rp 3.700.000</div>
+                    </div>
+                    <div class="member-card">
+                        <div class="member-avatar-row">
+                            <div class="member-avatar" style="background: linear-gradient(135deg, #bbf7d0, #86efac);">S</div>
+                            <div>
+                                <div class="member-name">Siti</div>
+                                <div class="member-count">18 transaksi</div>
+                            </div>
+                        </div>
+                        <div class="member-income">+Rp 3.100.000</div>
+                        <div class="member-expense">-Rp 2.100.000</div>
+                        <div class="member-net positive">Selisih: +Rp 1.000.000</div>
+                    </div>
+                    <div class="member-card">
+                        <div class="member-avatar-row">
+                            <div class="member-avatar" style="background: linear-gradient(135deg, #fde68a, #fbbf24);">B</div>
+                            <div>
+                                <div class="member-name">Budi</div>
+                                <div class="member-count">12 transaksi</div>
+                            </div>
+                        </div>
+                        <div class="member-income">+Rp 1.150.000</div>
+                        <div class="member-expense">-Rp 1.230.000</div>
+                        <div class="member-net negative">Selisih: -Rp 80.000</div>
+                    </div>
+                    <div class="member-card">
+                        <div class="member-avatar-row">
+                            <div class="member-avatar" style="background: linear-gradient(135deg, #e9d5ff, #c4b5fd);">D</div>
+                            <div>
+                                <div class="member-name">Dewi</div>
+                                <div class="member-count">8 transaksi</div>
+                            </div>
+                        </div>
+                        <div class="member-income">+Rp 0</div>
+                        <div class="member-expense">-Rp 0</div>
+                        <div class="member-net neutral">Selisih: Rp 0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Budget Overview -->
+            <div class="card budget-card animate-in delay-6">
+                <div class="card-title">
+                    <div class="icon" style="background: var(--orange-light);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><path d="M12 4v16"/></svg>
+                    </div>
+                    Anggaran Bulan Ini
+                    <span class="card-title-link">Kelola <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+                </div>
+                <div class="budget-summary">
+                    <div class="budget-ring">
+                        <svg viewBox="0 0 72 72">
+                            <circle cx="36" cy="36" r="28" fill="none" stroke="#f3f4f6" stroke-width="7"/>
+                            <circle cx="36" cy="36" r="28" fill="none" stroke="#22c55e" stroke-width="7"
+                                stroke-dasharray="176" stroke-dashoffset="62" stroke-linecap="round"/>
+                        </svg>
+                        <div class="ring-pct">65%</div>
+                    </div>
+                    <div class="budget-stats">
+                        <div class="budget-stat-item">
+                            <div class="bs-label">Total Anggaran</div>
+                            <div class="bs-value">Rp 8.000.000</div>
+                        </div>
+                        <div class="budget-stat-item">
+                            <div class="bs-label">Terpakai</div>
+                            <div class="bs-value" style="color: var(--orange);">Rp 5.200.000</div>
+                        </div>
+                        <div class="budget-stat-item" style="grid-column: span 2;">
+                            <div class="bs-label">Sisa Anggaran</div>
+                            <div class="bs-value" style="color: var(--green);">Rp 2.800.000</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="budget-items">
+                    <div class="budget-item">
+                        <div class="budget-item-row">
+                            <div class="budget-item-icon" style="background: var(--orange-light);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+                            </div>
+                            <span class="budget-item-name">Makanan & Minuman</span>
+                            <span class="budget-item-status warning">Hampir habis</span>
+                        </div>
+                        <div class="budget-item-bar">
+                            <div class="bar-bg" style="background: #ffedd5;">
+                                <div class="bar-fill" style="width: 88%; background: var(--orange);"></div>
+                            </div>
+                        </div>
+                        <div class="budget-item-amounts">
+                            <span>Rp 2.640.000 terpakai</span>
+                            <span>dari Rp 3.000.000</span>
+                        </div>
+                    </div>
+                    <div class="budget-item">
+                        <div class="budget-item-row">
+                            <div class="budget-item-icon" style="background: var(--blue-light);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 16H9m10 0h3v-3.15a1 1 0 00-.84-.99L16 11l-2.7-3.6a1 1 0 00-.8-.4H5.24a2 2 0 00-1.8 1.1l-.8 1.63A6 6 0 002 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg>
+                            </div>
+                            <span class="budget-item-name">Transportasi</span>
+                            <span class="budget-item-status safe">Aman</span>
+                        </div>
+                        <div class="budget-item-bar">
+                            <div class="bar-bg" style="background: var(--green-light);">
+                                <div class="bar-fill" style="width: 52%; background: var(--green);"></div>
+                            </div>
+                        </div>
+                        <div class="budget-item-amounts">
+                            <span>Rp 1.040.000 terpakai</span>
+                            <span>dari Rp 2.000.000</span>
+                        </div>
+                    </div>
+                    <div class="budget-item">
+                        <div class="budget-item-row">
+                            <div class="budget-item-icon" style="background: var(--red-light);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>
+                            </div>
+                            <span class="budget-item-name">Belanja</span>
+                            <span class="budget-item-status danger">Melebihi</span>
+                        </div>
+                        <div class="budget-item-bar">
+                            <div class="bar-bg" style="background: var(--red-light);">
+                                <div class="bar-fill" style="width: 100%; background: var(--red);"></div>
+                            </div>
+                        </div>
+                        <div class="budget-item-amounts">
+                            <span>Rp 1.520.000 terpakai</span>
+                            <span>dari Rp 1.500.000</span>
+                        </div>
+                    </div>
+                    <div class="budget-item">
+                        <div class="budget-item-row">
+                            <div class="budget-item-icon" style="background: var(--green-light);">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                            </div>
+                            <span class="budget-item-name">Tagihan & Utilitas</span>
+                            <span class="budget-item-status safe">Aman</span>
+                        </div>
+                        <div class="budget-item-bar">
+                            <div class="bar-bg" style="background: var(--green-light);">
+                                <div class="bar-fill" style="width: 40%; background: var(--green);"></div>
+                            </div>
+                        </div>
+                        <div class="budget-item-amounts">
+                            <span>Rp 0 terpakai</span>
+                            <span>dari Rp 1.500.000</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ===== RIGHT PANEL ===== -->
+        <div class="right-panel">
+
+            <!-- Wallet Cards -->
+            <div class="wallet-section animate-in delay-2">
+                <div class="wallet-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green-dark)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+                    Dompet Saya
+                </div>
+                <div class="wallet-stack">
+                    <div class="wallet-card-item">
+                        <div class="wc-top">
+                            <div class="wc-chip"></div>
+                            <div class="wc-name">BCA</div>
+                        </div>
+                        <div class="wc-dots">&bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull;</div>
+                        <div>
+                            <div class="wc-balance-label">Saldo</div>
+                            <div class="wc-balance">Rp 15.420.000</div>
+                        </div>
+                    </div>
+                    <div class="wallet-card-item">
+                        <div class="wc-top">
+                            <div class="wc-chip"></div>
+                            <div class="wc-name">Mandiri</div>
+                        </div>
+                        <div class="wc-dots">&bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull;</div>
+                        <div>
+                            <div class="wc-balance-label">Saldo</div>
+                            <div class="wc-balance">Rp 8.750.000</div>
+                        </div>
+                    </div>
+                    <div class="wallet-card-item">
+                        <div class="wc-top">
+                            <div class="wc-chip"></div>
+                            <div class="wc-name">GoPay</div>
+                        </div>
+                        <div class="wc-dots">&bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull; &bull;&bull;&bull;&bull;</div>
+                        <div>
+                            <div class="wc-balance-label">Saldo</div>
+                            <div class="wc-balance">Rp 1.230.000</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="wallet-dots">
+                    <div class="dot active"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+                <div class="wallet-swipe-hint">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                    swipe untuk ganti kartu
+                </div>
+            </div>
+
+            <!-- Financial Health -->
+            <div class="card health-card animate-in delay-3">
+                <div class="card-title">
+                    <div class="icon" style="background: var(--pink-light);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--pink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+                    </div>
+                    Kesehatan Finansial
+                </div>
+                <div class="health-amount" style="color: var(--green);">Rp 4.620.000</div>
+                <div class="health-trend">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                    <span>18.5% dari bulan lalu</span>
+                </div>
+                <div class="health-gauge">
+                    <svg viewBox="0 0 160 90">
+                        <path d="M15,80 A65,65 0 0,1 145,80" fill="none" stroke="#f3f4f6" stroke-width="12" stroke-linecap="round"/>
+                        <path d="M15,80 A65,65 0 0,1 145,80" fill="none" stroke="#10b981" stroke-width="12" stroke-linecap="round"
+                            stroke-dasharray="204" stroke-dashoffset="128"/>
+                        <text x="80" y="70" text-anchor="middle" font-size="28" font-weight="700" fill="#10b981" font-family="Nunito, sans-serif">37%</text>
+                    </svg>
+                </div>
+                <p class="health-label">Tingkat tabungan bulan ini</p>
+            </div>
+
+            <!-- Quick Insights -->
+            <div class="card animate-in delay-4">
+                <div class="card-title">
+                    <div class="icon" style="background: var(--yellow-light);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    </div>
+                    Insight Cepat
+                </div>
+                <div class="insight-list">
+                    <div class="insight-item success">
+                        <div class="insight-icon-wrap success">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
+                        <div class="insight-text">
+                            <div class="insight-title">Pengeluaran Transport Turun!</div>
+                            <div class="insight-msg">Kamu berhasil mengurangi 23% pengeluaran transport dibanding bulan lalu.</div>
+                        </div>
+                    </div>
+                    <div class="insight-item warning">
+                        <div class="insight-icon-wrap warning">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        </div>
+                        <div class="insight-text">
+                            <div class="insight-title">Budget Makanan Hampir Habis</div>
+                            <div class="insight-msg">Sudah 88% terpakai, masih ada 25 hari lagi di bulan ini.</div>
+                        </div>
+                    </div>
+                    <div class="insight-item info">
+                        <div class="insight-icon-wrap info">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        </div>
+                        <div class="insight-text">
+                            <div class="insight-title">Pemasukan Tertinggi</div>
+                            <div class="insight-msg">Bulan ini pemasukanmu tertinggi dalam 6 bulan terakhir!</div>
+                        </div>
+                    </div>
+                    <div class="insight-item danger">
+                        <div class="insight-icon-wrap danger">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                        </div>
+                        <div class="insight-text">
+                            <div class="insight-title">Budget Belanja Over</div>
+                            <div class="insight-msg">Pengeluaran belanja melebihi budget Rp 20.000.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Transactions -->
+            <div class="card animate-in delay-5">
+                <div class="card-title" style="display: flex; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="icon" style="background: var(--blue-light);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                        </div>
+                        Riwayat Transaksi
+                    </div>
+                    <a href="#" class="card-title-link">Lihat Semua <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+                </div>
+                <div class="transaction-list">
+                    <div class="transaction-item">
+                        <div class="tx-icon income-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                        </div>
+                        <div class="tx-info">
+                            <div class="tx-desc">Gaji Bulanan</div>
+                            <div class="tx-meta">01 Sep 2026 &bull; Gaji</div>
+                        </div>
+                        <div class="tx-amount positive">+Rp 8.000.000</div>
+                    </div>
+                    <div class="transaction-item">
+                        <div class="tx-icon expense-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+                        </div>
+                        <div class="tx-info">
+                            <div class="tx-desc">Makan Siang - Warteg</div>
+                            <div class="tx-meta">05 Sep 2026 &bull; Makanan</div>
+                        </div>
+                        <div class="tx-amount negative">-Rp 25.000</div>
+                    </div>
+                    <div class="transaction-item">
+                        <div class="tx-icon expense-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 16H9m10 0h3v-3.15a1 1 0 00-.84-.99L16 11l-2.7-3.6a1 1 0 00-.8-.4H5.24a2 2 0 00-1.8 1.1l-.8 1.63A6 6 0 002 12.42V16h2"/><circle cx="6.5" cy="16.5" r="2.5"/><circle cx="16.5" cy="16.5" r="2.5"/></svg>
+                        </div>
+                        <div class="tx-info">
+                            <div class="tx-desc">Bensin Pertamax</div>
+                            <div class="tx-meta">04 Sep 2026 &bull; Transport</div>
+                        </div>
+                        <div class="tx-amount negative">-Rp 150.000</div>
+                    </div>
+                    <div class="transaction-item">
+                        <div class="tx-icon income-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                        </div>
+                        <div class="tx-info">
+                            <div class="tx-desc">Freelance Project</div>
+                            <div class="tx-meta">03 Sep 2026 &bull; Pendapatan Lain</div>
+                        </div>
+                        <div class="tx-amount positive">+Rp 4.200.000</div>
+                    </div>
+                    <div class="transaction-item">
+                        <div class="tx-icon expense-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>
+                        </div>
+                        <div class="tx-info">
+                            <div class="tx-desc">Belanja Bulanan Tokopedia</div>
+                            <div class="tx-meta">02 Sep 2026 &bull; Belanja</div>
+                        </div>
+                        <div class="tx-amount negative">-Rp 520.000</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Floating Action Button -->
+<button class="fab" title="Tambah Transaksi">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</button>
+
+</body>
+</html>

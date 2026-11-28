@@ -27,11 +27,10 @@ class FileController extends Controller
             return response()->json(['error' => 'API key not configured'], 500);
         }
 
-        if ($apiKey !== $expectedKey) {
+        if (! is_string($apiKey) || ! hash_equals($expectedKey, $apiKey)) {
             Log::warning('FileController: Unauthorized request', [
-                'received_key' => $apiKey ? substr($apiKey, 0, 10).'...' : 'null',
-                'expected_key' => substr($expectedKey, 0, 10).'...',
-                'request_uri' => $request->getRequestUri(),
+                'has_key' => ! empty($apiKey),
+                'ip' => $request->ip(),
             ]);
 
             return response()->json([
@@ -86,7 +85,7 @@ class FileController extends Controller
             ]);
 
             // Security: hanya allow path yang valid (whatsapp/...)
-            if (! str_starts_with($decodedPath, 'whatsapp/')) {
+            if (! str_starts_with($decodedPath, 'whatsapp/') || str_contains($decodedPath, '..')) {
                 Log::warning('FileController: Invalid file path (not starting with whatsapp/)', [
                     'path_param' => $path,
                     'decoded_path' => $decodedPath,
@@ -201,13 +200,18 @@ class FileController extends Controller
     {
         // Verify API key
         $apiKey = $request->header('X-API-Key');
-        $expectedKey = config('services.ocr_worker.api_key', 'ocr_worker_api_key_123');
+        $expectedKey = config('services.ocr_worker.api_key');
 
-        if ($apiKey !== $expectedKey) {
+        if (empty($expectedKey)) {
+            Log::error('FileController: OCR API key not configured');
+
+            return response()->json(['error' => 'API key not configured'], 500);
+        }
+
+        if (! is_string($apiKey) || ! hash_equals($expectedKey, $apiKey)) {
             Log::warning('FileController: Unauthorized request (serveFromRequest)', [
-                'received_key' => $apiKey ? substr($apiKey, 0, 10).'...' : 'null',
-                'expected_key' => substr($expectedKey, 0, 10).'...',
-                'request_uri' => $request->getRequestUri(),
+                'has_key' => ! empty($apiKey),
+                'ip' => $request->ip(),
             ]);
 
             return response()->json([
@@ -288,7 +292,7 @@ class FileController extends Controller
             ]);
 
             // Security: hanya allow path yang valid (whatsapp/...)
-            if (! str_starts_with($decodedPath, 'whatsapp/')) {
+            if (! str_starts_with($decodedPath, 'whatsapp/') || str_contains($decodedPath, '..')) {
                 Log::warning('FileController: Invalid file path (serveFromRequest)', [
                     'path' => $path,
                     'decoded_path' => $decodedPath,

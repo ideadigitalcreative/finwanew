@@ -31,7 +31,7 @@
                         <component :is="f.icon" class="h-28 w-28 sm:h-32 sm:w-32" :stroke-width="1.5" />
                     </div>
                     <div class="relative z-10 max-w-[92%] pb-2">
-                        <h3 class="text-lg font-bold tracking-tight text-[var(--fw-700)]">{{ f.title }}</h3>
+                        <h3 class="text-lg font-bold tracking-tight bg-gradient-to-br from-[#59c323] via-[#4da818] to-[#3d9014] bg-clip-text text-transparent">{{ f.title }}</h3>
                         <p class="mt-2 text-sm text-gray-600 leading-relaxed">{{ f.description }}</p>
                     </div>
                 </div>
